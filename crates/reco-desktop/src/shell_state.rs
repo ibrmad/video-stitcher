@@ -1,9 +1,6 @@
 //! Which side panels are open, and the rules that fold them on narrow
 //! windows. Pure state, so the rules are unit-tested without a window.
 
-// Wired into App in Task 5.
-#![allow(dead_code)]
-
 /// Below this window width (points) the Inspector folds by itself.
 pub const INSPECTOR_FOLD_WIDTH: f64 = 960.0;
 /// Below this window width (points) the Media sidebar folds as well.

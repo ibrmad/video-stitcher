@@ -1,9 +1,6 @@
 //! Command-line options. Makepad reads its own flags (`--remote`,
 //! `--remote=PORT`, ...) from the same list, so unknown flags are ignored.
 
-// Wired into App in Task 5.
-#![allow(dead_code)]
-
 /// Options this app reads from the command line.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Args {
