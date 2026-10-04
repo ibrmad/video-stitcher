@@ -413,6 +413,11 @@ impl StitchRenderer {
         self.pipeline.viewport.blend_width = w;
     }
 
+    /// Turn automatic exposure and colour matching between the cameras on or off.
+    pub fn set_color_match(&mut self, on: bool) {
+        self.pipeline.viewport.color_match = on;
+    }
+
     pub fn set_rig_tilt(&mut self, radians: f32) {
         self.pipeline.viewport.rig_tilt = radians;
     }

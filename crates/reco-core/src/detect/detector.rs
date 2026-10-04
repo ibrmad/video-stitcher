@@ -257,6 +257,10 @@ pub enum DetectorFrame<'a> {
         width: u32,
         /// Frame height in pixels.
         height: u32,
+        /// Stream rotation (0 or 180). VideoToolbox decodes without
+        /// applying it, so the detector must flip the frame itself or
+        /// it sees people upside down and reports mirrored positions.
+        rotation: i32,
     },
 
     /// wgpu NV12 texture views from D3D11VA staging or similar.

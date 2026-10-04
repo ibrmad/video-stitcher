@@ -232,13 +232,14 @@ impl UnifiedDetector for MetalYoloDetector {
         // owned by this struct (cloned at construction time); wgpu
         // types are reference-counted so the clone is cheap and shares
         // the session's device/queue.
-        let (cv_pixel_buffer, width, height) = match frame {
+        let (cv_pixel_buffer, width, height, rotation) = match frame {
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             DetectorFrame::Metal {
                 cv_pixel_buffer,
                 width,
                 height,
-            } => (*cv_pixel_buffer, *width, *height),
+                rotation,
+            } => (*cv_pixel_buffer, *width, *height, *rotation),
             _ => return Err(DetectorError::UnsupportedFrameKind),
         };
 
@@ -249,8 +250,11 @@ impl UnifiedDetector for MetalYoloDetector {
             reco_core::profile_scope!("metal_preprocess");
             // SAFETY: caller guarantees cv_pixel_buffer is valid
             // (session wraps it as a RetainedCVPixelBuffer).
-            unsafe { self.preprocess.preprocess(cv_pixel_buffer, &self.gpu) }
-                .map_err(|e| DetectorError::InferenceFailed(format!("metal preprocess: {e}")))?
+            unsafe {
+                self.preprocess
+                    .preprocess(cv_pixel_buffer, &self.gpu, rotation == 180)
+            }
+            .map_err(|e| DetectorError::InferenceFailed(format!("metal preprocess: {e}")))?
         };
 
         // Step 2: Run inference (CoreML native or ORT).

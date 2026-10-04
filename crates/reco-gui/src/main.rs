@@ -293,6 +293,8 @@ struct AppState {
     lens_preview_side: String,
     /// Lens correction amount for the preview (0.0 = raw, 1.0 = full).
     lens_correction_amount: f32,
+    /// Match exposure and colour between the cameras ("Match colours").
+    color_match: bool,
     /// Set by the ROI editor thread. Timer tick reloads calibration when true.
     roi_reload_pending: Option<Arc<AtomicBool>>,
     toasts: ToastManager,
@@ -511,6 +513,7 @@ impl AppState {
             lens_preview_active: false,
             lens_preview_side: "left".into(),
             lens_correction_amount: 1.0,
+            color_match: true,
             roi_reload_pending: None,
             toasts: ToastManager::default(),
             telemetry: None,
@@ -557,7 +560,7 @@ impl AppState {
             .clone();
         // Save baseline layout so Reset Calibration can restore it.
         self.cal_baseline_layout = Some(cal.layout.clone());
-        PreviewBridge::new(
+        let mut bridge = PreviewBridge::new(
             gpu.device,
             gpu.queue,
             gpu.adapter_info,
@@ -567,7 +570,9 @@ impl AppState {
             PREVIEW_WIDTH_DEFAULT,
             PREVIEW_HEIGHT_DEFAULT,
         )
-        .map_err(|e| format!("GPU init error: {e}"))
+        .map_err(|e| format!("GPU init error: {e}"))?;
+        bridge.renderer_mut().set_color_match(self.color_match);
+        Ok(bridge)
     }
 
     /// Apply an edited PlaneLayout to the renderer. `preview_dirty`
@@ -911,6 +916,15 @@ impl AppState {
     fn set_blend_width(&mut self, w: f32) {
         if let Some(bridge) = self.bridge.as_mut() {
             bridge.renderer_mut().set_blend_width(w.clamp(0.0, 0.5));
+            self.preview_dirty = true;
+        }
+    }
+
+    /// Turn exposure and colour matching between the cameras on or off.
+    fn set_color_match(&mut self, on: bool) {
+        self.color_match = on;
+        if let Some(bridge) = self.bridge.as_mut() {
+            bridge.renderer_mut().set_color_match(on);
             self.preview_dirty = true;
         }
     }
@@ -2746,6 +2760,11 @@ fn main() -> anyhow::Result<()> {
     });
 
     let state_ref = Rc::clone(&state);
+    app.on_changed_color_match(move |on| {
+        state_ref.borrow_mut().set_color_match(on);
+    });
+
+    let state_ref = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_changed_blend_width(move |w| {
         state_ref.borrow_mut().set_blend_width(w);
@@ -3448,6 +3467,7 @@ fn main() -> anyhow::Result<()> {
         let codec_str = app.get_export_codec().to_string();
         let quality_str = app.get_export_quality().to_string();
         let blend = app.get_blend_width();
+        let color_match = app.get_color_match();
         let start_secs = app.get_export_start_secs();
         let end_secs = app.get_export_end_secs();
         log::info!("Export range: start={start_secs:.1}s, end={end_secs:.1}s");
@@ -3532,6 +3552,7 @@ fn main() -> anyhow::Result<()> {
                 codec_str,
                 quality_str,
                 blend,
+                color_match,
                 start_secs,
                 end_secs,
                 autocam,

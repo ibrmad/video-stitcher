@@ -13,20 +13,30 @@
 //! 2. **Position required** — detections whose
 //!    [`MappedDetection::position`] is `None` (failed panorama
 //!    projection) are dropped.
-//! 3. **Player anchor** (optional) — if player anchors have been
+//! 3. **Static clutter** — once ball detections at one spot span
+//!    [`DEFAULT_STATIC_AFTER_FRAMES`] frames, that spot is ignored: a
+//!    spare ball by the touchline, the round shadow of a floodlight's
+//!    head, a cone. Detections need not be continuous; a spot is only
+//!    forgotten after 30 s without one. On GoPro football footage a
+//!    floodlight shadow was "seen" as the ball in 119 of 120 detection
+//!    runs, and a fixed object by the far goal in 9 of 120 (always at the
+//!    same pixel), pulling the camera off the play and widening the zoom
+//!    to keep the fake ball in frame. A real ball stays at one spot only
+//!    at set pieces, when the players are around it anyway.
+//! 4. **Player anchor** (optional) — if player anchors have been
 //!    supplied via [`BallTracker::set_players`] and non-empty, a
 //!    detection must be within `player_anchor_max_rad` of at least
 //!    one player in panorama yaw/pitch space to survive. When no
 //!    players have been supplied (no player provider attached, or a
 //!    ball-only model), the filter is a no-op.
-//! 4. **Nearest-to-last with max-jump** — among survivors, pick the
+//! 5. **Nearest-to-last with max-jump** — among survivors, pick the
 //!    one whose panorama position is closest to the last accepted
 //!    tracked position, provided the jump is below `max_jump_rad`.
 //!    Cross-camera yaw/pitch is meaningful because the
 //!    projection already unifies the coordinate frame, so same-cam
 //!    vs cross-cam are scored identically (unlike the Python POC
 //!    which worked in pixels and had to special-case cross-cam).
-//! 5. **Coaster** — if no candidate survived this frame, hold the
+//! 6. **Coaster** — if no candidate survived this frame, hold the
 //!    last known position for up to `max_coast_frames` frames, then
 //!    transition to `Lost`.
 //!
@@ -64,6 +74,49 @@ pub const DEFAULT_COAST_FRAMES: u32 = 20;
 /// the POC's 250-500 px pixel threshold on a 3840-wide frame.
 pub const DEFAULT_PLAYER_ANCHOR_RAD: f32 = 0.20;
 
+/// Ball detections within this distance (radians, about 0.7 degrees) of
+/// each other count as the same spot.
+pub const DEFAULT_STATIC_RADIUS_RAD: f32 = 0.012;
+
+/// Span, in frames, over which a spot must keep producing ball
+/// detections before it is treated as clutter (4 s at 30 fps). The
+/// tracker is updated every frame, with the last detections repeated
+/// between detection runs, so this counts video time whatever the export
+/// speed.
+pub const DEFAULT_STATIC_AFTER_FRAMES: u64 = 120;
+
+/// A spot with no ball detection for this many frames (30 s) is
+/// forgotten.
+const STATIC_FORGET_FRAMES: u64 = 900;
+
+/// Confidence a detection needs to start a new track. A track, once
+/// started, continues on weaker detections. Faint false balls (0.10 to
+/// 0.25 on a 1280 px model over a 5K frame) then cannot start one.
+pub const DEFAULT_MIN_ACQUIRE_CONFIDENCE: f32 = 0.25;
+
+/// With motion confirmation, how recent (in frames) the earlier
+/// sighting that proves the ball moved must be.
+const CONFIRM_WINDOW_FRAMES: u64 = 60;
+/// A spot counts as a fresh sighting while its detections span at most
+/// this many frames; detections are repeated every frame until the next
+/// detection run, so one run's sighting spans up to the run interval.
+const FRESH_SPAN_FRAMES: u64 = 20;
+/// Fastest plausible ball movement between two sightings, in radians
+/// per frame (about 34 degrees a second at 30 fps, a hard-hit ball 30 m
+/// away). Faster would let two unrelated objects far apart "confirm"
+/// each other.
+const MAX_BALL_RAD_PER_FRAME: f32 = 0.02;
+
+/// A place where ball detections have been appearing.
+#[derive(Debug, Clone, Copy)]
+struct Spot {
+    yaw: f32,
+    pitch: f32,
+    first_frame: u64,
+    last_frame: u64,
+    reported: bool,
+}
+
 /// Singleton ball tracker emitting at most one
 /// [`TrackedEntity`] per frame.
 ///
@@ -85,6 +138,16 @@ pub struct BallTracker {
     /// Persistent age counter; singleton ball so `id` is always 0
     /// but `age_frames` ticks every frame we're actively tracking.
     age_frames: u64,
+    /// Calls to `update` so far (one per video frame).
+    frame: u64,
+    /// Where ball detections have been appearing lately.
+    spots: Vec<Spot>,
+    static_radius_rad: f32,
+    static_after_frames: u64,
+    min_acquire_confidence: f32,
+    /// Start a track only on a ball seen moving (see
+    /// [`with_motion_confirmation`](Self::with_motion_confirmation)).
+    confirm_motion: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,7 +169,99 @@ impl BallTracker {
             player_anchor_max_rad: DEFAULT_PLAYER_ANCHOR_RAD,
             current_players: Vec::new(),
             age_frames: 0,
+            frame: 0,
+            spots: Vec::new(),
+            static_radius_rad: DEFAULT_STATIC_RADIUS_RAD,
+            static_after_frames: DEFAULT_STATIC_AFTER_FRAMES,
+            min_acquire_confidence: DEFAULT_MIN_ACQUIRE_CONFIDENCE,
+            confirm_motion: false,
         }
+    }
+
+    /// Start a new track only on a ball seen moving: the detection must
+    /// be at a fresh spot, with another fresh sighting a plausible
+    /// distance away in the last two seconds. A shadow, a marking or a
+    /// ball lying beside the pitch then cannot grab the camera, not even
+    /// in the first seconds before the static-clutter filter has learned
+    /// it. Costs one detection run of delay when the real ball appears.
+    pub fn with_motion_confirmation(mut self, on: bool) -> Self {
+        self.confirm_motion = on;
+        self
+    }
+
+    /// Whether a ball detection at `(yaw, pitch)` was seen moving: its own
+    /// spot is fresh, and another fresh spot was first seen recently, far
+    /// enough away to be movement and close enough for a ball to cover.
+    fn seen_moving(&self, yaw: f32, pitch: f32) -> bool {
+        let frame = self.frame;
+        let dist = |s: &Spot| ((s.yaw - yaw).powi(2) + (s.pitch - pitch).powi(2)).sqrt();
+        let fresh = |s: &Spot| s.last_frame - s.first_frame <= FRESH_SPAN_FRAMES;
+        let here = self
+            .spots
+            .iter()
+            .find(|s| dist(s) <= self.static_radius_rad);
+        if !here.is_some_and(fresh) {
+            return false;
+        }
+        self.spots.iter().any(|s| {
+            let since = frame - s.first_frame;
+            let d = dist(s);
+            fresh(s)
+                && d > self.static_radius_rad
+                && since <= CONFIRM_WINDOW_FRAMES
+                && d <= MAX_BALL_RAD_PER_FRAME * since as f32
+        })
+    }
+
+    /// Override the confidence a detection needs to start a new track.
+    pub fn with_min_acquire_confidence(mut self, confidence: f32) -> Self {
+        self.min_acquire_confidence = confidence;
+        self
+    }
+
+    /// Override how many frames a ball detection may stay at one spot
+    /// before it is ignored as clutter. `u64::MAX` turns the filter off.
+    pub fn with_static_after_frames(mut self, frames: u64) -> Self {
+        self.static_after_frames = frames;
+        self
+    }
+
+    /// Record a ball detection at `(yaw, pitch)` and say whether its spot
+    /// has been producing detections, without moving, for long enough to
+    /// count as clutter.
+    fn is_static(&mut self, yaw: f32, pitch: f32) -> bool {
+        let frame = self.frame;
+        let radius = self.static_radius_rad;
+        let near = self.spots.iter_mut().find(|s| {
+            let (dy, dp) = (s.yaw - yaw, s.pitch - pitch);
+            (dy * dy + dp * dp).sqrt() <= radius
+        });
+        let Some(spot) = near else {
+            self.spots.push(Spot {
+                yaw,
+                pitch,
+                first_frame: frame,
+                last_frame: frame,
+                reported: false,
+            });
+            return false;
+        };
+        // Follow slow drift (a shadow moves with the sun) without letting
+        // a rolling ball drag the spot along with it.
+        spot.yaw += 0.02 * (yaw - spot.yaw);
+        spot.pitch += 0.02 * (pitch - spot.pitch);
+        spot.last_frame = frame;
+        let is_static = frame - spot.first_frame >= self.static_after_frames;
+        if is_static && !spot.reported {
+            spot.reported = true;
+            log::info!(
+                "BallTracker: ignoring a ball that has not moved for {} frames at yaw={:.3} pitch={:.3} (spare ball, shadow or marking)",
+                frame - spot.first_frame,
+                spot.yaw,
+                spot.pitch
+            );
+        }
+        is_static
     }
 
     /// Override the per-frame max jump gate (radians).
@@ -188,7 +343,12 @@ impl BallTracker {
 
 impl Tracker for BallTracker {
     fn update(&mut self, detections: &[MappedDetection], timestamp_ms: f64) -> Vec<TrackedEntity> {
-        // Step 1-4: filter candidates down to survivors.
+        self.frame += 1;
+        let frame = self.frame;
+        self.spots
+            .retain(|s| frame - s.last_frame <= STATIC_FORGET_FRAMES);
+
+        // Step 1-5: filter candidates down to survivors.
         let mut survivors: Vec<&MappedDetection> = Vec::with_capacity(detections.len());
         for det in detections {
             if det.class_id != self.class_id {
@@ -202,6 +362,29 @@ impl Tracker for BallTracker {
                 );
                 continue;
             };
+            if self.is_static(pos.yaw, pos.pitch) {
+                log::trace!(
+                    "BallTracker: drop static — yaw={:.3} pitch={:.3}",
+                    pos.yaw,
+                    pos.pitch
+                );
+                continue;
+            }
+            if self.last.is_none() && det.confidence < self.min_acquire_confidence {
+                log::trace!(
+                    "BallTracker: drop — too faint to start a track (conf={:.2})",
+                    det.confidence
+                );
+                continue;
+            }
+            if self.last.is_none() && self.confirm_motion && !self.seen_moving(pos.yaw, pos.pitch) {
+                log::trace!(
+                    "BallTracker: hold — not seen moving yet, yaw={:.3} pitch={:.3}",
+                    pos.yaw,
+                    pos.pitch
+                );
+                continue;
+            }
             if !self.passes_player_anchor(pos.yaw, pos.pitch) {
                 log::trace!(
                     "BallTracker: drop off-player — yaw={:.3} pitch={:.3} nearest player > {:.3}rad",
@@ -569,5 +752,127 @@ mod tests {
             "expected near, got {}",
             out[0].yaw
         );
+    }
+
+    #[test]
+    fn ball_that_never_moves_is_ignored_after_a_while() {
+        let mut t = BallTracker::new(0).with_max_coast_frames(1);
+        for i in 0..DEFAULT_STATIC_AFTER_FRAMES {
+            let out = t.update(&[det(CameraId::Left, 0.3, -0.1, 0.8, 0.5, 0.5)], 0.0);
+            assert_eq!(out[0].state, TrackState::Tracking, "frame {i}");
+        }
+        // Now it counts as clutter: the tracker coasts once, then loses it.
+        t.update(&[det(CameraId::Left, 0.3, -0.1, 0.8, 0.5, 0.5)], 0.0);
+        let out = t.update(&[det(CameraId::Left, 0.3, -0.1, 0.8, 0.5, 0.5)], 0.0);
+        assert_eq!(out[0].state, TrackState::Lost);
+    }
+
+    #[test]
+    fn moving_ball_is_never_treated_as_clutter() {
+        let mut t = BallTracker::new(0);
+        // 0.06 degrees per frame: a slow roll far away.
+        for i in 0..DEFAULT_STATIC_AFTER_FRAMES * 3 {
+            let yaw = 0.001 * i as f32;
+            let out = t.update(&[det(CameraId::Left, yaw, 0.0, 0.8, 0.5, 0.5)], 0.0);
+            assert_eq!(out[0].state, TrackState::Tracking, "frame {i}");
+        }
+    }
+
+    #[test]
+    fn slowly_drifting_shadow_still_counts_as_clutter() {
+        let mut t = BallTracker::new(0).with_max_coast_frames(1);
+        let shadow = |i: u64| det(CameraId::Left, 0.3 + 1e-5 * i as f32, -0.1, 0.8, 0.5, 0.5);
+        for i in 0..DEFAULT_STATIC_AFTER_FRAMES {
+            t.update(&[shadow(i)], 0.0);
+        }
+        t.update(&[shadow(DEFAULT_STATIC_AFTER_FRAMES)], 0.0);
+        let out = t.update(&[shadow(DEFAULT_STATIC_AFTER_FRAMES + 1)], 0.0);
+        assert_eq!(out[0].state, TrackState::Lost);
+    }
+
+    #[test]
+    fn clutter_spot_is_forgotten_once_it_disappears() {
+        let mut t = BallTracker::new(0).with_max_coast_frames(1);
+        for _ in 0..DEFAULT_STATIC_AFTER_FRAMES + 1 {
+            t.update(&[det(CameraId::Left, 0.3, -0.1, 0.8, 0.5, 0.5)], 0.0);
+        }
+        for _ in 0..=STATIC_FORGET_FRAMES {
+            t.update(&[], 0.0);
+        }
+        let out = t.update(&[det(CameraId::Left, 0.3, -0.1, 0.8, 0.5, 0.5)], 0.0);
+        assert_eq!(out[0].state, TrackState::Tracking);
+    }
+
+    #[test]
+    fn ball_that_keeps_reappearing_at_one_spot_is_clutter() {
+        // A fixed object found in one detection run in ten.
+        let mut t = BallTracker::new(0).with_max_coast_frames(1);
+        let mut last = Vec::new();
+        for i in 0..=DEFAULT_STATIC_AFTER_FRAMES + 30 {
+            let dets = if i % 30 == 0 {
+                vec![det(CameraId::Left, 0.57, 0.09, 0.3, 0.5, 0.5)]
+            } else {
+                vec![]
+            };
+            last = t.update(&dets, 0.0);
+            if i == 0 {
+                assert_eq!(last[0].state, TrackState::Tracking);
+            }
+        }
+        // Its latest sighting is past the span: not picked up again.
+        assert!(
+            last.iter().all(|b| b.state != TrackState::Tracking),
+            "{last:?}"
+        );
+    }
+
+    #[test]
+    fn faint_detection_cannot_start_a_track_but_can_continue_one() {
+        let mut t = BallTracker::new(0);
+        let faint = |yaw: f32| det(CameraId::Left, yaw, 0.0, 0.15, 0.5, 0.5);
+        assert!(t.update(&[faint(0.10)], 0.0).is_empty());
+        let out = t.update(&[det(CameraId::Left, 0.11, 0.0, 0.6, 0.5, 0.5)], 0.0);
+        assert_eq!(out[0].state, TrackState::Tracking);
+        let out = t.update(&[faint(0.12)], 0.0);
+        assert_eq!(out[0].state, TrackState::Tracking);
+        assert!((out[0].yaw - 0.12).abs() < 1e-6);
+    }
+
+    #[test]
+    fn with_motion_confirmation_a_still_object_never_starts_a_track() {
+        // The floodlight shadow, seen in every detection run from the start.
+        let mut t = BallTracker::new(0).with_motion_confirmation(true);
+        for i in 0..DEFAULT_STATIC_AFTER_FRAMES * 2 {
+            let out = t.update(&[det(CameraId::Left, 0.852, -0.252, 0.3, 0.5, 0.5)], 0.0);
+            assert!(out.is_empty(), "frame {i}: {out:?}");
+        }
+    }
+
+    #[test]
+    fn with_motion_confirmation_a_moving_ball_starts_on_its_second_sighting() {
+        let mut t = BallTracker::new(0).with_motion_confirmation(true);
+        // One detection run every 15 frames, repeated in between.
+        for i in 0..15 {
+            assert!(
+                t.update(&[det(CameraId::Left, 0.10, 0.0, 0.5, 0.5, 0.5)], 0.0)
+                    .is_empty(),
+                "{i}"
+            );
+        }
+        let out = t.update(&[det(CameraId::Left, 0.16, 0.0, 0.5, 0.5, 0.5)], 0.0);
+        assert_eq!(out[0].state, TrackState::Tracking);
+    }
+
+    #[test]
+    fn with_motion_confirmation_far_apart_objects_do_not_confirm_each_other() {
+        // A real ball far away cannot "prove" that the shadow moved.
+        let mut t = BallTracker::new(0).with_motion_confirmation(true);
+        for _ in 0..15 {
+            t.update(&[det(CameraId::Left, 0.055, 0.07, 0.4, 0.5, 0.5)], 0.0);
+        }
+        for i in 0..45 {
+            let out = t.update(&[det(CameraId::Left, 0.852, -0.252, 0.3, 0.5, 0.5)], 0.0);
+            assert!(out.is_empty(), "frame {i}: {out:?}");
+        }
     }
 }

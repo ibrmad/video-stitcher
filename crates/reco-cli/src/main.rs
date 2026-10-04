@@ -174,6 +174,10 @@ enum Commands {
         #[arg(long, default_value_t = 0.15, value_parser = parse_blend)]
         blend: f32,
 
+        /// Don't match exposure and colour between the two cameras at the seam.
+        #[arg(long)]
+        no_color_match: bool,
+
         /// Frame offset for temporal sync between cameras.
         /// Positive: skip N right frames (right started first).
         /// Negative: skip N left frames (left started first).
@@ -760,6 +764,7 @@ fn main() -> anyhow::Result<()> {
             codec,
             quality,
             blend,
+            no_color_match,
             sync_offset,
             model,
             detection_interval,
@@ -785,6 +790,7 @@ fn main() -> anyhow::Result<()> {
                 width,
                 height,
                 blend,
+                color_match: !no_color_match,
                 start_time,
                 end_time,
                 max_frames,

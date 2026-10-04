@@ -507,6 +507,8 @@ export component RecoApp inherits Window {
     in-out property <float> pitch: 0.0;    // radians
     in-out property <float> fov: 75.0;     // degrees
     in-out property <float> blend-width: 0.05;
+    // Match exposure and colour between the two cameras at the seam.
+    in-out property <bool> color-match: true;
     in-out property <float> rig-tilt: 0.0; // degrees
     in-out property <float> rig-roll: 0.0; // degrees
     in-out property <int> sync-offset: 0;  // frames
@@ -536,7 +538,7 @@ export component RecoApp inherits Window {
     in-out property <float> clip-duration-secs: 0.0;
     in-out property <string> export-model-path: "";
     in-out property <string> export-tracking-mode: "field";
-    in-out property <int> export-detection-interval: 3;
+    in-out property <int> export-detection-interval: 15;
     in-out property <bool> export-autocam-enabled: false;
     // Panner tuning (mapped onto FieldPannerConfig in export.rs). Defaults
     // mirror the validated football defaults; lookahead defaults on because
@@ -552,9 +554,9 @@ export component RecoApp inherits Window {
     in-out property <string> export-framing: "action";
     in-out property <bool> export-lock-pitch: false;
     in-out property <string> export-cluster-mode: "density";
-    in-out property <float> export-cluster-bandwidth: 0.30;
-    in-out property <float> export-dead-zone: 0.20;
-    in-out property <float> export-ball-weight: 0.20;
+    in-out property <float> export-cluster-bandwidth: 0.20;
+    in-out property <float> export-dead-zone: 0.03;
+    in-out property <float> export-ball-weight: 0.60;
     in-out property <float> export-fov-tight: 22.0;
     in-out property <float> export-fov-wide: 58.0;
     in-out property <float> export-fov-default: 40.0;
@@ -704,6 +706,7 @@ export component RecoApp inherits Window {
     callback reset-view();
     // Settings-panel slider callbacks.
     callback changed-blend-width(float);
+    callback changed-color-match(bool);
     callback changed-rig-tilt(float);
     callback changed-rig-roll(float);
     callback changed-sync-offset(int);
@@ -1115,6 +1118,12 @@ export component RecoApp inherits Window {
                             value <=> root.blend-width;
                             decimals: 2;
                             changed(v) => { root.changed-blend-width(v); }
+                        }
+
+                        if root.files-loaded: CheckBox {
+                            text: "Match colours";
+                            checked <=> root.color-match;
+                            toggled => { root.changed-color-match(self.checked); }
                         }
 
                         if root.files-loaded: LabeledSlider {

@@ -508,8 +508,9 @@ pub fn setup_autocam(
 
         match tracking_mode {
             TrackingMode::Field => {
-                let ball_tracker =
-                    crate::trackers::BallTracker::new(ball_id).with_max_jump_rad(0.8);
+                let ball_tracker = crate::trackers::BallTracker::new(ball_id)
+                    .with_max_jump_rad(0.8)
+                    .with_motion_confirmation(true);
                 target.set_ball_tracker(Box::new(ball_tracker));
 
                 // Attach the player provider only when the model actually
@@ -533,12 +534,11 @@ pub fn setup_autocam(
                     ),
                 }
 
-                let fp_config = config.field_panner_config.clone().unwrap_or(
-                    crate::panners::FieldPannerConfig {
-                        ball_weight: 0.20,
-                        ..Default::default()
-                    },
-                );
+                let mut fp_config = config
+                    .field_panner_config
+                    .clone()
+                    .unwrap_or_else(crate::panners::FieldPannerConfig::broadcast);
+                fit_distance_zoom_to_field(&mut fp_config, config.field_roi.as_ref(), target);
                 log::info!(
                     "FieldPanner: framing={:?}, confidence_weighted={}, lock_pitch={}",
                     fp_config.framing,
@@ -549,8 +549,9 @@ pub fn setup_autocam(
                 target.set_panner(Box::new(field_panner));
             }
             TrackingMode::Ball => {
-                let ball_tracker =
-                    crate::trackers::BallTracker::new(ball_id).with_max_jump_rad(0.5);
+                let ball_tracker = crate::trackers::BallTracker::new(ball_id)
+                    .with_max_jump_rad(0.5)
+                    .with_motion_confirmation(true);
                 // No player provider - ball-only mode, even if the model
                 // has a player class (the user asked to track the ball).
                 target.set_ball_tracker(Box::new(ball_tracker));
@@ -577,6 +578,70 @@ pub fn setup_autocam(
     }
 
     Ok(detection_active)
+}
+
+/// Fit the panner's distance zoom (tighter on far play) to this rig.
+///
+/// The defaults assume far play sits around pitch 0.20 rad. How high it
+/// really sits depends on the mounting height and tilt; on a GoPro rig
+/// at the halfway line the far touchline was at +0.12 and midfield near
+/// 0, so the distance zoom hardly engaged and far play stayed wide. With
+/// a field ROI, the ramp instead runs from the nearest field point the
+/// cameras see to the far touchline. Only applied while both ends are
+/// at their defaults, so explicit tuning wins.
+fn fit_distance_zoom_to_field(
+    config: &mut crate::panners::FieldPannerConfig,
+    roi: Option<&reco_core::calibration::FieldRoi>,
+    target: &impl reco_core::detect::DetectionTarget,
+) {
+    let defaults = crate::panners::FieldPannerConfig::default();
+    if config.pitch_near != defaults.pitch_near || config.pitch_far != defaults.pitch_far {
+        return;
+    }
+    let Some((near, far)) = roi.and_then(|r| field_pitch_range(r, target.pipeline().calibration()))
+    else {
+        return;
+    };
+    config.pitch_near = near;
+    config.pitch_far = far;
+    log::info!(
+        "FieldPanner: distance zoom spans the field ROI, pitch {near:.2} (nearest) to {far:.2} (far touchline)"
+    );
+}
+
+/// Lowest and highest panorama pitch along the field ROI's outline, or
+/// `None` when it maps to too small a range to use.
+fn field_pitch_range(
+    roi: &reco_core::calibration::FieldRoi,
+    calibration: &reco_core::calibration::MatchCalibration,
+) -> Option<(f32, f32)> {
+    use reco_core::detect::detector::CameraId;
+    let aspect = calibration.left.width as f32 / calibration.left.height as f32;
+    let scene = reco_core::render::scene::SceneGeometry::from_layout_with_aspect(
+        &calibration.layout,
+        aspect,
+    );
+    let (mut near, mut far) = (f32::INFINITY, f32::NEG_INFINITY);
+    for (camera, polygon) in [(CameraId::Left, &roi.left), (CameraId::Right, &roi.right)] {
+        if polygon.len() < 3 {
+            continue;
+        }
+        for (k, a) in polygon.iter().enumerate() {
+            let b = polygon[(k + 1) % polygon.len()];
+            for step in 0..=16 {
+                let t = f64::from(step) / 16.0;
+                let x = (a[0] + (b[0] - a[0]) * t) as f32;
+                let y = (a[1] + (b[1] - a[1]) * t) as f32;
+                if let Some(p) =
+                    reco_core::projection::camera_to_panorama(camera, x, y, calibration, &scene)
+                {
+                    near = near.min(p.pitch);
+                    far = far.max(p.pitch);
+                }
+            }
+        }
+    }
+    (far - near > 0.05).then_some((near, far))
 }
 
 /// Resolve a class label to its ID from the model's label list, by name

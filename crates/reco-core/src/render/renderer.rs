@@ -23,6 +23,7 @@
 //! reduces CPU-GPU transfer from 8.3 MB to 3.1 MB per frame (62% less
 //! bandwidth) and eliminates CPU-side swscale color conversion entirely.
 
+use super::color_match::{self, ColorMatch, MeasureFrame, ToneCurve};
 use super::scene::SceneGeometry;
 use super::viewport::ResolvedViewport;
 use crate::calibration::{CameraParams, MatchCalibration};
@@ -71,6 +72,17 @@ pub(crate) struct GpuUniforms {
     color_offset_blend: [f32; 4],
     flags: [u32; 4],
     pub(crate) lens_preview: [f32; 4],
+    /// Per-channel tone curve for colour matching, applied when
+    /// `color_scale[3]` is 1. See [`color_match`].
+    tone_curve: ToneCurve,
+}
+
+impl GpuUniforms {
+    /// Draw this plane through `curve` (see [`color_match`]).
+    fn set_tone_curve(&mut self, curve: &ToneCurve) {
+        self.tone_curve = *curve;
+        self.color_scale[3] = 1.0;
+    }
 }
 
 /// Vertex with 3D position and UV coordinates.
@@ -246,6 +258,9 @@ pub(crate) struct Renderer {
     /// Set by the zero-copy path when the source video has rotation metadata.
     /// The CPU decode path handles rotation by reversing buffers instead.
     flip_180: [bool; 2],
+    /// Exposure and colour matching between the cameras. Behind a mutex
+    /// because rendering takes `&self`.
+    color_match: std::sync::Mutex<ColorMatch>,
 }
 
 impl Renderer {
@@ -329,44 +344,62 @@ impl Renderer {
             immediate_size: 0,
         });
 
-        // Render pipeline with alpha blending for seam transition
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("stitch_render_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[Vertex::LAYOUT],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: output_format,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent::OVER,
+        // Render pipeline with alpha blending for seam transition. Colour
+        // matching draws the same planes into its own target, unblended.
+        let make_pipeline =
+            |label: &str, format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>| {
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_main"),
+                        compilation_options: Default::default(),
+                        buffers: &[Vertex::LAYOUT],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some("fs_main"),
+                        compilation_options: Default::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format,
+                            blend,
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
                     }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: None, // Both sides visible
+                        ..Default::default()
+                    },
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview_mask: None,
+                    cache: None,
+                })
+            };
+        let pipeline = make_pipeline(
+            "stitch_render_pipeline",
+            output_format,
+            Some(wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent::OVER,
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None, // Both sides visible
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        );
+        let color_match = ColorMatch::new(
+            device,
+            make_pipeline(
+                "color_match_pipeline",
+                wgpu::TextureFormat::Rgba8Unorm,
+                None,
+            ),
+            &uniform_layout,
+        );
 
         // Sampler (shared by both planes)
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -432,6 +465,7 @@ impl Renderer {
             sampler,
             device: device.clone(),
             flip_180: [false, false],
+            color_match: std::sync::Mutex::new(color_match),
         }
     }
 
@@ -768,6 +802,42 @@ impl Renderer {
         self.is_full_range = full_range;
     }
 
+    /// Uniforms for drawing each plane alone from the colour matching
+    /// view: looking straight at the seam, no correction, with the plane
+    /// position in alpha instead of the seam fade.
+    fn measurement_uniforms(
+        &self,
+        scene: &SceneGeometry,
+        calibration: &MatchCalibration,
+    ) -> [GpuUniforms; 2] {
+        let projection = opengl_to_wgpu_matrix()
+            * Perspective3::new(
+                color_match::MEASURE_WIDTH as f32 / color_match::MEASURE_HEIGHT as f32,
+                color_match::MEASURE_FOV_DEGREES.to_radians(),
+                NEAR_PLANE,
+                FAR_PLANE,
+            )
+            .to_homogeneous();
+        let view = view_matrix(&scene.camera_position, 0.0, 0.0, 0.0, 0.0);
+        [
+            (scene.model_matrix_left(), &calibration.left, 0),
+            (scene.model_matrix_right(), &calibration.right, 1),
+        ]
+        .map(|(model, camera, side)| {
+            let mut uniforms = build_gpu_uniforms(
+                &(projection * view * model),
+                camera,
+                false,
+                0.0,
+                self.input_format,
+                self.flip_180[side],
+                self.is_full_range,
+            );
+            uniforms.lens_preview[2] = 1.0;
+            uniforms
+        })
+    }
+
     /// Create fresh `TextureView`s for the left plane's Y/U/V
     /// textures. Needed by [`crate::gpu::yuv_stack_packer::YuvStackPacker`]
     /// when replay recording is enabled: the packer samples the same
@@ -869,6 +939,29 @@ impl Renderer {
             self.is_full_range,
         );
         right_uniforms.lens_preview[0] = correction;
+
+        let curves = viewport
+            .config
+            .color_match
+            .then(|| {
+                self.color_match
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .next_frame(gpu, || MeasureFrame {
+                        vertex_buffer: &self.vertex_buffer,
+                        textures: [
+                            &self.left.texture_bind_group,
+                            &self.right.texture_bind_group,
+                        ],
+                        uniforms: self.measurement_uniforms(scene, calibration),
+                        blend_width,
+                    })
+            })
+            .flatten();
+        if let Some([left_curve, right_curve]) = curves {
+            left_uniforms.set_tone_curve(&left_curve);
+            right_uniforms.set_tone_curve(&right_curve);
+        }
 
         gpu.queue.write_buffer(
             &self.left.uniform_buffer,
@@ -1274,6 +1367,7 @@ pub(crate) fn build_gpu_uniforms(
         // Full correction for normal stitching. LensPreviewRenderer
         // overrides this field for the single-camera preview mode.
         lens_preview: [1.0, 0.0, 0.0, 0.0],
+        tone_curve: color_match::identity_curve(),
     }
 }
 

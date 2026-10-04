@@ -49,8 +49,10 @@ struct PreprocessParams {
     src_h: u32,
     /// Model input size (square, e.g. 1280).
     dst_size: u32,
-    /// Padding (unused, alignment).
-    _pad: u32,
+    /// 1 = sample the source rotated by 180 degrees (camera mounted
+    /// upside down), so the model sees people upright and reports
+    /// upright coordinates.
+    flip_180: u32,
     /// Letterbox scale factor.
     scale: f32,
     /// Horizontal padding offset.
@@ -82,7 +84,7 @@ struct PreprocessParams {
     uint src_w;
     uint src_h;
     uint dst_size;
-    uint _pad;
+    uint flip_180;
     float scale;
     float pad_x;
     float pad_y;
@@ -127,6 +129,9 @@ kernel void nv12_to_chw_tensor(
         (src_x + 0.5) / float(params.src_w),
         (src_y + 0.5) / float(params.src_h)
     );
+    if (params.flip_180 != 0) {
+        tex_coord = float2(1.0) - tex_coord;
+    }
 
     constexpr sampler s(coord::normalized, filter::linear, address::clamp_to_edge);
 
@@ -275,6 +280,9 @@ impl MetalPreprocessPipeline {
     /// (`[3, input_size, input_size]`). The slice is valid until the next call
     /// to `preprocess` (it points into the shared MTLBuffer).
     ///
+    /// With `flip_180`, the frame is read rotated by 180 degrees (for a
+    /// camera mounted upside down), so detections come out upright.
+    ///
     /// # Safety
     ///
     /// `cv_pixel_buffer` must be a valid, non-null `CVPixelBufferRef`.
@@ -282,6 +290,7 @@ impl MetalPreprocessPipeline {
         &mut self,
         cv_pixel_buffer: CVPixelBufferRef,
         gpu: &GpuContext,
+        flip_180: bool,
     ) -> Result<&mut [f32], MetalComputeError> {
         use reco_core::wgpu::hal::api::Metal;
 
@@ -315,7 +324,7 @@ impl MetalPreprocessPipeline {
             src_w: self.frame_width,
             src_h: self.frame_height,
             dst_size: self.input_size,
-            _pad: 0,
+            flip_180: u32::from(flip_180),
             scale,
             pad_x,
             pad_y,

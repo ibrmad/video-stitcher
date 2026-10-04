@@ -217,7 +217,10 @@ impl Default for FieldPannerConfig {
     fn default() -> Self {
         Self {
             cluster_mode: ClusterMode::Density,
-            cluster_bandwidth_rad: 0.30,
+            // Tighter than the original 0.30: on stretched play (a long
+            // ball) a 0.30 group spans half the pitch and the zoom opens
+            // to fit it, where a broadcast camera tightens on the action.
+            cluster_bandwidth_rad: 0.20,
             keep_fraction: 0.8,
             min_cluster: 2,
             edge_push: 0.15,
@@ -229,20 +232,28 @@ impl Default for FieldPannerConfig {
             fov_tight: 22.0,
             fov_wide: 58.0,
             fov_default: 40.0,
-            cluster_alpha: 0.012,
-            max_velocity_rad_per_sec: 0.18,
-            velocity_alpha: 0.06,
+            // The follow settings below (cluster_alpha, max velocity,
+            // velocity_alpha, lookahead_reactivity, dead zone) were made
+            // about twice as responsive after a broadcast-style test on
+            // GoPro football footage: the camera averaged under 3 deg/s
+            // and let the ball leave the frame. The faster settings
+            // halved that, still with about half a degree of wobble.
+            cluster_alpha: 0.05,
+            max_velocity_rad_per_sec: 0.40,
+            velocity_alpha: 0.15,
             pitch_bias: 0.05,
             ball_presence_decay: 0.90,
             ball_presence_attack: 0.15,
-            velocity_fov_bias_max: 10.0,
+            velocity_fov_bias_max: 4.0,
             ball_frame_margin_deg: 3.0,
-            ball_max_dist_from_cluster: 0.5,
-            ball_weight: 0.5,
-            lookahead_reactivity: 2.5,
+            // Far enough (about 46 degrees) that a long ball pulls the
+            // camera before the players catch up with it.
+            ball_max_dist_from_cluster: 0.8,
+            ball_weight: 0.6,
+            lookahead_reactivity: 5.0,
             lead_gain: 1.3,
             lead_alpha: 0.1,
-            dead_zone_rad: 0.20,
+            dead_zone_rad: 0.03,
             framing: FramingMode::Action,
             confidence_weighted: true,
             frame_all_margin_deg: 8.0,
@@ -258,21 +269,18 @@ pub const PRESET_NAMES: &[&str] = &["broadcast", "action", "frame_all"];
 impl FieldPannerConfig {
     /// Calm, anticipatory broadcast framing - the validated default.
     pub fn broadcast() -> Self {
-        Self {
-            ball_weight: 0.20,
-            ..Self::default()
-        }
+        Self::default()
     }
 
     /// Tighter, more reactive follow for highlight-style energy.
     pub fn action() -> Self {
         Self {
-            dead_zone_rad: 0.12,
+            dead_zone_rad: 0.02,
+            lookahead_reactivity: 6.0,
             fov_tight: 20.0,
             fov_wide: 48.0,
             fov_default: 34.0,
-            lookahead_reactivity: 3.0,
-            ball_weight: 0.35,
+            ball_weight: 0.7,
             edge_push: 0.20,
             ..Self::default()
         }

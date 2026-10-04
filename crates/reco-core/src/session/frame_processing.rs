@@ -8,6 +8,26 @@ use crate::detect::director::ViewportPosition;
 use crate::session::types::{FrameLoopContext, SessionError};
 use crate::source::StereoFrame;
 
+/// A rendered Metal frame's inputs, kept until the GPU has finished with
+/// them (see `StitchSession::metal_in_flight`).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub(crate) struct MetalInFlight {
+    done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    _textures: [crate::interop::metal::ImportedPlaneTexture; 4],
+    _buffers: [crate::interop::metal::RetainedCVPixelBuffer; 2],
+}
+
+// SAFETY: the CoreVideo objects inside (CVMetalTexture, CVPixelBuffer)
+// are reference-counted CF types whose release is thread-safe, and
+// nothing reads them after construction.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+unsafe impl Send for MetalInFlight {}
+
+/// Most rendered Metal frames held at once before waiting on the GPU: a
+/// backstop in case nothing polls the device, so completions never fire.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const MAX_METAL_IN_FLIGHT: usize = 8;
+
 impl StitchSession {
     /// Get the current viewport position from the director, or default.
     ///
@@ -431,6 +451,42 @@ impl StitchSession {
             crate::gpu::yuv_stack_packer::StackedPackSource::Nv12 { y: &ly, uv: &lu },
             crate::gpu::yuv_stack_packer::StackedPackSource::Nv12 { y: &ry, uv: &ru },
         );
+
+        // Keep this frame's buffers until the GPU has read them; see
+        // `metal_in_flight`.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let done = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = std::sync::Arc::clone(&done);
+        self.core
+            .gpu()
+            .queue
+            .on_submitted_work_done(move || flag.store(true, Ordering::Release));
+        // SAFETY: both pointers come from live RetainedCVPixelBuffers.
+        let buffers = unsafe {
+            [
+                crate::interop::metal::RetainedCVPixelBuffer::retain(left.as_ptr()),
+                crate::interop::metal::RetainedCVPixelBuffer::retain(right.as_ptr()),
+            ]
+        };
+        self.metal_in_flight.push_back(MetalInFlight {
+            done,
+            _textures: [left_y, left_uv, right_y, right_uv],
+            _buffers: buffers,
+        });
+        if self.metal_in_flight.len() > MAX_METAL_IN_FLIGHT {
+            let _ = self
+                .core
+                .gpu()
+                .device
+                .poll(wgpu::PollType::wait_indefinitely());
+        }
+        while self
+            .metal_in_flight
+            .front()
+            .is_some_and(|f| f.done.load(Ordering::Acquire))
+        {
+            self.metal_in_flight.pop_front();
+        }
         Ok(())
     }
 

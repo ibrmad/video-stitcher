@@ -108,6 +108,8 @@ impl StitchSession {
                     right.as_ptr(),
                     left.width(),
                     left.height(),
+                    self.left_rotation,
+                    self.right_rotation,
                 ),
                 _ => {
                     let (w, h) = self.core.pipeline().source_info();
@@ -234,8 +236,9 @@ impl StitchSession {
         height: u32,
         elapsed: std::time::Duration,
     ) -> Result<(), SessionError> {
+        let (lr, rr) = (self.left_rotation, self.right_rotation);
         self.detect_and_update_director_with(elapsed, |det| {
-            det.run_detection_metal(left_cvpb, right_cvpb, width, height)
+            det.run_detection_metal(left_cvpb, right_cvpb, width, height, lr, rr)
         })
     }
 

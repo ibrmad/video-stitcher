@@ -754,6 +754,12 @@ impl StitchPipeline {
         self.renderer.set_full_range(full_range);
     }
 
+    /// Turn automatic exposure and colour matching between the two
+    /// cameras on or off (see [`ViewportConfig::color_match`]).
+    pub fn set_color_match(&mut self, enabled: bool) {
+        self.viewport.color_match = enabled;
+    }
+
     /// Access the rendered RGBA texture for NV12 conversion.
     pub fn render_target(&self) -> &wgpu::Texture {
         self.renderer.render_target()

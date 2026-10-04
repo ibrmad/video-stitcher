@@ -14,7 +14,7 @@ struct Uniforms {
     intrinsics: vec4<f32>,
     // KB4 distortion coefficients (k1, k2, k3, k4)
     dist: vec4<f32>,
-    // YUV color transfer: scale.xyz (Y, U, V), pad
+    // YUV color transfer: scale.xyz (Y, U, V); w = 1 applies tone_curve
     color_scale: vec4<f32>,
     // YUV color transfer: offset.xyz (Y, U, V), blend_width
     color_offset_blend: vec4<f32>,
@@ -27,7 +27,11 @@ struct Uniforms {
     flags: vec4<u32>,
     // lens_preview.x: correction_amount (0.0 = no correction, 1.0 = full KB4)
     // lens_preview.y: split_view (> 0.5 = left half uncorrected, right half corrected)
+    // lens_preview.z: colour matching measurement (> 0.5 = alpha carries uv.x, see fs_main)
     lens_preview: vec4<f32>,
+    // Per-channel tone curve (RGB in xyz) at 32 even steps over [0, 1],
+    // set by the automatic colour matching between the cameras.
+    tone_curve: array<vec4<f32>, 32>,
 };
 
 // YUV420P plane textures (Y = full res R8Unorm, U/V = half res R8Unorm)
@@ -227,6 +231,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Apply YUV-space color transfer
     color = apply_color_transfer(color, u.color_scale.xyz, u.color_offset_blend.xyz);
+    if u.color_scale.w > 0.5 {
+        color = apply_tone_curve(color);
+    }
+
+    // Colour matching measurement: alpha carries the plane's horizontal
+    // position (uv.x from -0.5 to 1.5 as 1/255 to 1) instead of the seam
+    // fade, so the matching can weigh pixels by their distance to the seam.
+    if u.lens_preview.z > 0.5 {
+        return vec4<f32>(color, (1.0 + 254.0 * clamp((uv.x + 0.5) / 2.0, 0.0, 1.0)) / 255.0);
+    }
 
     // Compute alpha for seam blending (right plane fades in at left edge)
     var alpha = 1.0;
@@ -242,4 +256,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     return vec4<f32>(color, alpha);
+}
+
+/// Map each channel through its tone curve (linear between the steps).
+fn apply_tone_curve(rgb: vec3<f32>) -> vec3<f32> {
+    let pos = clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)) * 31.0;
+    let i = min(vec3<u32>(pos), vec3<u32>(30u));
+    let t = pos - vec3<f32>(i);
+    return vec3<f32>(
+        mix(u.tone_curve[i.x].x, u.tone_curve[i.x + 1u].x, t.x),
+        mix(u.tone_curve[i.y].y, u.tone_curve[i.y + 1u].y, t.y),
+        mix(u.tone_curve[i.z].z, u.tone_curve[i.z + 1u].z, t.z),
+    );
 }

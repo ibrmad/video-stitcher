@@ -24,6 +24,8 @@ pub struct StitchArgs<'a> {
     pub width: u32,
     pub height: u32,
     pub blend: f32,
+    /// Match exposure and colour between the cameras at the seam.
+    pub color_match: bool,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
     pub max_frames: Option<u64>,
@@ -124,6 +126,7 @@ pub fn run_stitch(args: StitchArgs<'_>, interrupted: &Arc<AtomicBool>) -> anyhow
     .quality(parse_quality(args.quality))
     .resolution(args.width, args.height)
     .blend_width(args.blend)
+    .color_match(args.color_match)
     .on_progress(move |p: &reco_core::session::types::FrameProgress| {
         // Use the session's own elapsed clock so the reported
         // rate excludes one-time GPU / encoder / ORT init and

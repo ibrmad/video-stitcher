@@ -48,6 +48,10 @@ pub struct ViewportConfig {
     /// Values between smoothly interpolate. This is a rendering
     /// parameter - it does NOT affect calibration accuracy.
     pub lens_correction_amount: f32,
+    /// Match exposure and colour between the two cameras where they meet
+    /// (see `render::color_match`). Default: `true`. The
+    /// `RECO_COLOR_MATCH=0` environment variable turns it off everywhere.
+    pub color_match: bool,
 }
 
 impl Default for ViewportConfig {
@@ -60,6 +64,7 @@ impl Default for ViewportConfig {
             rig_tilt: 0.0,
             rig_roll: 0.0,
             lens_correction_amount: 1.0,
+            color_match: true,
         }
     }
 }

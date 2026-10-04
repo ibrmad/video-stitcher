@@ -70,7 +70,12 @@ impl StitchSession {
             }
             // Store rotation for the GPU detector preprocessing path.
             // The detector needs to flip frames independently of the render shader.
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "windows",
+                target_os = "macos",
+                target_os = "ios"
+            ))]
             {
                 self.left_rotation = lr;
                 self.right_rotation = rr;

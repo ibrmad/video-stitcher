@@ -165,6 +165,16 @@ pub struct StitchSession {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub(crate) metal_texture_cache: Option<crate::interop::metal::MetalTextureCache>,
 
+    /// Rendered frames' decoder buffers (and their Metal imports) that
+    /// the GPU may still be reading. VideoToolbox reuses a CVPixelBuffer
+    /// as soon as its last reference goes, so releasing one right after
+    /// submitting the render let the decoder (running a lookahead ahead)
+    /// write a later frame into it first, and that later picture was
+    /// drawn instead. Entries are released once the GPU reports the work
+    /// submitted before them as done.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub(crate) metal_in_flight: std::collections::VecDeque<frame_processing::MetalInFlight>,
+
     /// D3D11VA staging pool for zero-copy decode on Windows.
     /// Created lazily when the first D3d11Resident frame arrives.
     #[cfg(target_os = "windows")]
@@ -173,10 +183,20 @@ pub struct StitchSession {
     /// Camera rotation from stream metadata, populated by
     /// [`configure_from_source`](Self::configure_from_source).
     /// Used to tell the GPU detector to flip frames during preprocessing.
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios"
+    ))]
     pub(crate) left_rotation: i32,
     /// Right camera rotation from stream metadata.
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "macos",
+        target_os = "ios"
+    ))]
     pub(crate) right_rotation: i32,
     /// GPU pixel format (NV12 or P010) for D3D11VA staging pool creation.
     pub(crate) gpu_pixel_format: crate::render::renderer::GpuPixelFormat,
@@ -284,11 +304,23 @@ impl StitchSession {
             current_vram_slot: None,
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             metal_texture_cache: None,
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            metal_in_flight: std::collections::VecDeque::new(),
             #[cfg(target_os = "windows")]
             d3d11_staging_pool: None,
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "windows",
+                target_os = "macos",
+                target_os = "ios"
+            ))]
             left_rotation: 0,
-            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "windows",
+                target_os = "macos",
+                target_os = "ios"
+            ))]
             right_rotation: 0,
             gpu_pixel_format: crate::render::renderer::GpuPixelFormat::Nv12,
             is_full_range: false,

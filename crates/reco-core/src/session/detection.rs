@@ -377,17 +377,23 @@ impl DetectionPipeline {
         right_cvpb: crate::interop::metal::CVPixelBufferRef,
         width: u32,
         height: u32,
+        left_rotation: i32,
+        right_rotation: i32,
     ) -> Vec<Detection> {
         let Some(ref mut detector) = self.detector else {
             return Vec::new();
         };
 
         let mut detections = Vec::new();
-        for (camera, cvpb) in [(CameraId::Left, left_cvpb), (CameraId::Right, right_cvpb)] {
+        for (camera, cvpb, rotation) in [
+            (CameraId::Left, left_cvpb, left_rotation),
+            (CameraId::Right, right_cvpb, right_rotation),
+        ] {
             let frame = DetectorFrame::Metal {
                 cv_pixel_buffer: cvpb,
                 width,
                 height,
+                rotation,
             };
             match detector.detect(camera, &frame) {
                 Ok(v) => detections.extend(v),

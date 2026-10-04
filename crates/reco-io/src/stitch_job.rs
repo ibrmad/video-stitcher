@@ -54,6 +54,7 @@ pub struct StitchJob {
     max_frames: Option<u64>,
     sync_offset: Option<i64>,
     blend_width: f32,
+    color_match: bool,
 
     // Callbacks
     on_progress: Option<ProgressCallback>,
@@ -256,6 +257,7 @@ impl StitchJob {
             max_frames: None,
             sync_offset: None,
             blend_width: 0.15,
+            color_match: true,
             on_progress: None,
             on_finalizing: None,
             session_hooks: Vec::new(),
@@ -376,6 +378,13 @@ impl StitchJob {
     /// Set the blend width for seam blending (0.0 - 1.0). Default: 0.15.
     pub fn blend_width(mut self, blend: f32) -> Self {
         self.blend_width = blend;
+        self
+    }
+
+    /// Match exposure and colour between the two cameras at the seam.
+    /// Default: on.
+    pub fn color_match(mut self, on: bool) -> Self {
+        self.color_match = on;
         self
     }
 
@@ -596,6 +605,7 @@ impl StitchJob {
             width: out_w,
             height: out_h,
             blend_width: self.blend_width,
+            color_match: self.color_match,
             rig_tilt: cal.rig_tilt as f32,
             rig_roll: cal.rig_roll as f32,
             ..Default::default()
