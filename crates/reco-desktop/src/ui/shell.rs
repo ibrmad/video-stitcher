@@ -20,8 +20,10 @@ script_mod! {
                 inner_split := Splitter{
                     axis: SplitterAxis.Horizontal
                     align: SplitterAlign.FromB(280.0)
-                    min_vertical: 360.0 max_vertical: 200.0
-                    min_horizontal: 360.0 max_horizontal: 200.0
+                    // The B floor includes the 6 pt bar: the Inspector itself
+                    // stops at 200 pt.
+                    min_vertical: 360.0 max_vertical: 206.0
+                    min_horizontal: 360.0 max_horizontal: 206.0
                     a: View{width: Fill height: Fill viewer := RecoViewer{}}
                     b: View{width: Fill height: Fill inspector := RecoInspector{}}
                 }

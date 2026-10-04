@@ -13,6 +13,9 @@ script_mod! {
         draw_bg.color: theme.color_bg_app
         status_text := RecoMuted{width: Fill text: "Ready"}
         version_text := RecoMuted{text: ""}
-        report_bug := ButtonFlatter{text: "Report bug"}
+        report_bug := ButtonFlatter{
+            text: "Report bug"
+            draw_text +: {color: theme.reco_text_secondary}
+        }
     }
 }

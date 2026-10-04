@@ -36,6 +36,14 @@ script_mod! {
         timeline := SliderMinimal{
             animator +: {disabled: {default: @on}}
             width: Fill text: "" min: 0.0 max: 1.0 default: 0.0
+            // The time labels show the position; hide the slider's own value.
+            text_input +: {
+                is_read_only: true
+                draw_text +: {
+                    color: #x0000 color_hover: #x0000 color_focus: #x0000
+                    color_down: #x0000 color_disabled: #x0000
+                }
+            }
         }
         time_total := Time{text: "0:00"}
         record_button := RecoButton{

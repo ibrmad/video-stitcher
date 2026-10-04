@@ -25,7 +25,7 @@ script_mod! {
             help_button := RecoIconButton{draw_icon +: {svg: crate_resource("self:resources/icons/help.svg")}}
         }
         Tip{text: "Preferences"
-            prefs_button := RecoIconButton{draw_icon +: {svg: crate_resource("self:resources/icons/gear.svg")}}
+            prefs_button := RecoIconButton{draw_icon +: {svg: crate_resource("self:resources/icons/settings.svg")}}
         }
         // Starts disabled (no flash at startup); enabled once files load.
         export_button := RecoPrimaryButton{

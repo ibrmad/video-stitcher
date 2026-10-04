@@ -28,12 +28,28 @@ script_mod! {
         show_bg: true new_batch: true
         draw_bg +: {color: theme.reco_surface border_radius: theme.container_corner_radius}
     }
+    // Makepad's disabled state dims a button's face and label but not its
+    // icon, so Reco's buttons fade the icon as well.
     mod.widgets.RecoIconButton = ButtonIcon{
         width: 30 height: 30 padding: 0 margin: 0 text: ""
         icon_walk: Walk{width: 16 height: 16}
         draw_icon +: {color: theme.reco_text_secondary}
+        animator +: {
+            disabled +: {
+                off +: {apply +: {draw_icon: {opacity: 1.0}}}
+                on +: {apply +: {draw_icon: {opacity: theme.reco_disabled_icon_opacity}}}
+            }
+        }
     }
-    mod.widgets.RecoButton = Button{height: 28}
+    mod.widgets.RecoButton = Button{
+        height: 28
+        animator +: {
+            disabled +: {
+                off +: {apply +: {draw_icon: {opacity: 1.0}}}
+                on +: {apply +: {draw_icon: {opacity: theme.reco_disabled_icon_opacity}}}
+            }
+        }
+    }
     mod.widgets.RecoPrimaryButton = ButtonPrimary{
         height: 30 padding: Inset{left: 14 right: 14}
     }

@@ -171,6 +171,7 @@ script_mod! {
         reco_text_secondary: #xa0a7b2
         reco_text_muted: #x6b7280
         reco_record: #xef4444
+        reco_disabled_icon_opacity: 0.35
         reco_topbar_height: 44.0
         reco_transport_height: 52.0
         reco_statusbar_height: 26.0

@@ -89,11 +89,14 @@ impl App {
         self.set_button_enabled(cx, ids!(export_button), loaded);
         let inspector_toggle = self.shell.can_toggle(Panel::Inspector);
         self.set_button_enabled(cx, ids!(toggle_inspector), inspector_toggle);
+        // Module 0 stand-in: "files loaded" means both cameras have videos,
+        // which is what calibration needs (Module 3 wires the real rule).
         for id in [
             ids!(step_back),
             ids!(play_pause),
             ids!(step_forward),
             ids!(record_button),
+            ids!(auto_calibrate),
         ] {
             self.set_button_enabled(cx, id, loaded);
         }
@@ -123,6 +126,18 @@ impl App {
         self.ui
             .label(cx, ids!(project_name))
             .set_text(cx, "GX010120.MP4 + GX010092.MP4");
+        self.ui
+            .label(cx, ids!(left_empty))
+            .set_text(cx, "GX010120.MP4 + 20 chapters");
+        self.ui
+            .label(cx, ids!(right_empty))
+            .set_text(cx, "GX010092.MP4 + 22 chapters");
+        self.ui
+            .label(cx, ids!(calibration_status))
+            .set_text(cx, "match.json");
+        self.ui
+            .button(cx, ids!(auto_calibrate))
+            .set_text(cx, "Re-calibrate");
         self.ui.label(cx, ids!(time_current)).set_text(cx, "12:34");
         self.ui.label(cx, ids!(time_total)).set_text(cx, "1:45:00");
         self.ui
