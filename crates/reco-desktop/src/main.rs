@@ -5,6 +5,9 @@
 pub use makepad_widgets;
 use makepad_widgets::*;
 
+mod cli;
+mod shell_state;
+
 app_main!(App);
 
 script_mod! {
