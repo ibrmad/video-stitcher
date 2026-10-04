@@ -84,14 +84,19 @@ impl ShellState {
     }
 
     /// Record that files were loaded or unloaded. Loading opens the
-    /// Inspector; call [`ShellState::fit_width`] afterwards on a narrow window.
+    /// Inspector, unless the window is already narrower than
+    /// [`INSPECTOR_FOLD_WIDTH`]: then it stays folded and reopens when the
+    /// window widens past the limit.
     pub fn set_files_loaded(&mut self, loaded: bool) {
         if loaded == self.files_loaded {
             return;
         }
         self.files_loaded = loaded;
-        self.inspector_open = loaded;
-        self.inspector_auto_folded = false;
+        let narrow = self
+            .last_width
+            .is_some_and(|width| width < INSPECTOR_FOLD_WIDTH);
+        self.inspector_open = loaded && !narrow;
+        self.inspector_auto_folded = loaded && narrow;
     }
 
     /// Apply the width rule after a resize. A panel folds when the window
@@ -202,5 +207,42 @@ mod tests {
         s.fit_width(650.0);
         s.fit_width(1280.0);
         assert!(!s.is_open(Panel::Media));
+    }
+
+    #[test]
+    fn loading_on_narrow_window_keeps_inspector_folded() {
+        let mut s = ShellState::default();
+        s.fit_width(1280.0);
+        s.fit_width(900.0);
+        s.set_files_loaded(true);
+        assert!(!s.is_open(Panel::Inspector));
+    }
+
+    #[test]
+    fn loading_on_window_that_started_narrow_keeps_inspector_folded() {
+        let mut s = ShellState::default();
+        s.fit_width(720.0);
+        s.set_files_loaded(true);
+        assert!(!s.is_open(Panel::Inspector));
+    }
+
+    #[test]
+    fn reloading_on_narrow_window_keeps_inspector_folded() {
+        let mut s = ShellState::default();
+        s.set_files_loaded(true);
+        s.fit_width(1280.0);
+        s.fit_width(900.0);
+        s.set_files_loaded(false);
+        s.set_files_loaded(true);
+        assert!(!s.is_open(Panel::Inspector));
+    }
+
+    #[test]
+    fn inspector_folded_by_a_narrow_load_reopens_when_widening() {
+        let mut s = ShellState::default();
+        s.fit_width(900.0);
+        s.set_files_loaded(true);
+        s.fit_width(1280.0);
+        assert!(s.is_open(Panel::Inspector));
     }
 }
