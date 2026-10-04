@@ -7,6 +7,7 @@ use makepad_widgets::*;
 
 mod cli;
 mod shell_state;
+mod theme;
 
 app_main!(App);
 
@@ -38,6 +39,7 @@ impl MatchEvent for App {}
 impl AppMain for App {
     fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
         makepad_widgets::theme_mod(vm);
+        crate::theme::script_mod(vm);
         makepad_widgets::widgets_mod(vm);
         self::script_mod(vm)
     }
