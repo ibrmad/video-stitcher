@@ -107,6 +107,28 @@ Threading, adopted from Makepad's own rules:
 10. **Reco code standards.** rustfmt; `clippy -D warnings`; `///` on public
     items; `//!` on modules; tests in each module; conventional commit
     messages; one commit per finished step.
+11. **Containers own every gap.** Text roles (`RecoText` and its family)
+    carry no padding or margin, and Reco controls carry no outer margin;
+    insets live on the enclosing view. Everything in a card starts on the
+    card's content edge, and a status line's detail starts under its words.
+    `check_m0.py` measures where the ink starts, not just widget boxes.
+
+### Makepad behaviour the rules work around
+
+- `Label` applies its padding and margin twice (once to its box, once to
+  its text), so an inset label drifts off its edge. Hence Rule 11.
+- `Slider` and `SliderMinimal` sit 4 pt in and 8 pt down from their row,
+  and `SliderMinimal` draws its track at the bottom of its box (room for a
+  label). `RecoSlider` drops the margin; `RecoTimeline` draws its own
+  centred track and playhead.
+- Buttons and dropdowns add 4 pt above and below themselves; Reco's
+  versions set `margin: 0`.
+- A plain `View` with `show_bg` draws nothing; a filled box is a
+  `SolidView` (or `RoundedView`).
+- A disabled button's icon keeps its colour: `RecoIconButton` and
+  `RecoButton` fade it, `RecoPrimaryButton` greys it.
+- Disabled buttons still take Tab focus, and Tab follows draw-list nesting
+  rather than reading order (`nav.rs`). Known gaps until Module 2.
 
 ## Modules
 

@@ -9,8 +9,10 @@ wrong (see the issues list in [DESIGN.md](DESIGN.md)).
 
 ## Module 0: shell and look (§1, §4)
 
-Evidence for this module: `tools/check_m0.py` (168 checks), the unit tests
-(`cargo test -p reco-desktop`), and screenshots in `target/desktop-checks/m0/`.
+Evidence for this module: `tools/check_m0.py` (658 checks over every
+`--look-preview` state: start, one camera, both cameras, calibrating, ready,
+exporting), the unit tests (`cargo test -p reco-desktop`), and screenshots
+in `target/desktop-checks/m0/`.
 
 - [x] Window: title "Reco", default 1280×820. It stays usable down to
       720×600 by folding panels, because Makepad has no minimum-size API.
@@ -45,6 +47,20 @@ Evidence for this module: `tools/check_m0.py` (168 checks), the unit tests
       screenshots reviewed. Fixes from that review: the Media panel
       scrolls, disabled icons fade, the timeline value is hidden, and the
       settings icon is clearer.
+- [x] Critique pass (contrast, type, information architecture, copy,
+      states, match character): Setup and Adjust panels, the next-step
+      viewer with the panorama frame and stepper, calibration progress in
+      the viewer column, the export card, one primary per screen.
+      Evidence: "`<id>` shown / hidden" and "takes / ignores input" for
+      every state, "Setup panel's Auto-calibrate is secondary", "camera
+      link is lit", "disabled Export has no green ink", "stepper not
+      covered while calibrating", "next step clear of the viewer's right
+      edge" (720×600).
+- [x] One edge per card, one line per row (DESIGN.md Rule 11). Evidence:
+      "`<id>` text starts on the content edge" for card titles, hints,
+      status words and details, panel headers and Adjust controls;
+      "`<id>` centred on the transport row" and "timeline track centred on
+      the transport row".
 - [ ] Owner approved the look.
 
 ## Module 1: preview (§2.3, §6)
