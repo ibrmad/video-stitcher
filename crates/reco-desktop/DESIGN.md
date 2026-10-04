@@ -79,7 +79,8 @@ Threading, adopted from Makepad's own rules:
    and sends actions. Nothing slow runs on the UI thread.
 5. **One theme file.** Every colour, spacing step, radius, font size and
    animation timing comes from `reco-desktop/src/theme.rs`. Screens use
-   theme names, never raw values.
+   theme names, never raw values. The `screens_use_theme_values_only` unit
+   test enforces this for colours, sizes, spacing and type sizes.
 6. **Checklist per screen.** Each module has a checklist in
    [PARITY.md](PARITY.md) built from [the Slint inventory](docs/slint-inventory.md):
    every control, state and shortcut. Known Slint bugs (listed below) are

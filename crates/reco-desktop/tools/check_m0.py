@@ -18,6 +18,10 @@ APP_BG = "#0f1115"
 PANEL_BG = "#14171c"
 ACCENT = "#34d399"
 
+# Controls that need loaded files (Module 0 stand-in: both cameras loaded).
+GATED = ("export_button", "toggle_inspector", "step_back", "play_pause", "step_forward",
+         "record_button", "auto_calibrate", "timeline", "aspect")
+
 
 def expect(ok, message):
     if not ok:
@@ -79,6 +83,17 @@ def check_state(size, look_preview):
         expect(drive.close_to(corner, APP_BG, tol=4), f"{name}: status bar background {corner[:3]} is {APP_BG}")
         expect(drive.close_to(centre_left, ACCENT, tol=40) == look_preview,
                f"{name}: Export is {'enabled (accent)' if look_preview else 'disabled'} ({centre_left[:3]})")
+        # Every control gated on loaded files takes input exactly when loaded
+        # (Makepad's own enabled flag), not just looks that way.
+        for wid in GATED:
+            expect(app.enabled(wid) == look_preview,
+                   f"{name}: `{wid}` {'enabled' if look_preview else 'disabled'} (/snap enabled={app.enabled(wid)})")
+        # ...and the Inspector toggle's icon is visibly dimmed before load.
+        tx, ty, tw, th = app.rect("toggle_inspector")
+        _, icon = settled_pixel(app, os.path.join(OUT, f"{name}-toggle.png"),
+                                tx + tw / 2 + 3.5, ty + th / 2, info["sz"][0])
+        expect((max(icon[:3]) > 130) == look_preview,
+               f"{name}: Inspector toggle icon {'bright' if look_preview else 'dimmed'} ({icon[:3]})")
         expect(app.errors() == [], f"{name}: no errors in the app log")
 
 

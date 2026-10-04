@@ -9,8 +9,8 @@ wrong (see the issues list in [DESIGN.md](DESIGN.md)).
 
 ## Module 0: shell and look (§1, §4)
 
-Evidence for this module: `tools/check_m0.py` (108 checks), screenshots in
-`target/desktop-checks/m0/`.
+Evidence for this module: `tools/check_m0.py` (168 checks), the unit tests
+(`cargo test -p reco-desktop`), and screenshots in `target/desktop-checks/m0/`.
 
 - [x] Window: title "Reco", default 1280×820. It stays usable down to
       720×600 by folding panels, because Makepad has no minimum-size API.
@@ -20,6 +20,7 @@ Evidence for this module: `tools/check_m0.py` (108 checks), screenshots in
       Export (primary; disabled until files are loaded), Inspector toggle.
       Evidence: "`toggle_media` / `export_button` / `toggle_inspector` is
       on screen", "Export is disabled" / "Export is enabled (accent)".
+      Every icon file exists: `every_self_resource_exists`.
 - [x] Media sidebar on the left: default width 260, minimum 180, resizable,
       opens at startup when nothing is loaded. Evidence: "Media panel open",
       "dragging the bar widens Media", "Media stops at its 180 pt minimum";
@@ -30,13 +31,16 @@ Evidence for this module: `tools/check_m0.py` (108 checks), screenshots in
       Evidence: "Inspector open", "Inspector stops at its 200 pt minimum",
       "Inspector closed before load".
 - [x] Transport bar placeholder, disabled until files are loaded.
-      Evidence: `empty-1280x820.png` (dimmed) versus `loaded-1280x820.png`.
+      Evidence: "`step_back` / `play_pause` / `step_forward` /
+      `record_button` / `timeline` / `aspect` disabled" (the `/snap` input
+      flag, in every state), and `empty-1280x820.png` (dimmed).
 - [x] Status bar: status text, version, Report bug link. Evidence:
       "`status_text` / `version_text` / `report_bug` is on screen".
 - [x] All colours, spacing, radii and type sizes come from `src/theme.rs`.
       Dark only; light tokens arrive with the dark-mode preference
-      (Module 7). Evidence: `tools/check_theme.py`, plus the background
-      pixel checks in `check_m0.py`.
+      (Module 7). Evidence: the `screens_use_theme_values_only` unit test
+      (no raw colours, sizes, spacing or type sizes in `src/ui/`),
+      `tools/check_theme.py`, and the background pixel checks.
 - [x] Looks right at 720×600, 1280×820 and 1920×1200. Evidence: all 12
       screenshots reviewed. Fixes from that review: the Media panel
       scrolls, disabled icons fade, the timeline value is hidden, and the

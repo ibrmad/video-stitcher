@@ -190,6 +190,14 @@ class App:
                 return tuple(item["r"])
         return None
 
+    def enabled(self, widget_id):
+        """Whether the widget with exactly this id takes input (Makepad's own
+        `enabled` flag from /snap), or None when it is not found."""
+        for item in self.snap(widget_id):
+            if item.get("i") == widget_id and "enabled" in item:
+                return bool(item["enabled"])
+        return None
+
     def click_id(self, widget_id):
         """Click the centre of a widget found by id."""
         r = self.rect(widget_id)
