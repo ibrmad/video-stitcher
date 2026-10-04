@@ -4,6 +4,7 @@
 mod controls;
 mod inspector;
 mod media_panel;
+pub mod panorama;
 mod shell;
 mod status_bar;
 mod top_bar;
@@ -16,6 +17,7 @@ use makepad_widgets::*;
 /// and before the app's own script module.
 pub fn script_mod(vm: &mut ScriptVm) {
     controls::script_mod(vm);
+    panorama::script_mod(vm);
     top_bar::script_mod(vm);
     media_panel::script_mod(vm);
     viewer::script_mod(vm);
@@ -87,9 +89,18 @@ mod tests {
         );
     }
 
-    /// Keys whose numbers are data, not design: slider ranges and the
-    /// fractions of an `Align`.
-    const DATA_KEYS: [&str; 7] = ["min", "max", "default", "precision", "step", "x", "y"];
+    /// Keys whose numbers are data, not design: slider ranges, the
+    /// fractions of an `Align`, and line limits.
+    const DATA_KEYS: [&str; 8] = [
+        "min",
+        "max",
+        "default",
+        "precision",
+        "step",
+        "x",
+        "y",
+        "max_lines",
+    ];
 
     /// `line` with string-literal contents blanked and any `//` comment
     /// removed, so text such as `"16:9"` is not read as code.

@@ -6,9 +6,43 @@
 pub struct Args {
     /// Initial window size in points, from `--window-size WxH`.
     pub window_size: Option<(f64, f64)>,
-    /// Show the shell as if files were loaded, with sample content, from
-    /// `--look-preview`. For design review until loading exists (Module 1).
-    pub look_preview: bool,
+    /// Show the shell in one of its states with sample content, from
+    /// `--look-preview[=STATE]` (default `ready`). For design review until the
+    /// engine drives these states (Modules 1-6).
+    pub look_preview: Option<LookPreview>,
+}
+
+/// The app states `--look-preview` can show.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LookPreview {
+    /// One camera has videos; the next step is the other camera.
+    OneCamera,
+    /// Both cameras have videos; the next step is calibration.
+    Cameras,
+    /// Calibration is running.
+    Calibrating,
+    /// Calibrated and previewing: the default.
+    Ready,
+    /// An export is running over the preview.
+    Exporting,
+}
+
+impl LookPreview {
+    /// The state named on the command line (`one-camera`, `cameras`,
+    /// `calibrating`, `ready`, `exporting`).
+    fn parse(name: &str) -> Result<Self, String> {
+        match name {
+            "one-camera" => Ok(Self::OneCamera),
+            "cameras" => Ok(Self::Cameras),
+            "calibrating" => Ok(Self::Calibrating),
+            "ready" => Ok(Self::Ready),
+            "exporting" => Ok(Self::Exporting),
+            other => Err(format!(
+                "unknown --look-preview state `{other}` \
+                 (one-camera, cameras, calibrating, ready, exporting)"
+            )),
+        }
+    }
 }
 
 impl Args {
@@ -23,7 +57,9 @@ impl Args {
         while let Some(arg) = iter.next() {
             let arg = arg.as_ref();
             if arg == "--look-preview" {
-                out.look_preview = true;
+                out.look_preview = Some(LookPreview::Ready);
+            } else if let Some(state) = arg.strip_prefix("--look-preview=") {
+                out.look_preview = Some(LookPreview::parse(state)?);
             } else if let Some(value) = arg.strip_prefix("--window-size=") {
                 out.window_size = Some(parse_size(value)?);
             } else if arg == "--window-size" {
@@ -76,8 +112,27 @@ mod tests {
     #[test]
     fn parses_look_preview_and_ignores_makepad_flags() {
         let a = Args::parse(["--remote", "--look-preview", "--remote=5000"]).unwrap();
-        assert!(a.look_preview);
+        assert_eq!(a.look_preview, Some(LookPreview::Ready));
         assert_eq!(a.window_size, None);
+    }
+
+    #[test]
+    fn parses_every_look_preview_state() {
+        for (name, state) in [
+            ("one-camera", LookPreview::OneCamera),
+            ("cameras", LookPreview::Cameras),
+            ("calibrating", LookPreview::Calibrating),
+            ("ready", LookPreview::Ready),
+            ("exporting", LookPreview::Exporting),
+        ] {
+            let a = Args::parse([format!("--look-preview={name}")]).unwrap();
+            assert_eq!(a.look_preview, Some(state), "{name}");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_look_preview_state() {
+        assert!(Args::parse(["--look-preview=party"]).is_err());
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! The status bar: status line, version and Report bug.
+//! The status bar: status line, version and Report a bug.
 
 use makepad_widgets::*;
 
@@ -9,13 +9,10 @@ script_mod! {
     mod.widgets.RecoStatusBar = SolidView{
         width: Fill height: theme.reco_statusbar_height flow: Right spacing: theme.reco_space_xl
         align: Align{y: 0.5}
-        padding: Inset{left: theme.reco_space_xl right: theme.reco_space_m}
+        padding: Inset{left: theme.reco_space_xl right: theme.reco_space_s}
         draw_bg.color: theme.color_bg_app
         status_text := RecoMuted{width: Fill text: "Ready"}
         version_text := RecoMuted{text: ""}
-        report_bug := ButtonFlatter{
-            text: "Report bug"
-            draw_text +: {color: theme.reco_text_secondary}
-        }
+        report_bug := RecoLinkButton{text: "Report a bug"}
     }
 }

@@ -50,6 +50,15 @@ impl ShellState {
         }
     }
 
+    /// Whether the panel is closed because the window got narrow (not by the
+    /// user), so the shell can say how to bring it back.
+    pub fn auto_folded(&self, panel: Panel) -> bool {
+        match panel {
+            Panel::Media => self.media_auto_folded,
+            Panel::Inspector => self.inspector_auto_folded,
+        }
+    }
+
     /// Whether left/right videos are loaded (gates Export, transport and
     /// the Inspector toggle).
     pub fn files_loaded(&self) -> bool {
@@ -207,6 +216,18 @@ mod tests {
         s.fit_width(650.0);
         s.fit_width(1280.0);
         assert!(!s.is_open(Panel::Media));
+    }
+
+    #[test]
+    fn reports_which_panels_folded_by_themselves() {
+        let mut s = ShellState::default();
+        s.set_files_loaded(true);
+        s.fit_width(1280.0);
+        s.fit_width(900.0);
+        assert!(s.auto_folded(Panel::Inspector));
+        assert!(!s.auto_folded(Panel::Media));
+        assert!(s.toggle(Panel::Inspector));
+        assert!(!s.auto_folded(Panel::Inspector));
     }
 
     #[test]

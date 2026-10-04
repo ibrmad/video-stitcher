@@ -21,6 +21,6 @@ with local bug fixes.
 **Lens Distortion** - The Kannala-Brandt fisheye model follows the
 published paper and OpenCV documentation.
 
-**Makepad icons** - `crates/reco-desktop/resources/icons/{help,play,pause,plus,close,folder,chevron_down,chevron_right,warning,keyboard}.svg`
+**Makepad icons** - `crates/reco-desktop/resources/icons/{help,play,pause,plus,folder,check}.svg`
 are copied from [Makepad](https://github.com/makepad/makepad)
 (`libs/fab/resources/icons`), MIT License, Copyright (c) 2023 Makepad B.V.
