@@ -7,9 +7,9 @@ script_mod! {
     use mod.widgets.*
 
     mod.widgets.RecoStatusBar = SolidView{
-        width: Fill height: theme.reco_statusbar_height flow: Right spacing: 12
+        width: Fill height: theme.reco_statusbar_height flow: Right spacing: theme.reco_space_xl
         align: Align{y: 0.5}
-        padding: Inset{left: 12 right: 8}
+        padding: Inset{left: theme.reco_space_xl right: theme.reco_space_m}
         draw_bg.color: theme.color_bg_app
         status_text := RecoMuted{width: Fill text: "Ready"}
         version_text := RecoMuted{text: ""}

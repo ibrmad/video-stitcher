@@ -7,14 +7,14 @@ script_mod! {
     use mod.widgets.*
 
     let Time = Label{
-        width: 56
-        draw_text +: {color: theme.reco_text_secondary text_style: theme.font_code{font_size: 9.5}}
+        width: theme.reco_time_width
+        draw_text +: {color: theme.reco_text_secondary text_style: theme.font_code{font_size: theme.reco_font_small}}
     }
 
     mod.widgets.RecoTransport = SolidView{
-        width: Fill height: theme.reco_transport_height flow: Right spacing: 6
+        width: Fill height: theme.reco_transport_height flow: Right spacing: theme.reco_space_s
         align: Align{y: 0.5}
-        padding: Inset{left: 12 right: 12}
+        padding: Inset{left: theme.reco_space_xl right: theme.reco_space_xl}
         draw_bg.color: theme.reco_panel
         // Everything starts disabled (no flash at startup); the app enables
         // it once files are loaded.
@@ -24,8 +24,8 @@ script_mod! {
         }
         play_pause := RecoIconButton{
             animator +: {disabled: {default: @on}}
-            width: 36 height: 36
-            icon_walk: Walk{width: 18 height: 18}
+            width: theme.reco_play_button height: theme.reco_play_button
+            icon_walk: Walk{width: theme.reco_play_icon height: theme.reco_play_icon}
             draw_icon +: {svg: crate_resource("self:resources/icons/play.svg") color: theme.color_text}
         }
         step_forward := RecoIconButton{
@@ -40,8 +40,9 @@ script_mod! {
             text_input +: {
                 is_read_only: true
                 draw_text +: {
-                    color: #x0000 color_hover: #x0000 color_focus: #x0000
-                    color_down: #x0000 color_disabled: #x0000
+                    color: theme.reco_transparent color_hover: theme.reco_transparent
+                    color_focus: theme.reco_transparent
+                    color_down: theme.reco_transparent color_disabled: theme.reco_transparent
                 }
             }
         }
@@ -49,12 +50,12 @@ script_mod! {
         record_button := RecoButton{
             animator +: {disabled: {default: @on}}
             text: "Rec"
-            icon_walk: Walk{width: 10 height: 10}
+            icon_walk: Walk{width: theme.reco_icon_tiny height: theme.reco_icon_tiny}
             draw_icon +: {svg: crate_resource("self:resources/icons/record.svg") color: theme.reco_record}
         }
         aspect := DropDown{
             animator +: {disabled: {default: @on}}
-            width: 84 labels: ["Auto" "16:9" "4:3" "21:9"]
+            width: theme.reco_aspect_width labels: ["Auto" "16:9" "4:3" "21:9"]
         }
     }
 }

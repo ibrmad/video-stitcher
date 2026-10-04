@@ -163,20 +163,65 @@ script_mod! {
         color_bevel_outset_1_disabled: #x1f232a
         color_bevel_outset_2_disabled: #x1f232a
 
-        // Reco surfaces and sizes
+        // Reco surfaces
         reco_panel: #x14171c
         reco_surface: #x1a1d23
-        reco_hairline: #x2a2f37
         reco_viewer: #x08090b
         reco_text_secondary: #xa0a7b2
         reco_text_muted: #x6b7280
         reco_record: #xef4444
+        reco_transparent: #x0000
+        // Placeholder frame shown by --look-preview until Module 1.
+        reco_sample_top: #x1c5438
+        reco_sample_bottom: #x0d301f
+        // Icon opacity on enabled and disabled controls.
+        reco_icon_opacity: 1.0
         reco_disabled_icon_opacity: 0.35
-        reco_topbar_height: 44.0
+
+        // Type scale (points)
+        reco_font_caption: 8.5
+        reco_font_badge: 9.0
+        reco_font_small: 9.5
+        reco_font_body: 10.0
+        reco_font_title: 11.0
+        reco_font_heading: 12.0
+        reco_font_display: 16.0
+
+        // Spacing scale (points)
+        reco_space_hair: 2.0
+        reco_space_xs: 4.0
+        reco_space_s: 6.0
+        reco_space_m: 8.0
+        reco_space_l: 10.0
+        reco_space_xl: 12.0
+        reco_space_xxl: 16.0
+
+        // Control and layout sizes (points)
+        reco_control_height: 28.0
+        reco_primary_height: 30.0
+        reco_button_pad_x: 14.0
+        reco_icon_button: 30.0
+        reco_icon: 16.0
+        reco_icon_medium: 14.0
+        reco_icon_small: 12.0
+        reco_icon_tiny: 10.0
+        reco_play_button: 36.0
+        reco_play_icon: 18.0
+        reco_badge: 22.0
+        reco_badge_radius: 11.0
+        reco_time_width: 56.0
+        reco_aspect_width: 84.0
+        // Room for the macOS window buttons at the left of the title bar.
+        reco_caption_inset: 80.0
         reco_transport_height: 52.0
         reco_statusbar_height: 26.0
-        reco_panel_pad: 10.0
-        reco_gap: 8.0
+        reco_media_width: 260.0
+        reco_media_min: 180.0
+        reco_viewer_min: 360.0
+        reco_inspector_width: 280.0
+        // The Inspector's splitter floor includes the 6 pt bar, so 206
+        // keeps the panel itself at 200.
+        reco_inspector_floor: 206.0
     }
     mod.theme = mod.themes.reco_dark
 }

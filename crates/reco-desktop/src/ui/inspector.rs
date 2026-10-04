@@ -11,8 +11,8 @@ script_mod! {
         width: Fill height: Fill flow: Down
         draw_bg.color: theme.reco_panel
         ScrollYView{
-            width: Fill height: Fill flow: Down spacing: theme.reco_gap
-            padding: Inset{left: 6 right: 10 top: 10 bottom: 10}
+            width: Fill height: Fill flow: Down spacing: theme.reco_space_m
+            padding: Inset{left: theme.reco_space_s right: theme.reco_space_l top: theme.reco_space_l bottom: theme.reco_space_l}
             RecoPanelHeader{text: "Adjust"}
             RecoSection{
                 RecoSectionTitle{text: "VIEW"}
