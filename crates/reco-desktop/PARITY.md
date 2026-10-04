@@ -9,18 +9,38 @@ wrong (see the issues list in [DESIGN.md](DESIGN.md)).
 
 ## Module 0: shell and look (§1, §4)
 
-- [ ] Window: title "Reco", default 1280×820, minimum 720×600.
-- [ ] Top bar: Media panel toggle, title, Help (shortcuts), Preferences,
+Evidence for this module: `tools/check_m0.py` (108 checks), screenshots in
+`target/desktop-checks/m0/`.
+
+- [x] Window: title "Reco", default 1280×820. It stays usable down to
+      720×600 by folding panels, because Makepad has no minimum-size API.
+      Evidence: "window title is Reco", "window size … matches",
+      "loaded-720x600: Inspector folded"; `loaded-720x600.png`.
+- [x] Top bar: Media panel toggle, title, Help (shortcuts), Preferences,
       Export (primary; disabled until files are loaded), Inspector toggle.
-- [ ] Media sidebar on the left: default width 260, minimum 180, resizable,
-      opens at startup when nothing is loaded.
-- [ ] Viewer with empty state: title, the three steps, status text.
-- [ ] Inspector on the right: default width 280, minimum 200, resizable.
-- [ ] Transport bar placeholder, disabled until files are loaded.
-- [ ] Status bar: status text, version, Report bug link.
-- [ ] All colours, spacing, radii, type sizes and timings come from
-      `src/theme.rs`. Dark first; light tokens exist.
-- [ ] Looks right at 720×600, 1280×820 and 1920×1200.
+      Evidence: "`toggle_media` / `export_button` / `toggle_inspector` is
+      on screen", "Export is disabled" / "Export is enabled (accent)".
+- [x] Media sidebar on the left: default width 260, minimum 180, resizable,
+      opens at startup when nothing is loaded. Evidence: "Media panel open",
+      "dragging the bar widens Media", "Media stops at its 180 pt minimum";
+      `loaded-media-widened.png`.
+- [x] Viewer with empty state: title, the three steps, status text.
+      Evidence: "empty state shown"; `empty-1280x820.png`.
+- [x] Inspector on the right: default width 280, minimum 200, resizable.
+      Evidence: "Inspector open", "Inspector stops at its 200 pt minimum",
+      "Inspector closed before load".
+- [x] Transport bar placeholder, disabled until files are loaded.
+      Evidence: `empty-1280x820.png` (dimmed) versus `loaded-1280x820.png`.
+- [x] Status bar: status text, version, Report bug link. Evidence:
+      "`status_text` / `version_text` / `report_bug` is on screen".
+- [x] All colours, spacing, radii and type sizes come from `src/theme.rs`.
+      Dark only; light tokens arrive with the dark-mode preference
+      (Module 7). Evidence: `tools/check_theme.py`, plus the background
+      pixel checks in `check_m0.py`.
+- [x] Looks right at 720×600, 1280×820 and 1920×1200. Evidence: all 12
+      screenshots reviewed. Fixes from that review: the Media panel
+      scrolls, disabled icons fade, the timeline value is hidden, and the
+      settings icon is clearer.
 - [ ] Owner approved the look.
 
 ## Module 1: preview (§2.3, §6)
