@@ -1,0 +1,19 @@
+[package]
+publish = false
+name = "reco-desktop"
+version = "0.1.0"
+# Makepad's macros (app_main!, script_mod!) are written for edition 2021.
+edition = "2021"
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Makepad 2 desktop app for Reco (replaces reco-gui; see DESIGN.md)"
+
+[[bin]]
+name = "reco-desktop"
+path = "src/main.rs"
+
+[dependencies]
+# Pinned per DESIGN.md Rule 3. The widget families are opt-in; the core
+# has every widget Module 0 uses.
+makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c", default-features = false }

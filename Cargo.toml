@@ -9,6 +9,7 @@ members = [
     "crates/reco-control",
     "crates/reco-detect",
     "crates/reco-gui",
+    "crates/reco-desktop",
     "crates/reco-obs",
 ]
 # The `fuzz` subcrate is intentionally out of the workspace because
@@ -39,3 +40,12 @@ lto = "thin"
 
 # SPIKE: wgpu 28 interop with Slint. Fork removed; if wgpu 28 doesn't
 # have the shaderDrawParameters regression, no patch is needed.
+
+# Fast optimised builds for the Makepad desktop app's checks
+# (crates/reco-desktop/DESIGN.md, "Verification tooling"): release code
+# without LTO, incremental. Shipped builds keep using `release`.
+[profile.desktop]
+inherits = "release"
+lto = false
+incremental = true
+codegen-units = 16
