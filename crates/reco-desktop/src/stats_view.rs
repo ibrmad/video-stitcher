@@ -46,7 +46,7 @@ pub(crate) fn detection_line(ms: f64, per_frame: f64) -> String {
     )
 }
 
-/// "9 tracked · ball 62%": players tracked, and how often the ball was
+/// "9 tracked · ball 62%": tracks followed, and how often the ball was
 /// found.
 pub(crate) fn tracking_line(tracks: u32, ball_pct: f64) -> String {
     format!("{tracks} tracked · ball {ball_pct:.0}%")

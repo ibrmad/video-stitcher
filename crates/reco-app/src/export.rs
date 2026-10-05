@@ -91,7 +91,8 @@ pub struct AiFigures {
     pub detection_ms: f64,
     /// Detections a frame, on average.
     pub per_frame: f64,
-    /// Players being tracked.
+    /// Tracks being followed (players mostly; one player can leave more
+    /// than one).
     pub tracks: u32,
     /// Frames with the ball found, percent.
     pub ball_pct: f64,
@@ -805,8 +806,8 @@ mod tests {
 
     /// Debug builds turn on wgpu's validation, which turns on Metal's, and
     /// that asserts in reco-detect's Metal preprocessing (an early return
-    /// leaves an encoder open; FRICTION.md). Release runs it as the app does:
-    /// `cargo test --profile desktop -p reco-app an_export_tracks`.
+    /// leaves an encoder open; FRICTION.md). Optimized builds run it as the
+    /// app does: `cargo test --profile desktop -p reco-app export::tests`.
     #[cfg(feature = "ai")]
     #[cfg_attr(
         debug_assertions,

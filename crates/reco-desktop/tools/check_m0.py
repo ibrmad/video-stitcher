@@ -169,7 +169,23 @@ def launch(size, state):
     args = ["--window-size", f"{size[0]}x{size[1]}"]
     if state:
         args.append(f"--look-preview={state}")
-    return drive.App.launch(BIN, args)
+    app = drive.App.launch(BIN, args)
+    first_frame(app, size)
+    return app
+
+
+def first_frame(app, size, secs=10.0):
+    """Wait until the window has its size and its first frame: the app
+    sizes and draws it a moment after it appears, and a check that looked
+    sooner saw the default size (then probed the picture at the wrong
+    scale) or no menu button yet. After `secs` it goes on, and the checks
+    say what is wrong."""
+    deadline = time.monotonic() + secs
+    while time.monotonic() < deadline:
+        width, height = app.get("/s")["w"][0]["sz"]
+        if abs(width - size[0]) <= 2 and abs(height - size[1]) <= 2 and app.rect("app_menu"):
+            return
+        time.sleep(0.1)
 
 
 def check_text_edge(app, png, scale, widget_id, edge, bg, name):

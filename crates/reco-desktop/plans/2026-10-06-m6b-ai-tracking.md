@@ -68,3 +68,35 @@ lowering an out-of-budget lookahead to the safe value).
    the fixture model says tracking was active and writes detections to
    the events file); check_m0–m7; PARITY, DESIGN, FRICTION; self-review;
    the merge is the owner's choice.
+
+## Rulings made while running
+
+- **Rows, not a fold.** The AI rows show while "Follow the play" is on, as
+  in the Slint app; only the Advanced tier is a fold. A fold of its own
+  would be a second control for the same thing.
+- **The model's rule is Preferences'.** The model is an .onnx file that
+  exists, so the default Preferences shows stays one it accepts. Sweep
+  takes any text there, but only a usable model is saved. Cost if wrong: a
+  coreml build's `.mlmodelc` can't be chosen (it couldn't in Preferences
+  either).
+- **Enable is gated in code.** Makepad's checkbox takes clicks while it
+  looks disabled (FRICTION.md); the sheet puts it back off.
+  `RECO_DESKTOP_FAKE_AI` is a check-only switch, as `FAKE_RELEASE` is.
+- **The lookahead fills to its knob.** The Slint app's risk slider
+  painted its zones whatever the value. Here the zones show dimmed and the
+  fill takes the colour of the knob's zone, so the slider moves like every
+  other. Without a reading it is a plain slider.
+- **What is saved is what the export did.** On a machine that can't run
+  the detector, an export saves tracking as off.
+- **Plain labels.** "Follow" (Players and ball, Ball only, Sweep (no AI));
+  "Detection" (Every N frames); "Tilt: Hold it level" (in this app
+  "pitch" means the football pitch); "Group" and "Group size" for the
+  cluster mode and bandwidth; "Tightest, Usual and Widest view" for the
+  fields of view.
+- **ORT on the CPU by default**, as the Slint app's default build; CoreML
+  stays the `coreml` feature. The status reads "Ready: runs on CPU" here.
+- **AI figures in Stats** (PARITY's Stats item had left them to 6b; this
+  plan missed them). The engine measures them only without a lookahead
+  (FRICTION.md), so they are sent once measured, never as zeros.
+- **One commit for tasks 2 and 3:** the sheet without its wiring does
+  nothing.

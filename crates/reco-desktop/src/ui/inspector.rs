@@ -297,7 +297,7 @@ script_mod! {
                             stats_detection := RecoMeta{text: "—"}
                         }
                         RecoRow{
-                            Tip{text: "In the last export with AI tracking: players tracked, and how often the ball was found."
+                            Tip{text: "In the last export with AI tracking: the tracks followed (mostly players), and how often the ball was found."
                                 RecoLabelCell{RecoSubdued{text: "Tracking"}}
                             }
                             stats_tracking := RecoMeta{text: "—"}

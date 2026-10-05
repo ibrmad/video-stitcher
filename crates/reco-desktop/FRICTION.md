@@ -207,7 +207,7 @@ released without endEncoding`. reco-detect's Metal preprocessing
 return early with `?` (fetching the planes' Metal textures), so such a
 return drops the encoder open. Optimized builds (the app's) export with
 tracking fine. reco-app's two tracked export tests run in optimized builds
-only (`cargo test --profile desktop -p reco-app an_export_tracks`). The
+only (`cargo test --profile desktop -p reco-app export::tests`). The
 ask (engine): open the encoder after the steps that can fail, or end it on
 every path.
 
