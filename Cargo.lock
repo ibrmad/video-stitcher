@@ -6087,6 +6087,8 @@ dependencies = [
 name = "reco-app"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "image",
  "log",
  "metal 0.33.0",
  "reco-calibrate",

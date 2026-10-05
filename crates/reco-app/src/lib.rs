@@ -11,5 +11,6 @@ pub mod preview;
 pub mod project;
 pub mod recording;
 pub mod reveal;
+pub mod roi;
 pub mod settings;
 pub mod toasts;
