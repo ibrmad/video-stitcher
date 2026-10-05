@@ -61,14 +61,22 @@ Preview bridge (Module 1). The render thread lives in `reco-app`
   then.
 - Makepad and the worker use different Metal queues with no fence between
   them. So the worker waits for its own GPU work before it announces a
-  frame; the widget hands a slot back only three display beats after it
-  stopped showing it (`Retirement`); and the worker renders only into
-  slots it got back (`SlotRing`).
+  frame; the widget hands a slot back only three display beats and at least
+  50 ms after it stopped showing it (`Retirement`: beats keep coming while
+  Makepad skips paints with three frames in flight); and the worker renders
+  only into slots it got back (`SlotRing`).
 - Readback: the frame is copied to a buffer, mapped, and sent as BGRA `u32`
   pixels into a `VecBGRAu8_32` texture. Slower, but it works on every
   desktop; the Module 1 check runs both paths.
 - The worker sleeps until the next frame while playing and blocks while
-  paused and still, so a paused preview costs about 0% CPU.
+  paused and still, so a paused preview costs about 0% CPU. The pose eases
+  by time (reco-gui's 0.25 per 60 Hz frame) whatever the render rate, and
+  eased renders come at most every 8 ms.
+- A pair that gives no first frame, or videos of different sizes, fail the
+  open (`PreviewEvent::Failed`; [FRICTION.md](FRICTION.md)). Anything that
+  fails once open (a render, a seek, a decode) pauses playback and is
+  reported once (`PreviewEvent::Stopped`); the picture and the panels stay.
+  Space after the end plays again from the start.
 
 Threading, adopted from Makepad's own rules:
 
@@ -187,6 +195,13 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
 - The `log` crate has no backend in the app: whatever the remote log ring
   (and so a check) must see is logged with Makepad's `log!`.
 - On macOS `maximize()` toggles fullscreen; `fullscreen()` does nothing.
+- Buttons take key focus on a click by default (`grab_key_focus`), and a
+  focused button eats Space, so after any click the preview's shortcuts
+  went dead and Space re-clicked the button. Reco's buttons turn it off
+  (Tab still focuses them). A dropdown always takes focus on a click and
+  steps its choice on arrow keys, so a mouse pick hands focus back and a
+  keyboard pick keeps it. Checkboxes and sliders also take focus on a
+  click; they get the same hand-back when Modules 4 and 5 wire them.
 - Negative margins work, and are how trailing icons line up (Rule 11).
 - An SVG icon is scaled by its drawn content, not its viewBox, so a small
   drawing is blown up to fill the icon box. Every icon pins its 16 by 16

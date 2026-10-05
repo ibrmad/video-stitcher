@@ -172,17 +172,23 @@ impl Playback {
         }
     }
 
-    /// Play or pause; play again after the end resumes from there.
-    pub fn toggle(&mut self) -> PlayState {
+    /// Play or pause; after the end, play again from the start (a seek,
+    /// so it can fail).
+    pub fn toggle(&mut self) -> Result<PlayState, SourceError> {
         self.state = match self.state {
-            PlayState::Paused | PlayState::Finished => {
+            PlayState::Finished => {
+                self.seek_to(0)?;
+                self.clock.reset();
+                PlayState::Playing
+            }
+            PlayState::Paused => {
                 self.clock.reset();
                 PlayState::Playing
             }
             PlayState::Playing => PlayState::Paused,
             PlayState::Empty => PlayState::Empty,
         };
-        self.state
+        Ok(self.state)
     }
 
     /// How long until the next frame is due while playing; `None` otherwise.
@@ -253,6 +259,32 @@ mod tests {
         playback.state = PlayState::Finished;
         assert!(!playback.tick().unwrap());
         assert_eq!(playback.until_next_frame(), None);
-        assert_eq!(playback.toggle(), PlayState::Playing);
+        assert_eq!(playback.toggle().unwrap(), PlayState::Playing);
+    }
+
+    #[test]
+    fn space_after_the_end_restarts() {
+        let Some((left, right, _)) = crate::preview::fixtures::fast_set() else {
+            return;
+        };
+        let mut playback = Playback::new();
+        playback
+            .open(&InputPath::Single(left), &InputPath::Single(right), 0)
+            .unwrap();
+        // Past the end: lands on the last frame; playing then finishes.
+        playback.seek_by(600.0).unwrap();
+        playback.toggle().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while playback.state() != PlayState::Finished && Instant::now() < deadline {
+            playback.tick().unwrap();
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(playback.state(), PlayState::Finished);
+        assert_eq!(playback.toggle().unwrap(), PlayState::Playing);
+        assert!(
+            playback.frame_index() <= 1,
+            "plays from the start again, not frame {}",
+            playback.frame_index()
+        );
     }
 }

@@ -22,3 +22,18 @@ pub fn fast_set() -> Option<(PathBuf, PathBuf, PathBuf)> {
         None
     }
 }
+
+/// A video of another size than the fast set (the 5.3K match pair's left
+/// file, or `RECO_FIXTURE_OTHER_SIZE`).
+pub fn other_size() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let path = std::env::var_os("RECO_FIXTURE_OTHER_SIZE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("Downloads/match_recording/left/GX010120.MP4"));
+    if path.exists() {
+        Some(path)
+    } else {
+        eprintln!("skipping: no video of another size (set RECO_FIXTURE_OTHER_SIZE)");
+        None
+    }
+}

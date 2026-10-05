@@ -1,13 +1,19 @@
 //! Slot bookkeeping for the zero-copy ring. Makepad and the worker use
 //! different Metal queues with no fence between them, so a slot is written
 //! only when the UI has handed it back, and the UI hands a slot back only
-//! [`RETIRE_BEATS`] display beats after it stopped showing it (frames still
-//! in flight may sample it until then).
+//! [`RETIRE_BEATS`] display beats and at least [`RETIRE_MIN`] after it
+//! stopped showing it (frames still in flight may sample it until then).
+
+use std::time::{Duration, Instant};
 
 /// Textures in the ring.
 pub const RING_SLOTS: usize = 6;
 /// Display beats a slot waits after being replaced before it is reused.
 pub const RETIRE_BEATS: u32 = 3;
+/// The least time a replaced slot waits too: beats keep coming while Makepad
+/// skips paints with three frames already in flight, and 50 ms covers three
+/// 60 Hz frames.
+pub const RETIRE_MIN: Duration = Duration::from_millis(50);
 
 /// The worker's view of the ring: which slots it may render into.
 #[derive(Clone, Debug)]
@@ -43,35 +49,40 @@ impl SlotRing {
     }
 }
 
-/// The UI's view: the slot on screen, and slots counting down their beats.
+/// The UI's view: the slot on screen, and slots counting down their beats
+/// (each with the time it was replaced).
 #[derive(Clone, Debug, Default)]
 pub struct Retirement {
     shown: Option<usize>,
-    retiring: Vec<(usize, u32)>,
+    retiring: Vec<(usize, u32, Instant)>,
 }
 
 impl Retirement {
-    /// Show `slot`; the slot shown before starts retiring.
-    pub fn show(&mut self, slot: usize) {
+    /// Show `slot` from `now`; the slot shown before starts retiring.
+    pub fn show(&mut self, slot: usize, now: Instant) {
         if let Some(old) = self.shown.replace(slot)
             && old != slot
         {
-            self.retiring.push((old, RETIRE_BEATS));
+            self.retiring.push((old, RETIRE_BEATS, now));
         }
     }
 
-    /// A display beat passed: slots retired long enough to hand back.
-    pub fn beat(&mut self) -> Vec<usize> {
-        for (_, beats) in &mut self.retiring {
+    /// A display beat passed at `now`: slots retired long enough, in beats
+    /// and in time, to hand back.
+    pub fn beat(&mut self, now: Instant) -> Vec<usize> {
+        for (_, beats, _) in &mut self.retiring {
             *beats = beats.saturating_sub(1);
         }
+        let ready = |&(_, beats, since): &(usize, u32, Instant)| {
+            beats == 0 && now.saturating_duration_since(since) >= RETIRE_MIN
+        };
         let done: Vec<usize> = self
             .retiring
             .iter()
-            .filter(|(_, b)| *b == 0)
-            .map(|(s, _)| *s)
+            .filter(|r| ready(r))
+            .map(|r| r.0)
             .collect();
-        self.retiring.retain(|(_, b)| *b > 0);
+        self.retiring.retain(|r| !ready(r));
         done
     }
 
@@ -121,32 +132,49 @@ mod tests {
 
     #[test]
     fn a_replaced_slot_retires_after_its_beats() {
+        let t0 = Instant::now();
+        let late = t0 + RETIRE_MIN;
         let mut r = Retirement::default();
-        r.show(0);
-        r.show(1);
+        r.show(0, t0);
+        r.show(1, t0);
         assert_eq!(r.shown(), Some(1));
-        assert!(r.beat().is_empty());
-        assert!(r.beat().is_empty());
-        assert_eq!(r.beat(), vec![0]);
+        assert!(r.beat(late).is_empty());
+        assert!(r.beat(late).is_empty());
+        assert_eq!(r.beat(late), vec![0]);
         assert!(r.is_idle());
     }
 
     #[test]
-    fn showing_the_same_slot_again_retires_nothing() {
+    fn a_slot_also_waits_its_minimum_time() {
+        let t0 = Instant::now();
         let mut r = Retirement::default();
-        r.show(2);
-        r.show(2);
+        r.show(0, t0);
+        r.show(1, t0);
+        for _ in 0..RETIRE_BEATS {
+            assert!(r.beat(t0 + Duration::from_millis(5)).is_empty());
+        }
+        assert!(r.beat(t0 + Duration::from_millis(10)).is_empty());
+        assert_eq!(r.beat(t0 + RETIRE_MIN), vec![0]);
+    }
+
+    #[test]
+    fn showing_the_same_slot_again_retires_nothing() {
+        let t0 = Instant::now();
+        let mut r = Retirement::default();
+        r.show(2, t0);
+        r.show(2, t0);
         assert!(r.is_idle());
     }
 
     #[test]
     fn clear_forgets_everything() {
+        let t0 = Instant::now();
         let mut r = Retirement::default();
-        r.show(0);
-        r.show(1);
+        r.show(0, t0);
+        r.show(1, t0);
         r.clear();
         assert_eq!(r.shown(), None);
         assert!(r.is_idle());
-        assert!(r.beat().is_empty());
+        assert!(r.beat(t0 + RETIRE_MIN).is_empty());
     }
 }

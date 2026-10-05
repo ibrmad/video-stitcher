@@ -146,6 +146,19 @@ fn sample_files(count: usize, length: f64) -> Vec<(f64, f64)> {
         .collect()
 }
 
+/// The UI's `MTLDevice`, for the zero-copy check (`None` off Apple
+/// platforms: Makepad has no Metal device there and the preview reads back).
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
+fn display_device(cx: &Cx) -> Option<usize> {
+    cx.metal_device().map(|d| d as usize)
+}
+
+/// See the Apple version.
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "tvos")))]
+fn display_device(_cx: &Cx) -> Option<usize> {
+    None
+}
+
 /// The application: widget tree, shell state and startup options.
 #[derive(Script, ScriptHook)]
 pub struct App {
@@ -165,6 +178,9 @@ pub struct App {
     /// The live preview, when files were given on the command line.
     #[rust]
     live: Option<Live>,
+    /// The last input came from the pointer, not the keyboard.
+    #[rust]
+    pointer_input: bool,
 }
 
 impl App {
@@ -435,7 +451,7 @@ impl App {
     /// Start the render worker on the files from the command line.
     fn start_live(&mut self, cx: &mut Cx, files: cli::FileArgs) {
         let config = PreviewConfig {
-            display_device: cx.metal_device().map(|d| d as usize),
+            display_device: display_device(cx),
             force_readback: self.args.preview_readback,
         };
         let worker = PreviewWorker::spawn(config, Arc::new(SignalToUI::set_ui_signal));
@@ -477,6 +493,7 @@ impl App {
                 Some(PreviewEvent::Opening) => self.show_opening(cx),
                 Some(PreviewEvent::Ready(info)) => self.show_live(cx, info),
                 Some(PreviewEvent::Failed(message)) => self.show_failed(cx, &message),
+                Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
                 Some(PreviewEvent::Time { frame, playing }) => self.show_time(cx, frame, playing),
                 // The widget takes frames; nothing else is left.
                 Some(_) | None => {}
@@ -616,6 +633,14 @@ impl App {
         self.ui.redraw(cx);
     }
 
+    /// Something failed while open (a render, a seek): playback paused, the
+    /// picture and the panels stay, the status line says what happened.
+    fn show_stopped(&mut self, cx: &mut Cx, message: &str) {
+        error!("preview: {message}");
+        let (title, _) = live::failure_text(message);
+        self.set_label(cx, ids!(status_text), &title);
+    }
+
     /// The playhead moved, or play started or stopped.
     fn show_time(&mut self, cx: &mut Cx, frame: u64, playing: bool) {
         let Some(live) = self.live.as_mut() else {
@@ -691,6 +716,12 @@ impl App {
             {
                 preview.set_aspect(cx, PreviewAspect::from_index(index));
             }
+            // A dropdown takes the keyboard on a click. A pick made with the
+            // mouse gives it back to the preview's shortcuts; arrow keys on
+            // a focused dropdown keep stepping through the choices.
+            if self.pointer_input {
+                cx.set_key_focus(Area::Empty);
+            }
         }
         let uid = self.ui.widget(cx, ids!(preview)).widget_uid();
         if actions
@@ -759,6 +790,11 @@ impl AppMain for App {
     }
 
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
+        match event {
+            Event::KeyDown(_) => self.pointer_input = false,
+            Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
+            _ => {}
+        }
         match event {
             // Only a width change can fold or unfold a panel; moves and
             // height changes skip the work.

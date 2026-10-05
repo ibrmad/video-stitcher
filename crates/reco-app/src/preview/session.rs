@@ -3,6 +3,7 @@
 //! `PreviewBridge` and `AppState` pose code, without Slint).
 
 use std::path::Path;
+use std::time::Duration;
 
 use reco_control::pose_control::{PoseControl, PoseControlConfig};
 use reco_control::{ControlIntent, IntentTranslator, PoseIntent};
@@ -23,7 +24,8 @@ pub const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 /// Drag sensitivity (reco-gui `DRAG_DEG_PER_PIXEL`: 0.005 rad per point).
 pub const DRAG_DEG_PER_PIXEL: f32 = 0.287;
-/// Pose smoothing per step (reco-gui `POSE_SMOOTHING`).
+/// Pose smoothing per 60 Hz frame (reco-gui `POSE_SMOOTHING`, applied once
+/// per frame there); see [`smoothing_for`].
 pub const POSE_SMOOTHING: f32 = 0.25;
 /// FOV limits and rest value, in degrees.
 pub const FOV_MIN: f32 = 20.0;
@@ -83,6 +85,30 @@ fn pose_config() -> PoseControlConfig {
     }
 }
 
+/// The share of the gap to the target pose to close in a step of `dt`:
+/// [`POSE_SMOOTHING`] per 60 Hz frame whatever the step rate, so easing feels
+/// the same at any render size, render path or input rate.
+pub fn smoothing_for(dt: Duration) -> f32 {
+    1.0 - (1.0 - POSE_SMOOTHING).powf(dt.as_secs_f32() * 60.0)
+}
+
+/// The engine opens a pair even when one file gives no frame (it only warns)
+/// and reports decode errors as the end of the stream, and it renders a pair
+/// of different sizes only to fail on every frame. Both are refused here, so
+/// they read as a failed open rather than a broken preview.
+fn check_first_frame(playback: &Playback, (width, height): (u32, u32)) -> Result<(), SessionError> {
+    let frame = playback.current_frame().ok_or_else(|| {
+        SessionError::Source("no frame could be decoded; check that both files are videos".into())
+    })?;
+    let pixels = width as usize * height as usize;
+    if frame.left.y.len() != pixels || frame.right.y.len() != pixels {
+        return Err(SessionError::Source(format!(
+            "the two cameras' videos are different sizes; both must be {width}×{height}"
+        )));
+    }
+    Ok(())
+}
+
 impl PreviewSession {
     /// Read the calibration, open both videos, decode the first frame and
     /// build the renderer for a `size` render target. Blocking: run it on
@@ -101,6 +127,7 @@ impl PreviewSession {
             .open(left, right, calibration.sync_offset)
             .map_err(|e| SessionError::Source(e.to_string()))?;
         let (input_w, input_h) = playback.input_dimensions().ok_or(SessionError::NoFrame)?;
+        check_first_frame(&playback, (input_w, input_h))?;
         let lens_correction = calibration.lens_correction_amount;
         let viewport = ViewportConfig {
             width: size.0,
@@ -154,10 +181,11 @@ impl PreviewSession {
         self.clamp();
     }
 
-    /// One smoothing step toward the target pose; `true` if it moved.
-    pub fn smooth(&mut self) -> bool {
+    /// One smoothing step of `dt` toward the target pose; `true` if it
+    /// moved.
+    pub fn smooth(&mut self, dt: Duration) -> bool {
         let before = self.pose.current_pose();
-        self.pose.tick();
+        self.pose.tick_with(smoothing_for(dt));
         self.clamp();
         let after = self.pose.current_pose();
         (before.yaw - after.yaw).abs() > f32::EPSILON
@@ -233,10 +261,23 @@ mod tests {
     use super::*;
     use crate::preview::fixtures;
 
+    /// One 60 Hz frame, reco-gui's smoothing step.
+    const FRAME: Duration = Duration::from_micros(16_667);
+
     fn gpu() -> Option<GpuContext> {
         GpuContext::new_blocking()
             .map_err(|e| eprintln!("skipping: no GPU ({e})"))
             .ok()
+    }
+
+    #[test]
+    fn easing_speed_does_not_depend_on_the_step_rate() {
+        // reco-gui eased by POSE_SMOOTHING once per 60 Hz frame.
+        let frame = Duration::from_secs_f64(1.0 / 60.0);
+        assert!((smoothing_for(frame) - POSE_SMOOTHING).abs() < 1e-6);
+        // 25 steps of 4 ms close the same share of the gap as one of 100 ms.
+        let many: f32 = 1.0 - (1.0 - smoothing_for(Duration::from_millis(4))).powi(25);
+        assert!((many - smoothing_for(Duration::from_millis(100))).abs() < 1e-4);
     }
 
     #[test]
@@ -253,6 +294,51 @@ mod tests {
         .err()
         .expect("opening missing files must fail");
         assert!(matches!(err, SessionError::Calibration(_)), "{err}");
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_video_fails_to_open() {
+        let (Some((left, _, cal)), Some(gpu)) = (fixtures::fast_set(), gpu()) else {
+            return;
+        };
+        let junk =
+            std::env::temp_dir().join(format!("reco-app-not-a-video-{}.mp4", std::process::id()));
+        std::fs::write(&junk, vec![0x5a_u8; 4096]).unwrap();
+        let result = PreviewSession::open(
+            gpu,
+            &InputPath::Single(left),
+            &InputPath::Single(junk.clone()),
+            &cal,
+            (320, 180),
+        );
+        let _ = std::fs::remove_file(&junk);
+        let err = result
+            .err()
+            .expect("a right file that is not a video must fail to open");
+        assert!(matches!(err, SessionError::Source(_)), "{err}");
+    }
+
+    #[test]
+    fn videos_of_different_sizes_fail_to_open() {
+        let (Some((left, _, cal)), Some(gpu)) = (fixtures::fast_set(), gpu()) else {
+            return;
+        };
+        let Some(other) = fixtures::other_size() else {
+            return;
+        };
+        let err = PreviewSession::open(
+            gpu,
+            &InputPath::Single(left),
+            &InputPath::Single(other),
+            &cal,
+            (320, 180),
+        )
+        .err()
+        .expect("a right video of another size must fail to open");
+        assert!(
+            matches!(&err, SessionError::Source(m) if m.contains("size")),
+            "{err}"
+        );
     }
 
     #[test]
@@ -293,7 +379,7 @@ mod tests {
         let before = render_to_cpu(&mut session);
         session.pan(80.0, 0.0);
         for _ in 0..40 {
-            session.smooth();
+            session.smooth(FRAME);
         }
         let after = render_to_cpu(&mut session);
         let changed = before.iter().zip(&after).filter(|(a, b)| a != b).count();
@@ -320,11 +406,11 @@ mod tests {
         let opening = render_to_cpu(&mut session);
         session.zoom(-30.0);
         for _ in 0..80 {
-            session.smooth();
+            session.smooth(FRAME);
         }
         session.reset_view();
         for _ in 0..80 {
-            session.smooth();
+            session.smooth(FRAME);
         }
         let reset = render_to_cpu(&mut session);
         let changed = opening.iter().zip(&reset).filter(|(a, b)| a != b).count();

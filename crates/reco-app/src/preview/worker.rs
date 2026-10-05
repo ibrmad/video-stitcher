@@ -16,7 +16,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use reco_core::gpu::GpuContext;
 use reco_core::wgpu;
@@ -32,8 +32,12 @@ use super::view::should_resize;
 /// Commands queued before the UI's sends start failing.
 const COMMAND_QUEUE: usize = 256;
 /// How often the worker wakes while the pose eases or a frame waits for a
-/// free slot.
-const ANIMATION_TICK: Duration = Duration::from_millis(4);
+/// free slot: about one frame of a 120 Hz display, so easing renders no
+/// faster than a display shows them.
+const ANIMATION_TICK: Duration = Duration::from_millis(8);
+/// The longest easing step: after a pause in input the first step counts as
+/// one 30 Hz frame, not the whole idle time.
+const MAX_EASE_STEP: Duration = Duration::from_millis(33);
 /// The shortest sleep while playing: a frame that is due but not decoded
 /// yet is polled again after this long (reco-gui's 2 ms timer).
 const POLL_FLOOR: Duration = Duration::from_millis(2);
@@ -116,8 +120,11 @@ pub enum PreviewEvent {
     Opening,
     /// Open and showing the first frame.
     Ready(PreviewInfo),
-    /// Opening or rendering failed; the message is for the user.
+    /// Opening failed; the message is for the user.
     Failed(String),
+    /// Something failed once open (a render, a seek, a decode) and playback
+    /// paused. The message is for the user; it is sent once, not per frame.
+    Stopped(String),
     /// A new ring (zero-copy): adopt every texture, answer `Adopted`, and
     /// show `shown`, which already holds the current frame.
     Ring {
@@ -259,6 +266,10 @@ struct Worker {
     /// The pose is still easing toward its target.
     easing: bool,
     last_time: (u64, bool),
+    /// The last failure reported since a frame was shown; not repeated.
+    problem: Option<String>,
+    /// When the pose last took a smoothing step.
+    last_step: Instant,
     quit: bool,
 }
 
@@ -277,6 +288,8 @@ impl Worker {
             dirty: false,
             easing: false,
             last_time: (0, false),
+            problem: None,
+            last_step: Instant::now(),
             quit: false,
         }
     }
@@ -301,7 +314,12 @@ impl Worker {
             while let Ok(c) = commands.try_recv() {
                 self.apply(c);
             }
-            self.step();
+            let now = Instant::now();
+            let dt = now
+                .saturating_duration_since(self.last_step)
+                .min(MAX_EASE_STEP);
+            self.last_step = now;
+            self.step(dt);
         }
     }
 
@@ -345,13 +363,11 @@ impl Worker {
             PreviewCommand::Pan { dx, dy } => self.with_session(|s| s.pan(dx, dy)),
             PreviewCommand::Zoom { degrees } => self.with_session(|s| s.zoom(degrees)),
             PreviewCommand::ResetView => self.with_session(PreviewSession::reset_view),
-            PreviewCommand::TogglePlay => self.with_session(|s| {
-                s.playback_mut().toggle();
-            }),
+            PreviewCommand::TogglePlay => self.transport(|s| s.playback_mut().toggle().map(|_| ())),
             PreviewCommand::Step { forward } => self.transport(|s| {
                 let playback = s.playback_mut();
                 if playback.state() == PlayState::Playing {
-                    playback.toggle();
+                    playback.toggle()?;
                 }
                 if forward {
                     playback.step_forward().map(|_| ())
@@ -378,11 +394,26 @@ impl Worker {
         f: impl FnOnce(&mut PreviewSession) -> Result<(), reco_core::source::SourceError>,
     ) {
         if let Some(s) = self.session.as_mut() {
-            if let Err(e) = f(s) {
-                self.out
-                    .send(PreviewEvent::Failed(format!("Couldn't seek: {e}")));
+            let result = f(s);
+            if let Err(e) = result {
+                self.stop(format!("Couldn't seek: {e}"));
             }
             self.dirty = true;
+        }
+    }
+
+    /// A failure once open (a render, a seek, a decode): pause, and tell the
+    /// UI once, so a frame that keeps failing is not reported every frame.
+    fn stop(&mut self, message: String) {
+        if let Some(s) = self.session.as_mut()
+            && s.playback().state() == PlayState::Playing
+        {
+            // Pausing never seeks, so it cannot fail.
+            let _ = s.playback_mut().toggle();
+        }
+        if self.problem.as_ref() != Some(&message) {
+            self.out.send(PreviewEvent::Stopped(message.clone()));
+            self.problem = Some(message);
         }
     }
 
@@ -428,26 +459,30 @@ impl Worker {
                 );
                 self.session = Some(session);
                 self.ring = None;
+                self.problem = None;
                 self.dirty = true;
             }
             Err(e) => self.out.send(PreviewEvent::Failed(e.to_string())),
         }
     }
 
-    /// Advance playback and smoothing, and present a frame if anything moved.
-    fn step(&mut self) {
+    /// Advance playback, and the pose by `dt`, and present a frame if
+    /// anything moved.
+    fn step(&mut self, dt: Duration) {
         let Some(session) = self.session.as_mut() else {
             return;
         };
         let advanced = match session.playback_mut().tick() {
-            Ok(a) => a,
+            Ok(advanced) => advanced,
             Err(e) => {
-                self.out
-                    .send(PreviewEvent::Failed(format!("Playback stopped: {e}")));
+                self.stop(format!("Playback stopped: {e}"));
                 false
             }
         };
-        let moved = session.smooth();
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        let moved = session.smooth(dt);
         self.easing = moved;
         let time = (
             session.playback().frame_index(),
@@ -527,7 +562,7 @@ impl Worker {
         let mut slots = SlotRing::new(RING_SLOTS);
         let shown = slots.acquire().expect("a new ring has free slots");
         if let Err(e) = session.render(&textures[shown].1) {
-            self.out.send(PreviewEvent::Failed(e.to_string()));
+            self.stop(e.to_string());
             return true;
         }
         let _ = gpu.device().poll(wgpu::PollType::wait_indefinitely());
@@ -545,6 +580,7 @@ impl Worker {
             textures: pointers,
             shown,
         });
+        self.problem = None;
         true
     }
 
@@ -562,7 +598,7 @@ impl Worker {
         };
         if let Err(e) = session.render(&ring.textures[slot].1) {
             ring.slots.release(slot);
-            self.out.send(PreviewEvent::Failed(e.to_string()));
+            self.stop(e.to_string());
             return true;
         }
         let _ = gpu.device().poll(wgpu::PollType::wait_indefinitely());
@@ -570,6 +606,7 @@ impl Worker {
             generation: ring.generation,
             slot,
         });
+        self.problem = None;
         true
     }
 
@@ -593,18 +630,19 @@ impl Worker {
             view_formats: &[],
         });
         if let Err(e) = session.render(&target.create_view(&Default::default())) {
-            self.out.send(PreviewEvent::Failed(e.to_string()));
+            self.stop(e.to_string());
             return true;
         }
         match read_bgra(gpu, &target, width, height) {
-            Ok(data) => self.out.send(PreviewEvent::Pixels {
-                width,
-                height,
-                data,
-            }),
-            Err(e) => self.out.send(PreviewEvent::Failed(format!(
-                "Couldn't read the frame back: {e}"
-            ))),
+            Ok(data) => {
+                self.out.send(PreviewEvent::Pixels {
+                    width,
+                    height,
+                    data,
+                });
+                self.problem = None;
+            }
+            Err(e) => self.stop(format!("Couldn't read the frame back: {e}")),
         }
         true
     }
@@ -708,6 +746,75 @@ mod tests {
             |e| matches!(e, PreviewEvent::Time { frame, playing: true } if *frame >= 10),
         );
         assert!(moved.is_some(), "playback did not reach frame 10");
+    }
+
+    #[test]
+    fn runtime_failures_report_once() {
+        let (tx, rx) = mpsc::channel();
+        let mut worker = Worker::new(
+            PreviewConfig::default(),
+            Outbox {
+                tx,
+                waker: Arc::new(|| {}),
+            },
+        );
+        worker.stop("The preview failed to render: x".into());
+        worker.stop("The preview failed to render: x".into());
+        worker.stop("Couldn't seek: y".into());
+        let events: Vec<_> = rx.try_iter().collect();
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(
+            matches!(&events[0], PreviewEvent::Stopped(m) if m.ends_with(": x")),
+            "{events:?}"
+        );
+        assert!(
+            matches!(&events[1], PreviewEvent::Stopped(m) if m.ends_with(": y")),
+            "{events:?}"
+        );
+    }
+
+    #[test]
+    fn another_gpu_falls_back_to_readback() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        // The UI's device is not the worker's: no ring, frames as pixels.
+        let worker = PreviewWorker::spawn(
+            PreviewConfig {
+                display_device: Some(1),
+                force_readback: false,
+            },
+            Arc::new(|| {}),
+        );
+        worker.send(PreviewCommand::Resize {
+            width: 320,
+            height: 180,
+        });
+        worker.send(PreviewCommand::Open {
+            left: InputPath::Single(left),
+            right: InputPath::Single(right),
+            calibration: cal,
+        });
+        let ready = wait_for(&worker, 30, |e| {
+            matches!(e, PreviewEvent::Ready(_) | PreviewEvent::Failed(_))
+        });
+        assert!(
+            matches!(
+                ready,
+                Some(PreviewEvent::Ready(PreviewInfo {
+                    zero_copy: false,
+                    ..
+                }))
+            ),
+            "{ready:?}"
+        );
+        let first = wait_for(&worker, 10, |e| {
+            matches!(e, PreviewEvent::Pixels { .. } | PreviewEvent::Ring { .. })
+        });
+        assert!(
+            matches!(first, Some(PreviewEvent::Pixels { .. })),
+            "{first:?}"
+        );
     }
 
     #[test]

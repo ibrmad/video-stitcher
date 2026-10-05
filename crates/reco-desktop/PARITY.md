@@ -89,7 +89,10 @@ lines.
       preview appears", "the empty state is gone", "a real picture";
       `ready-zero-copy.png`, `real-5k.png`. A missing file says so instead:
       "bad file: the viewer says it couldn't open the videos", "no preview
-      is drawn"; `bad-file.png`.
+      is drawn"; `bad-file.png`. So does a right file that is not a video
+      ("bad video: it says no frame could be decoded", "Play stays
+      disabled"; `bad-video.png`) and a pair of different sizes
+      (`videos_of_different_sizes_fail_to_open`).
 - [x] Preview aspect: auto, 16:9, 4:3, 21:9. Evidence: "the preview
       letterboxes to 4:3 (734x550)", `aspect-4x3-zero-copy.png`;
       `aspects_follow_the_dropdown_order`, `fit_letterboxes_and_pillarboxes`.
@@ -100,16 +103,24 @@ lines.
 - [x] Keys: arrows pan 20 px; `+`/`=` zoom in 5°; `-`/`_` zoom out 5°; R
       resets the view; F/F11 toggle fullscreen; Space plays or pauses;
       `[`/`]` seek ∓5 s. Evidence: "Space plays", "arrow keys pan", "= zooms
-      in", "R resets the view", "F toggles fullscreen", "] seeks 5 s", and
-      "Space on a focused button leaves the preview alone"; the mapping of
-      every key, with ⌘/Ctrl/Option ignored: `maps_the_slint_shortcuts`,
-      `shift_still_counts`, `modified_keys_are_ignored`.
-- [x] Playback advances on vsync through the zero-copy bridge. Evidence:
-      "renders zero-copy" (the log line `preview: 1280x960 input, zero-copy
-      on Apple M1 Pro`), "the picture moves while playing", "paused frames
-      stay still", "about 0% CPU while paused"; the 5.3K pair plays at
-      30.0 fps (source 29.97). The ring's hand-over is unit-tested:
-      `ring_waits_for_adoption`, `a_replaced_slot_retires_after_its_beats`.
+      in", "R resets the view", "F toggles fullscreen", "] seeks 5 s"; keys
+      survive mouse use: "keys still reach the preview after clicking Play",
+      "keys reach the preview after a mouse pick of the aspect", "Space
+      plays after clicking a panel toggle", while "Space on a Tab-focused control leaves the preview
+      alone"; Space after the end plays again (`space_after_the_end_restarts`);
+      the mapping of every key, with ⌘/Ctrl/Option ignored:
+      `maps_the_slint_shortcuts`, `shift_still_counts`,
+      `modified_keys_are_ignored`.
+- [x] Playback advances on vsync through the zero-copy bridge. Frames are
+      paced by the worker's clock at the source rate and shown on Makepad's
+      next frame. Evidence: "renders zero-copy" (the log line `preview:
+      1280x960 input, zero-copy on Apple M1 Pro`), "the picture moves while
+      playing", "paused frames stay still", "about 0% CPU while paused"; the
+      5.3K pair decodes and shows about 30 frames a second (source 29.97).
+      The ring's hand-over is unit-tested: `ring_waits_for_adoption`,
+      `a_replaced_slot_retires_after_its_beats`,
+      `a_slot_also_waits_its_minimum_time`; a different GPU falls back to
+      readback: `another_gpu_falls_back_to_readback`.
 - [x] Render target follows the viewer size in physical pixels (New:
       DPI-aware). Evidence: `render_size_counts_physical_pixels`,
       `render_size_caps_at_4k_keeping_the_aspect`; the 4:3 run re-renders

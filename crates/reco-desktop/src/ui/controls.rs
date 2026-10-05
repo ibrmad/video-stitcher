@@ -54,9 +54,11 @@ script_mod! {
     }
 
     // Buttons: flat faces, no borders, 22 pt tall, no outer margin (Makepad
-    // adds 4 pt above and below by default).
+    // adds 4 pt above and below by default). A click does not take the
+    // keyboard (as on macOS), so the preview keeps its shortcuts and Space
+    // never re-clicks the last button; Tab still focuses every button.
     mod.widgets.RecoButton = Button{
-        height: theme.reco_button margin: 0
+        height: theme.reco_button margin: 0 grab_key_focus: false
         padding: Inset{left: theme.reco_button_pad_x right: theme.reco_button_pad_x}
         spacing: theme.reco_gap_s
         icon_walk: Walk{width: theme.reco_icon_small height: theme.reco_icon_small}
@@ -72,7 +74,7 @@ script_mod! {
     // The one primary action of a screen: white on deep green. Disabled, its
     // icon greys with the label.
     mod.widgets.RecoPrimaryButton = ButtonPrimary{
-        height: theme.reco_button margin: 0
+        height: theme.reco_button margin: 0 grab_key_focus: false
         padding: Inset{left: theme.reco_button_pad_x + theme.reco_gap_s right: theme.reco_button_pad_x + theme.reco_gap_s}
         spacing: theme.reco_gap_s
         icon_walk: Walk{width: theme.reco_icon_small height: theme.reco_icon_small}
@@ -93,6 +95,7 @@ script_mod! {
     // An icon-only action: no face until hovered.
     mod.widgets.RecoIconButton = ButtonIcon{
         width: theme.reco_icon_button height: theme.reco_icon_button padding: 0 margin: 0 text: ""
+        grab_key_focus: false
         icon_walk: Walk{width: theme.reco_icon height: theme.reco_icon}
         draw_bg +: {
             color: theme.reco_transparent

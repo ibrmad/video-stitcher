@@ -190,31 +190,87 @@ def check_mode(mode, extra):
         expect(before is not None and after is not None and 4 <= after - before <= 6,
                f"{name}: ] seeks 5 s ({before} -> {after})")
 
-        # A focused button keeps Space: the preview does not play.
-        app.click_id("load_calibration")
-        held = text_of(app, "time_current")
-        app.key("space")
-        time.sleep(1.0)
-        expect(text_of(app, "time_current") == held, f"{name}: Space on a focused button leaves the preview alone")
-        x, y, w, h = app.rect("preview")
-        app.get("/click", x=x + w / 2, y=y + h / 2, wait=1)
+        check_focus(app, name)
 
-        # Preview aspect 4:3 from the dropdown.
+        # A pick with the mouse gives the keyboard back to the preview. The
+        # open list puts the chosen row (Auto) over the dropdown, so a second
+        # click there picks it.
         app.click_id("aspect")
-        option = next((i for i in app.snap("4:3") if i.get("t") == "4:3"), None)
-        if option is not None:
-            r = option["r"]
-            app.get("/click", x=r[0] + r[2] / 2, y=r[1] + r[3] / 2, wait=1)
-        else:
-            app.key("down")
-            app.key("down")
-            app.key("return")
+        time.sleep(0.3)
+        app.click_id("aspect")
+        time.sleep(0.5)
+        before = seconds(text_of(app, "time_current"))
+        app.key("]")
+        time.sleep(1.0)
+        after = seconds(text_of(app, "time_current"))
+        expect(before is not None and after is not None and after - before >= 4,
+               f"{name}: keys reach the preview after a mouse pick of the aspect ({before} -> {after})")
+
+        # Preview aspect 4:3 from the dropdown: a click opens it and gives it
+        # the keyboard, and arrow keys step through the choices (the open
+        # list's rows are not in the snapshot).
+        app.click_id("aspect")
+        app.key("down")
+        app.key("down")
+        app.key("return")
         time.sleep(1.0)
         samples(app, f"aspect-4x3-{mode}")
         x, y, w, h = app.rect("preview")
         expect(abs(w / h - 4 / 3) < 0.03, f"{name}: the preview letterboxes to 4:3 ({w}x{h})")
 
         expect(app.errors() == [], f"{name}: no errors in the app log")
+
+
+def check_focus(app, name):
+    """Mouse clicks leave the shortcuts with the preview (a click does not
+    take the keyboard, as on macOS); a control focused with Tab keeps Space."""
+    # ] still seeks after two clicks on Play.
+    before = seconds(text_of(app, "time_current"))
+    app.click_id("play_pause")
+    app.click_id("play_pause")
+    app.key("]")
+    time.sleep(1.0)
+    after = seconds(text_of(app, "time_current"))
+    expect(before is not None and after is not None and after - before >= 4,
+           f"{name}: keys still reach the preview after clicking Play ({before} -> {after})")
+
+    # Space after clicking a panel toggle plays, and does not click it again.
+    app.click_id("toggle_media")
+    folded = app.rect("setup_header") is None
+    t0 = text_of(app, "time_current")
+    app.key("space")
+    time.sleep(1.5)
+    t1 = text_of(app, "time_current")
+    app.key("space")
+    expect(folded and app.rect("setup_header") is None, f"{name}: Space does not click the panel toggle again")
+    expect(t1 != t0, f"{name}: Space plays after clicking a panel toggle ({t0} -> {t1})")
+    app.click_id("toggle_media")
+    time.sleep(0.5)
+
+    # A control focused from the keyboard keeps Space for itself.
+    app.key("tab")
+    held = text_of(app, "time_current")
+    app.key("space")
+    time.sleep(1.0)
+    expect(text_of(app, "time_current") == held, f"{name}: Space on a Tab-focused control leaves the preview alone")
+    app.key("escape")
+    x, y, w, h = app.rect("preview")
+    app.get("/click", x=x + w / 2, y=y + h / 2, wait=1)
+
+
+def check_bad_video():
+    left, _, cal = FAST
+    junk = os.path.join(OUT, "not-a-video.mp4")
+    with open(junk, "wb") as f:
+        f.write(b"\x5a" * 4096)
+    with launch((left, junk, cal)) as app:
+        title = wait_for(lambda: text_of(app, "next_title") == "Couldn't open the videos", 20)
+        app.grab(os.path.join(OUT, "bad-video.png"))
+        expect(bool(title), "bad video: the viewer says it couldn't open the videos")
+        body = text_of(app, "next_body") or ""
+        expect("decoded" in body, f"bad video: it says no frame could be decoded ({body})")
+        expect(app.rect("preview") is None, "bad video: no preview is drawn")
+        expect(app.enabled("play_pause") is False, "bad video: Play stays disabled")
 
 
 def check_bad_file():
@@ -254,6 +310,7 @@ def main():
     check_mode("zero-copy", ())
     check_mode("readback", ("--preview-readback",))
     check_bad_file()
+    check_bad_video()
     check_real()
     if FAILURES:
         print(f"\nModule 1 check FAILED: {len(FAILURES)} failure(s):")

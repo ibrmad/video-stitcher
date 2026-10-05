@@ -7,8 +7,8 @@
 //! worker's queue). Readback frames arrive as CPU pixels.
 
 use std::sync::mpsc::SyncSender;
+use std::time::Instant;
 
-use makepad_widgets::makepad_platform::makepad_objc_sys::runtime::ObjcId;
 use makepad_widgets::*;
 use reco_app::preview::slots::{Retirement, RING_SLOTS};
 use reco_app::preview::view::{fit, render_size, PreviewAspect};
@@ -50,6 +50,32 @@ pub enum PreviewAction {
     ToggleFullscreen,
     #[default]
     None,
+}
+
+/// Take a ring texture by its raw `MTLTexture` pointer (retained, no copy).
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
+fn adopt(
+    cx: &mut Cx,
+    texture: &Texture,
+    raw: usize,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    use makepad_widgets::makepad_platform::makepad_objc_sys::runtime::ObjcId;
+    texture.adopt_metal_bgra(cx, raw as ObjcId, width as usize, height as usize)
+}
+
+/// Off Apple platforms there is no ring to adopt: the worker reads frames
+/// back there, because the UI has no Metal device to match.
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "tvos")))]
+fn adopt(
+    _cx: &mut Cx,
+    _texture: &Texture,
+    _raw: usize,
+    _width: u32,
+    _height: u32,
+) -> Result<(), String> {
+    Err("zero-copy frames need Metal".into())
 }
 
 /// Degrees of FOV per point of wheel scroll. reco-gui zooms by −dy / 40
@@ -138,18 +164,13 @@ impl RecoPreview {
                     self.ring.push(Texture::new_video_external(cx));
                 }
                 for (texture, raw) in self.ring.iter().zip(&textures) {
-                    if let Err(e) = texture.adopt_metal_bgra(
-                        cx,
-                        *raw as ObjcId,
-                        width as usize,
-                        height as usize,
-                    ) {
+                    if let Err(e) = adopt(cx, texture, *raw, width, height) {
                         error!("preview: could not adopt a ring texture: {e}");
                     }
                 }
                 self.generation = generation;
                 self.retirement.clear();
-                self.retirement.show(shown);
+                self.retirement.show(shown, Instant::now());
                 self.frame_size = Some((width, height));
                 self.showing_pixels = false;
                 self.queue(PreviewCommand::Adopted { generation });
@@ -159,7 +180,7 @@ impl RecoPreview {
             }
             PreviewEvent::Frame { generation, slot } => {
                 if generation == self.generation {
-                    self.retirement.show(slot);
+                    self.retirement.show(slot, Instant::now());
                     self.area.redraw(cx);
                     self.request_beat(cx);
                 } else {
@@ -255,7 +276,7 @@ impl RecoPreview {
 impl Widget for RecoPreview {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
         if self.beat.is_event(event).is_some() {
-            for slot in self.retirement.beat() {
+            for slot in self.retirement.beat(Instant::now()) {
                 self.queue(PreviewCommand::Release {
                     generation: self.generation,
                     slot,

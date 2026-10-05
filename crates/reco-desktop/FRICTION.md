@@ -10,8 +10,18 @@ what the app does instead, and raised with the engine.
 `seek`. The preview needs seeking for step back, `[`/`]` and (Module 2)
 scrubbing, so Module 1 decodes through `FfmpegFileSource`: CPU YUV planes,
 uploaded on every render. The 5.3K match pair still plays at the source rate
-(30.0 of 29.97 fps on an M1 Pro, `tools/check_m1.py`). The ask: `seek(frame)`
+(about 30 fps, the source's 29.97, on an M1 Pro: `tools/check_m1.py`). The ask: `seek(frame)`
 on the zero-copy source, then the preview can switch to it.
+
+## A file that is not a video opens anyway (Module 1)
+
+`FfmpegFileSource::open_from_inputs` only warns when the right file fails to
+probe, and decoding errors end the stream (`next_frame` turns an error into
+`Ok(None)`). So a pair with a junk right file opens and plays nothing, and a
+right video of another size opens and then fails every render.
+`PreviewSession::open` refuses both (no first frame; planes of different
+sizes), so they read as a failed open in plain words. The ask: fail the open
+when the right file does not probe, and report decoding errors as errors.
 
 ## Clippy on the engine fails under Rust 1.92
 
