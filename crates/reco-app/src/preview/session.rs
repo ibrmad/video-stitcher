@@ -160,11 +160,6 @@ impl PreviewSession {
         self.pose.tick();
         self.clamp();
         let after = self.pose.current_pose();
-        if before.fov_degrees != after.fov_degrees
-            && let Some(fov) = after.fov_degrees
-        {
-            self.renderer.pipeline_mut().set_fov(fov);
-        }
         (before.yaw - after.yaw).abs() > f32::EPSILON
             || (before.pitch - after.pitch).abs() > f32::EPSILON
             || before.fov_degrees != after.fov_degrees
@@ -225,6 +220,11 @@ impl PreviewSession {
         let rig_tilt = self.renderer.pipeline().viewport().rig_tilt;
         self.pose
             .clamp_via_coverage(self.renderer.coverage(), aspect, rig_tilt);
+        // The coverage can narrow the FOV (at open too, before any
+        // smoothing): the renderer always draws the pose's current FOV.
+        if let Some(fov) = self.pose.current_pose().fov_degrees {
+            self.renderer.pipeline_mut().set_fov(fov);
+        }
     }
 }
 
@@ -300,6 +300,38 @@ mod tests {
         assert!(
             changed > before.len() / 4,
             "pan changed only {changed} pixels"
+        );
+    }
+
+    #[test]
+    fn reset_restores_the_opening_view() {
+        let (Some((left, right, cal)), Some(gpu)) = (fixtures::fast_set(), gpu()) else {
+            return;
+        };
+        // Near-square, like the viewer: the coverage caps the FOV below 75°.
+        let mut session = PreviewSession::open(
+            gpu,
+            &InputPath::Single(left),
+            &InputPath::Single(right),
+            &cal,
+            (320, 300),
+        )
+        .expect("open the fixture pair");
+        let opening = render_to_cpu(&mut session);
+        session.zoom(-30.0);
+        for _ in 0..80 {
+            session.smooth();
+        }
+        session.reset_view();
+        for _ in 0..80 {
+            session.smooth();
+        }
+        let reset = render_to_cpu(&mut session);
+        let changed = opening.iter().zip(&reset).filter(|(a, b)| a != b).count();
+        assert!(
+            changed < opening.len() / 100,
+            "reset left {changed} of {} pixels changed",
+            opening.len()
         );
     }
 
