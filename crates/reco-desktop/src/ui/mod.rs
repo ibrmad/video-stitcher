@@ -75,16 +75,27 @@ mod tests {
     /// icons once drew larger than Play.
     #[test]
     fn every_icon_pins_its_viewbox() {
+        // Makepad scales an icon by its drawn content, not its viewBox, so
+        // each icon pins its whole box with an invisible rect. Icons paint in
+        // #000 for the widget to tint, never `currentColor`.
         let icons = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("icons");
-        let pin = r#"<rect x="0" y="0" width="16" height="16" fill="none"/>"#;
         let mut loose = Vec::new();
         for entry in std::fs::read_dir(&icons).expect("icons folder") {
             let path = entry.expect("readable entry").path();
             if path.extension().is_some_and(|ext| ext == "svg") {
                 let text = std::fs::read_to_string(&path).expect("readable icon");
-                if !text.contains(pin) {
+                let size = text
+                    .split_once("viewBox=\"0 0 ")
+                    .and_then(|(_, rest)| rest.split_once('"'))
+                    .and_then(|(size, _)| size.split_once(' '));
+                let pinned = size.is_some_and(|(w, h)| {
+                    text.contains(&format!(
+                        r#"<rect x="0" y="0" width="{w}" height="{h}" fill="none" stroke="none" />"#
+                    ))
+                });
+                if !pinned || text.contains("currentColor") {
                     loose.push(path.file_name().unwrap().to_string_lossy().into_owned());
                 }
             }
@@ -92,7 +103,7 @@ mod tests {
         loose.sort();
         assert!(
             loose.is_empty(),
-            "icons without a pinned 16x16 box: {loose:?}"
+            "icons without a pinned viewBox, or painted in currentColor: {loose:?}"
         );
     }
 

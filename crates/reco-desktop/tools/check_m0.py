@@ -244,9 +244,12 @@ def check_state(size, state):
             expect(not tinted, f"{name}: disabled Export has no green ink ({tinted[:2]})")
 
         tx, ty, tw, th = app.rect("toggle_inspector")
-        probe = (tx + tw / 2 + 3.5, ty + th / 2)
+        # Lucide's panel-right: an outline whose divider stands 2 pt right of
+        # the centre. The brightest pixel around it is the icon's colour.
+        probe = (tx + tw / 2 + 2.0, ty + th / 2)
         tpng, tscale = settled(app, os.path.join(OUT, f"{name}-toggle.png"), width_pt, probe)
-        icon = pixel_at(tpng, tscale, *probe)
+        icon = max((pixel_at(tpng, tscale, probe[0] + dx / 2, probe[1] + dy / 2)
+                    for dx in range(-3, 4) for dy in range(-3, 4)), key=lambda p: max(p[:3]))
         expect((max(icon[:3]) > 130) == stitched,
                f"{name}: Adjust toggle icon {'bright' if stitched else 'dimmed'} ({icon[:3]})")
 

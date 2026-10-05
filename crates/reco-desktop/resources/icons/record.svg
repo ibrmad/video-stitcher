@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-<rect x="0" y="0" width="16" height="16" fill="none"/>
-<circle cx="8" cy="8" r="4.5" fill="#000"/>
+<!-- @license lucide-static v1.52.0 - ISC -->
+<svg
+  class="lucide lucide-circle"
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="#000"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect x="0" y="0" width="24" height="24" fill="none" stroke="none" />
+  <circle fill="#000" cx="12" cy="12" r="10" />
 </svg>

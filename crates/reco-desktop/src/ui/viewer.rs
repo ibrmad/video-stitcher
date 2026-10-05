@@ -65,7 +65,7 @@ script_mod! {
             Tip{text: "Record the preview as you watch"
                 record_button := RecoIconButton{
                     animator +: {disabled: {default: @on}}
-                    icon_walk: Walk{width: theme.reco_row_icon height: theme.reco_row_icon}
+                    icon_walk: Walk{width: theme.reco_record_icon height: theme.reco_record_icon}
                     draw_icon +: {svg: crate_resource("self:resources/icons/record.svg") color: theme.reco_record}
                 }
             }

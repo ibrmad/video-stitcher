@@ -232,8 +232,12 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   click; they get the same hand-back when Modules 4 and 5 wire them.
 - Negative margins work, and are how trailing icons line up (Rule 11).
 - An SVG icon is scaled by its drawn content, not its viewBox, so a small
-  drawing is blown up to fill the icon box. Every icon pins its 16 by 16
-  box with an invisible rect (the `every_icon_pins_its_viewbox` test).
+  drawing is blown up to fill the icon box. Every icon pins its whole
+  viewBox with an invisible rect (the `every_icon_pins_its_viewbox` test).
+  Icons are [Lucide](https://lucide.dev)'s (owner's choice, 2026-10-05),
+  fetched and converted by `tools/lucide_icons.py`: painted in `#000` for the
+  widget to tint, the box pinned, Record and Stop filled and drawn at 9 pt.
+  A new icon is a line in that script's table.
 - Buttons and dropdowns add 4 pt above and below themselves; Reco's
   versions set `margin: 0`.
 - A plain `View` with `show_bg` draws nothing; a filled box is a
