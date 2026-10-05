@@ -6,9 +6,16 @@ use std::path::{Path, PathBuf};
 
 use crate::preview::view::PreviewAspect;
 
-/// The codec recordings use (the Slint app's default; a choice arrives with
-/// Preferences in Module 7).
-pub const RECORDING_CODEC: &str = "h264";
+/// How a recording is made: its frame size, codec and quality.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecordingFormat {
+    /// The frame size.
+    pub size: (u32, u32),
+    /// The codec: "h264", "hevc" or "av1" (Preferences).
+    pub codec: String,
+    /// The encoder quality.
+    pub quality: RecordingQuality,
+}
 
 /// Recording quality, named as the encoder presets name it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

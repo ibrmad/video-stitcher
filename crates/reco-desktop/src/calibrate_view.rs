@@ -78,6 +78,7 @@ impl App {
             ),
             skip_start: self.calibration_start(),
             skip_end: slider(ids!(cal_skip_end), defaults.skip_end),
+            blend: self.settings.blend(),
         }
     }
 
@@ -124,14 +125,15 @@ impl App {
         };
         let options = self.calibration_options(cx);
         log!(
-            "calibrate: {} frames, skip {:.1} s to -{:.0} s, imu={}, akaze={}, detect y {:.2}-{:.2}",
+            "calibrate: {} frames, skip {:.1} s to -{:.0} s, imu={}, akaze={}, detect y {:.2}-{:.2}, blend {:.2}",
             options.frames,
             options.skip_start,
             options.skip_end,
             options.imu_seeds,
             options.akaze_threshold,
             options.detect_y.0,
-            options.detect_y.1
+            options.detect_y.1,
+            options.blend
         );
         self.calibration_job = Some(CalibrationJob::start(
             left.clone(),

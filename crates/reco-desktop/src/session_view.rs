@@ -17,7 +17,7 @@ use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
 };
 use reco_app::recording::{
-    recording_file_name, recording_folder, recording_size, RecordingQuality,
+    recording_file_name, recording_folder, recording_size, RecordingFormat, RecordingQuality,
 };
 use reco_app::toasts::Severity;
 
@@ -266,8 +266,11 @@ impl App {
             .map_or(0, |d| d.as_secs());
         live.worker.send(PreviewCommand::StartRecording {
             path: folder.join(recording_file_name(now)),
-            size: recording_size(self.settings.aspect()),
-            quality: self.settings.quality(),
+            format: RecordingFormat {
+                size: recording_size(self.settings.aspect()),
+                codec: self.settings.recording_codec.clone(),
+                quality: self.settings.quality(),
+            },
         });
     }
 

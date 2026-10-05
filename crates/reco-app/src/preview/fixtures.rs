@@ -57,3 +57,12 @@ pub fn real_set() -> Option<(PathBuf, PathBuf, PathBuf)> {
         None
     }
 }
+
+/// A small, quick recording: 640x360, H.264, Fast.
+pub fn small_recording() -> crate::recording::RecordingFormat {
+    crate::recording::RecordingFormat {
+        size: (640, 360),
+        codec: "h264".into(),
+        quality: crate::recording::RecordingQuality::Fast,
+    }
+}

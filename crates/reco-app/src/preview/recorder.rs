@@ -25,7 +25,7 @@ use reco_io::adapters::create_encoder;
 
 use super::playback::StereoYuv;
 use super::session::{FOV_DEFAULT, build_renderer};
-use crate::recording::{RECORDING_CODEC, RecordingQuality};
+use crate::recording::RecordingFormat;
 
 /// Frames queued for the encoder before the render thread waits for it.
 const ENCODE_QUEUE: usize = 8;
@@ -49,16 +49,16 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    /// Open the encoder and a renderer at `size` (blocking for a moment).
+    /// Open the encoder and a renderer in `format` (blocking for a moment).
     pub fn start(
         gpu: GpuContext,
         calibration: MatchCalibration,
         input: (u32, u32),
-        size: (u32, u32),
         fps: (i32, i32),
         path: &Path,
-        quality: RecordingQuality,
+        format: &RecordingFormat,
     ) -> Result<Self, String> {
+        let size = format.size;
         let renderer = build_renderer(
             gpu,
             calibration,
@@ -72,8 +72,8 @@ impl Recorder {
             size.0,
             size.1,
             fps,
-            RECORDING_CODEC,
-            quality.name(),
+            &format.codec,
+            format.quality.name(),
             None,
             None,
             None,
@@ -228,7 +228,7 @@ mod tests {
         };
         let path = temp_video("one-per-frame");
         session
-            .start_recording(&path, (640, 360), RecordingQuality::Fast)
+            .start_recording(&path, &fixtures::small_recording())
             .expect("start");
         for i in 0..15 {
             if i > 0 {
@@ -261,7 +261,7 @@ mod tests {
         };
         let path = temp_video("fixed-size");
         session
-            .start_recording(&path, (640, 360), RecordingQuality::Fast)
+            .start_recording(&path, &fixtures::small_recording())
             .expect("start");
         session.record_frame().unwrap();
         session.resize(1000, 300);
@@ -281,8 +281,7 @@ mod tests {
         let err = session
             .start_recording(
                 Path::new("/nonexistent/folder/x.mp4"),
-                (640, 360),
-                RecordingQuality::Fast,
+                &fixtures::small_recording(),
             )
             .expect_err("no folder, no recording");
         assert!(err.to_string().starts_with("Couldn't record"), "{err}");

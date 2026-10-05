@@ -22,7 +22,7 @@ use super::recorder::{Recorder, Recording};
 use super::tuning::{CalibrationValues, Tuning};
 use crate::lens::Lens;
 use crate::project::Camera;
-use crate::recording::RecordingQuality;
+use crate::recording::RecordingFormat;
 use reco_core::lens::preview::LensPreviewRenderer;
 
 /// The pipeline's output and the ring's format (never sRGB: the shader
@@ -481,13 +481,12 @@ impl PreviewSession {
         self.renderer.gpu()
     }
 
-    /// Start recording to `path` at `size` (blocking for a moment while the
-    /// encoder opens: run on the worker).
+    /// Start recording to `path` in `format` (blocking for a moment while
+    /// the encoder opens: run on the worker).
     pub fn start_recording(
         &mut self,
         path: &Path,
-        size: (u32, u32),
-        quality: RecordingQuality,
+        format: &RecordingFormat,
     ) -> Result<(), SessionError> {
         let input = self
             .playback
@@ -497,10 +496,9 @@ impl PreviewSession {
             self.gpu().clone(),
             self.renderer.calibration().clone(),
             input,
-            size,
             self.playback.fps_rational(),
             path,
-            quality,
+            format,
         )
         .map_err(SessionError::Record)?;
         self.recorder = Some(recorder);
@@ -1038,7 +1036,7 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("reco-app-tuned-rec-{}.mp4", std::process::id()));
         session
-            .start_recording(&path, (640, 360), crate::recording::RecordingQuality::Fast)
+            .start_recording(&path, &fixtures::small_recording())
             .expect("start");
         session.tune(Tuning::Blend(0.25));
         session.tune(Tuning::Tilt(5.0));

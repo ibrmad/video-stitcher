@@ -35,7 +35,7 @@ use super::tuning::{CalibrationValues, Tuning};
 use super::view::should_resize;
 use crate::files::save_atomically;
 use crate::project::Camera;
-use crate::recording::RecordingQuality;
+use crate::recording::RecordingFormat;
 
 /// Commands queued before the UI's sends start failing.
 const COMMAND_QUEUE: usize = 256;
@@ -137,14 +137,12 @@ pub enum PreviewCommand {
         /// The frame.
         frame: u64,
     },
-    /// Start recording the preview to `path` at `size`.
+    /// Start recording the preview to `path`.
     StartRecording {
         /// The file to write.
         path: PathBuf,
-        /// The frame size.
-        size: (u32, u32),
-        /// The encoder quality.
-        quality: RecordingQuality,
+        /// Its size, codec and quality.
+        format: RecordingFormat,
     },
     /// Stop recording and close the file.
     StopRecording,
@@ -576,11 +574,7 @@ impl Worker {
             }
             #[cfg(test)]
             PreviewCommand::Crash => panic!("a test crash"),
-            PreviewCommand::StartRecording {
-                path,
-                size,
-                quality,
-            } => self.start_recording(&path, size, quality),
+            PreviewCommand::StartRecording { path, format } => self.start_recording(&path, &format),
             PreviewCommand::StopRecording => self.finish_recording(),
             PreviewCommand::Close => self.close(),
             PreviewCommand::Tune(tuning) => {
@@ -598,19 +592,14 @@ impl Worker {
         }
     }
 
-    fn start_recording(
-        &mut self,
-        path: &std::path::Path,
-        size: (u32, u32),
-        quality: RecordingQuality,
-    ) {
+    fn start_recording(&mut self, path: &std::path::Path, format: &RecordingFormat) {
         let Some(session) = self.session.as_mut() else {
             return;
         };
         if session.is_recording() {
             return;
         }
-        match session.start_recording(path, size, quality) {
+        match session.start_recording(path, format) {
             Ok(()) => {
                 self.recorded_at = None;
                 self.recorded = 0;
@@ -1366,10 +1355,16 @@ mod tests {
     }
 
     fn start_recording(worker: &PreviewWorker, path: &std::path::Path) {
+        start_recording_with(worker, path, "h264");
+    }
+
+    fn start_recording_with(worker: &PreviewWorker, path: &std::path::Path, codec: &str) {
         worker.send(PreviewCommand::StartRecording {
             path: path.to_path_buf(),
-            size: (640, 360),
-            quality: RecordingQuality::Fast,
+            format: RecordingFormat {
+                codec: codec.into(),
+                ..fixtures::small_recording()
+            },
         });
         let started = wait_for(worker, 10, |e| {
             matches!(
@@ -1436,6 +1431,41 @@ mod tests {
             (secs - recording.frames as f64 / 30.0).abs() < 0.1,
             "{secs}"
         );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The video codec of `path`'s first stream, by ffprobe (`None` when
+    /// ffprobe isn't installed).
+    fn codec_of(path: &std::path::Path) -> Option<String> {
+        let out = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-select_streams", "v:0"])
+            .args(["-show_entries", "stream=codec_name", "-of", "csv=p=0"])
+            .arg(path)
+            .output()
+            .ok()?;
+        Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+
+    #[test]
+    fn recording_uses_the_chosen_codec() {
+        if !crate::export::available_codecs()
+            .iter()
+            .any(|c| c == "hevc")
+        {
+            return;
+        }
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let path = temp_video("hevc");
+        start_recording_with(&worker, &path, "hevc");
+        worker.send(PreviewCommand::TogglePlay);
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(saved(&worker).frames > 0);
+        if let Some(codec) = codec_of(&path) {
+            assert_eq!(codec, "hevc");
+        }
         let _ = std::fs::remove_file(&path);
     }
 

@@ -42,6 +42,8 @@ pub struct CalibrationOptions {
     pub skip_start: f64,
     /// Seconds skipped at the end.
     pub skip_end: f64,
+    /// The seam blend a new calibration is saved with (Preferences).
+    pub blend: f32,
 }
 
 impl Default for CalibrationOptions {
@@ -53,6 +55,7 @@ impl Default for CalibrationOptions {
             detect_y: (0.05, 0.95),
             skip_start: 0.0,
             skip_end: 0.0,
+            blend: 0.05,
         }
     }
 }
@@ -172,10 +175,17 @@ impl CalibrationJob {
                     }
                 };
                 let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let lens = keep_lens_of
-                        .and_then(|path| MatchCalibration::from_file(&path).ok())
-                        .map(|c| (c.left, c.right));
-                    calibrate(&left, &right, &save_to, lens, &options, &flag, &send)
+                    let kept =
+                        keep_lens_of.and_then(|path| MatchCalibration::from_file(&path).ok());
+                    calibrate(
+                        &left,
+                        &right,
+                        &save_to,
+                        kept.as_ref(),
+                        &options,
+                        &flag,
+                        &send,
+                    )
                 }));
                 send(run.unwrap_or_else(|panic| {
                     let reason = panic
@@ -213,17 +223,32 @@ impl Drop for CalibrationJob {
     }
 }
 
-/// Run the calibration, save it and say how it ended.
+/// `calibration` with the seam blend it is saved with: the recalibrated
+/// calibration's (`kept`; the person tuned it), else `default`.
+fn with_blend(
+    mut calibration: MatchCalibration,
+    kept: Option<&MatchCalibration>,
+    default: f32,
+) -> MatchCalibration {
+    calibration.blend_width = kept.map_or(default, |k| k.blend_width);
+    calibration
+}
+
+/// Run the calibration, save it and say how it ended. A recalibration
+/// keeps the lenses and the seam blend of `kept`.
 fn calibrate(
     left: &Path,
     right: &Path,
     save_to: &Path,
-    lens: Option<(CameraParams, CameraParams)>,
+    kept: Option<&MatchCalibration>,
     options: &CalibrationOptions,
     cancel: &AtomicBool,
     send: &dyn Fn(CalibrationEvent),
 ) -> CalibrationEvent {
-    let (left_params, right_params) = lens.map_or((None, None), |(l, r)| (Some(l), Some(r)));
+    let (left_params, right_params): (Option<CameraParams>, Option<CameraParams>) = kept
+        .map_or((None, None), |k| {
+            (Some(k.left.clone()), Some(k.right.clone()))
+        });
     let result = calibrate_videos(
         left,
         right,
@@ -248,7 +273,8 @@ fn calibrate(
         Err(CalibrateVideosError::Cancelled) => return CalibrationEvent::Cancelled,
         Err(e) => return CalibrationEvent::Failed(e.to_string()),
     };
-    if let Err(e) = save_atomically(save_to, &result.calibration.to_json_pretty()) {
+    let calibration = with_blend(result.calibration, kept, options.blend);
+    if let Err(e) = save_atomically(save_to, &calibration.to_json_pretty()) {
         return CalibrationEvent::Failed(format!("couldn't save {}: {e}", save_to.display()));
     }
     let fallback_lens = [&result.left_lens_profile, &result.right_lens_profile]
@@ -323,6 +349,7 @@ mod tests {
             detect_y: (0.1, 0.8),
             skip_start: 12.5,
             skip_end: 30.0,
+            blend: 0.1,
         };
         let c = options.config();
         assert_eq!((c.num_frames, c.use_imu_rotation_seeds), (6, true));
@@ -335,12 +362,28 @@ mod tests {
             ),
             (0.002, 0.1, 0.8)
         );
+        assert!((CalibrationOptions::default().blend - 0.05).abs() < 1e-6);
         let too_few = CalibrationOptions {
             frames: 0,
             ..CalibrationOptions::default()
         };
         assert_eq!(too_few.config().num_frames, 2);
         assert_eq!(CalibrationOptions::default().config().num_frames, 4);
+    }
+
+    #[test]
+    fn a_new_calibration_takes_the_default_blend() {
+        let Some((_, _, path)) = fixtures::fast_set() else {
+            return;
+        };
+        let run = MatchCalibration::from_file(&path).expect("the fixture's calibration");
+        let mut tuned = run.clone();
+        tuned.blend_width = 0.2;
+        assert!((with_blend(run.clone(), None, 0.12).blend_width - 0.12).abs() < 1e-6);
+        assert!(
+            (with_blend(run, Some(&tuned), 0.12).blend_width - 0.2).abs() < 1e-6,
+            "a recalibration keeps the seam the person tuned"
+        );
     }
 
     #[test]
