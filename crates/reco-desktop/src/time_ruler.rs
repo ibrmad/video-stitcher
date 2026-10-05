@@ -49,6 +49,37 @@ pub fn ticks(duration: f64, width_px: f64, min_gap_px: f64) -> Vec<f64> {
     (0..=count).map(|i| i as f64 * step).collect()
 }
 
+/// The time at `x` points into a ruler `width` wide spanning `duration`
+/// seconds, kept inside the ruler.
+pub fn time_at(x: f64, width: f64, duration: f64) -> f64 {
+    if width <= 0.0 || duration <= 0.0 {
+        return 0.0;
+    }
+    (x / width).clamp(0.0, 1.0) * duration
+}
+
+/// The export range as fractions of the ruler, or `None` when there is
+/// nothing to tint (no length, an empty range, or the whole length).
+pub fn tint_span(range: (f64, f64), duration: f64) -> Option<(f64, f64)> {
+    if duration <= 0.0 {
+        return None;
+    }
+    let (start, end) = (range.0.clamp(0.0, duration), range.1.clamp(0.0, duration));
+    if end <= start || (start <= 0.0 && end >= duration) {
+        return None;
+    }
+    Some((start / duration, end / duration))
+}
+
+/// How close (seconds) a reported playhead must come to a seek's target
+/// for the seek to count as landed.
+pub const SETTLE_TOLERANCE: f64 = 0.5;
+
+/// Whether a seek to `target` has landed, given the `reported` playhead.
+pub fn settled(target: f64, reported: f64) -> bool {
+    (reported - target).abs() <= SETTLE_TOLERANCE
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,5 +133,32 @@ mod tests {
             vec![0.0, 900.0, 1800.0, 2700.0, 3600.0, 4500.0, 5400.0, 6300.0]
         );
         assert_eq!(ticks(0.0, 600.0, 60.0), vec![0.0]);
+    }
+
+    #[test]
+    fn time_at_maps_the_width_onto_the_length() {
+        assert_eq!(time_at(50.0, 200.0, 60.0), 15.0);
+        assert_eq!(time_at(-5.0, 200.0, 60.0), 0.0);
+        assert_eq!(time_at(500.0, 200.0, 60.0), 60.0);
+        assert_eq!(time_at(10.0, 0.0, 60.0), 0.0);
+    }
+
+    #[test]
+    fn the_tint_shows_only_a_partial_range() {
+        assert_eq!(
+            tint_span((10.0, 40.0), 60.0),
+            Some((10.0 / 60.0, 40.0 / 60.0))
+        );
+        assert_eq!(tint_span((10.0, 90.0), 60.0), Some((10.0 / 60.0, 1.0)));
+        assert_eq!(tint_span((0.0, 60.0), 60.0), None);
+        assert_eq!(tint_span((-5.0, 90.0), 60.0), None);
+        assert_eq!(tint_span((30.0, 20.0), 60.0), None);
+        assert_eq!(tint_span((10.0, 20.0), 0.0), None);
+    }
+
+    #[test]
+    fn a_seek_settles_within_half_a_second() {
+        assert!(settled(30.0, 30.4));
+        assert!(!settled(30.0, 12.0));
     }
 }

@@ -6,7 +6,9 @@
 //! lanes also fold away with the panel toggle. Module 0 shows sample data;
 //! Module 2 wires playback and scrubbing.
 
-use crate::time_ruler::{clock, ticks};
+use std::time::{Duration, Instant};
+
+use crate::time_ruler::{clock, settled, ticks, time_at, tint_span};
 use makepad_widgets::*;
 
 script_mod! {
@@ -30,6 +32,7 @@ script_mod! {
         lane_empty_color: theme.reco_bar
         tick_color: theme.reco_tick
         playhead_color: theme.reco_playhead
+        tint_color: theme.reco_range_tint
         // A file block: rounded at the corners. Sdf2d.box draws twice the
         // radius it is given.
         draw_block +: {
@@ -142,6 +145,20 @@ script_mod! {
     }
 }
 
+/// How long the ruler holds a sought playhead while the worker seeks.
+const SETTLE: Duration = Duration::from_millis(1500);
+
+/// What the ruler asks of the App.
+#[derive(Clone, Debug, Default)]
+pub enum RulerAction {
+    /// Dragging over this time (seconds): show it, don't seek yet.
+    Scrub(f64),
+    /// Released here: seek.
+    Seek(f64),
+    #[default]
+    None,
+}
+
 /// The ruler and the camera lanes, drawn in one pass: ticks with clock
 /// labels, each camera's files as blocks, and the playhead.
 #[derive(Script, ScriptHook, Widget)]
@@ -186,6 +203,17 @@ pub struct RecoTimeRuler {
     tick_color: Vec4f,
     #[live]
     playhead_color: Vec4f,
+    #[live]
+    tint_color: Vec4f,
+    /// The export range to tint, in seconds.
+    #[rust]
+    export_range: Option<(f64, f64)>,
+    /// A finger is scrubbing: the worker's reports don't move the playhead.
+    #[rust]
+    dragging: bool,
+    /// A seek in flight: its target and when it was asked for.
+    #[rust]
+    hold: Option<(f64, Instant)>,
     /// Seconds the ruler spans.
     #[rust]
     duration: f64,
@@ -205,6 +233,8 @@ pub struct RecoTimeRuler {
 
 impl RecoTimeRuler {
     /// Show a timeline: its length, the playhead, and each lane's files.
+    /// While scrubbing, or until a seek lands (or `SETTLE` passes), the
+    /// playhead stays where the user put it.
     pub fn set_timeline(
         &mut self,
         cx: &mut Cx,
@@ -213,8 +243,24 @@ impl RecoTimeRuler {
         lanes: Vec<Vec<(f64, f64)>>,
     ) {
         self.duration = duration;
-        self.playhead = playhead;
         self.lanes = lanes;
+        if !self.dragging {
+            self.hold = self
+                .hold
+                .filter(|(target, since)| since.elapsed() < SETTLE && !settled(*target, playhead));
+            self.playhead = self.hold.map_or(playhead, |(target, _)| target);
+        }
+        self.area.redraw(cx);
+    }
+
+    /// Tint the export range (`None`: no range).
+    pub fn set_export_range(&mut self, cx: &mut Cx, range: Option<(f64, f64)>) {
+        self.export_range = range;
+        self.area.redraw(cx);
+    }
+
+    fn scrub_to(&mut self, cx: &mut Cx, fe_x: f64, rect: Rect) {
+        self.playhead = time_at(fe_x - rect.pos.x, rect.size.x, self.duration);
         self.area.redraw(cx);
     }
 
@@ -225,7 +271,34 @@ impl RecoTimeRuler {
 }
 
 impl Widget for RecoTimeRuler {
-    fn handle_event(&mut self, _cx: &mut Cx, _event: &Event, _scope: &mut Scope) {}
+    fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
+        if self.disabled || self.duration <= 0.0 {
+            return;
+        }
+        let uid = self.widget_uid();
+        match event.hits(cx, self.area) {
+            Hit::FingerHoverIn(_) | Hit::FingerHoverOver(_) => cx.set_cursor(MouseCursor::EwResize),
+            Hit::FingerDown(fe) if fe.is_primary_hit() => {
+                self.dragging = true;
+                cx.set_cursor(MouseCursor::EwResize);
+                self.scrub_to(cx, fe.abs.x, fe.rect);
+                cx.widget_action(uid, RulerAction::Scrub(self.playhead));
+            }
+            Hit::FingerMove(fe) if self.dragging => {
+                self.scrub_to(cx, fe.abs.x, fe.rect);
+                cx.widget_action(uid, RulerAction::Scrub(self.playhead));
+            }
+            Hit::FingerUp(fe) if self.dragging => {
+                self.dragging = false;
+                if !fe.cancelled {
+                    self.scrub_to(cx, fe.abs.x, fe.rect);
+                }
+                self.hold = Some((self.playhead, Instant::now()));
+                cx.widget_action(uid, RulerAction::Seek(self.playhead));
+            }
+            _ => {}
+        }
+    }
 
     fn set_disabled(&mut self, cx: &mut Cx, disabled: bool) {
         self.disabled = disabled;
@@ -298,6 +371,18 @@ impl Widget for RecoTimeRuler {
             }
         }
         self.lanes = lanes;
+
+        // The export range, over the ruler and the lanes.
+        if let Some((a, b)) = self.export_range.and_then(|r| tint_span(r, self.duration)) {
+            self.line(
+                cx,
+                Rect {
+                    pos: dvec2(x0 + a * width, y0),
+                    size: dvec2((b - a) * width, height),
+                },
+                self.tint_color,
+            );
+        }
 
         // The playhead, only while there is something to play.
         if !self.disabled && self.duration > 0.0 {

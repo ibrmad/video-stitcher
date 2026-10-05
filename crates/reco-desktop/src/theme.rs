@@ -286,6 +286,8 @@ script_mod! {
         reco_lane_fill: #x2c2b2b
         reco_lane_fill_on: #x1a7446
         reco_lane_edge: #x0d0d0d
+        // The export range over the ruler and lanes: the accent at 18%.
+        reco_range_tint: #x34d3992e
         reco_tick: #x3a3939
         reco_playhead: #xffffff
 

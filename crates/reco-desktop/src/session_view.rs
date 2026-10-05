@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
+use reco_app::preview::lanes::Lanes;
 use reco_app::preview::playback::PlayState;
 use reco_app::preview::view::PreviewAspect;
 use reco_app::preview::worker::{
@@ -18,7 +19,7 @@ use crate::live::{self, Live};
 use crate::names::middle_ellipsis;
 use crate::time_ruler;
 use crate::ui::preview::{PreviewAction, RecoPreview};
-use crate::ui::time_panel::RecoTimeRuler;
+use crate::ui::time_panel::{RecoTimeRuler, RulerAction};
 use crate::{cli, display_device, App, Step, PROJECT_NAME_CHARS};
 
 impl App {
@@ -62,6 +63,7 @@ impl App {
                 Some(PreviewEvent::Failed(message)) => self.show_failed(cx, &message),
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
                 Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
+                Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
                 // The widget takes frames; nothing else is left.
                 Some(_) | None => {}
             }
@@ -265,17 +267,32 @@ impl App {
         self.update_ruler(cx);
     }
 
-    /// One block per camera over the whole length (file boundaries arrive
-    /// with Module 2), and the playhead.
+    /// Each camera's files (one block each until they are probed), the
+    /// playhead, and the export range.
     fn update_ruler(&mut self, cx: &mut Cx) {
-        let Some((length, playhead)) = self.live.as_ref().and_then(|l| {
+        let range = self.args.export_range;
+        let Some((length, playhead, lanes)) = self.live.as_ref().and_then(|l| {
             let info = l.info.as_ref()?;
             let playhead = if info.fps > 0.0 {
                 l.frame.saturating_sub(1) as f64 / info.fps
             } else {
                 0.0
             };
-            Some((live::length_secs(info), playhead))
+            Some(match l.lanes.as_ref() {
+                Some(lanes) => (
+                    lanes.length,
+                    playhead,
+                    vec![lanes.left.clone(), lanes.right.clone()],
+                ),
+                None => {
+                    let length = live::length_secs(info);
+                    (
+                        length,
+                        playhead,
+                        vec![vec![(0.0, length)], vec![(0.0, length)]],
+                    )
+                }
+            })
         }) else {
             return;
         };
@@ -284,12 +301,40 @@ impl App {
             .widget(cx, ids!(timeline))
             .borrow_mut::<RecoTimeRuler>()
         {
-            ruler.set_timeline(
-                cx,
-                length,
-                playhead,
-                vec![vec![(0.0, length)], vec![(0.0, length)]],
-            );
+            ruler.set_timeline(cx, length, playhead, lanes);
+            ruler.set_export_range(cx, range);
+        }
+    }
+
+    /// The files' lanes and the exact length arrived.
+    fn show_lanes(&mut self, cx: &mut Cx, lanes: Lanes) {
+        self.set_label(cx, ids!(time_total), &time_ruler::clock(lanes.length));
+        if let Some(live) = self.live.as_mut() {
+            live.lanes = Some(lanes);
+        }
+        self.update_ruler(cx);
+    }
+
+    /// Scrubbing shows the time; releasing seeks.
+    pub(crate) fn ruler_actions(&mut self, cx: &mut Cx, actions: &Actions) {
+        let uid = self.ui.widget(cx, ids!(timeline)).widget_uid();
+        for action in actions.filter_widget_actions_cast::<RulerAction>(uid) {
+            match action {
+                RulerAction::Scrub(secs) => {
+                    self.set_label(cx, ids!(time_current), &time_ruler::clock(secs))
+                }
+                RulerAction::Seek(secs) => {
+                    if let Some(live) = self.live.as_ref() {
+                        let fps = live.info.as_ref().map_or(0.0, |i| i.fps);
+                        if fps > 0.0 {
+                            live.worker.send(PreviewCommand::SeekTo {
+                                frame: (secs * fps).floor() as u64,
+                            });
+                        }
+                    }
+                }
+                RulerAction::None => {}
+            }
         }
     }
 

@@ -3,6 +3,7 @@
 
 use std::time::{Duration, Instant};
 
+use reco_app::preview::lanes::Lanes;
 use reco_app::preview::playback::PlayState;
 use reco_app::preview::worker::{PreviewInfo, PreviewWorker};
 
@@ -29,6 +30,8 @@ pub struct Live {
     pub fps_reading: Option<f64>,
     /// A failure to show in the status line until playback moves on.
     pub problem: Option<String>,
+    /// Each camera's files, once probed.
+    pub lanes: Option<Lanes>,
 }
 
 impl Live {
@@ -44,6 +47,7 @@ impl Live {
             fps: FpsMeter::default(),
             fps_reading: None,
             problem: None,
+            lanes: None,
         }
     }
 

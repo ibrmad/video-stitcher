@@ -166,9 +166,58 @@ def check_transport():
         expect(app.errors() == [], "transport: no errors in the app log")
 
 
+def ruler_point(app, secs, length, lane=None):
+    """Window point at `secs` on the ruler: in the ruler band, or in lane 0/1."""
+    x, y, w, h = app.rect("timeline")
+    row = 8 if lane is None else 16 + 16 * lane + 8
+    return x + w * secs / length, y + row
+
+
+def pixel_at(png, app, point):
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    return png.pixel(int(point[0] * scale), int(point[1] * scale))[:3]
+
+
+def check_ruler():
+    """Scrubbing seeks on release; lanes come from the files; the export range is tinted."""
+    with launch() as app:
+        ready(app)
+        time.sleep(1.0)
+        (x0, y0), (x1, _) = ruler_point(app, 6, 60.0), ruler_point(app, 30, 60.0)
+        app.get("/m", k="down", x=x0, y=y0)
+        for step in range(1, 6):
+            app.get("/m", k="move", x=x0 + (x1 - x0) * step / 5, y=y0, wait=1)
+        during = seconds(text_of(app, "time_current"))
+        app.get("/m", k="up", x=x1, y=y0, wait=1)
+        expect(during is not None and abs(during - 30) <= 1, f"ruler: the clock follows a scrub ({during})")
+        time.sleep(2.0)
+        after = seconds(text_of(app, "time_current"))
+        expect(after is not None and abs(after - 30) <= 1, f"ruler: releasing seeks there ({after})")
+        expect(app.errors() == [], "ruler: no errors in the app log")
+
+    left, right, cal = FAST
+    with launch((f"{left};{left}", f"{right};{right}", cal)) as app:
+        ready(app)
+        total = wait_for(lambda: text_of(app, "time_total") == "2:00", 20)
+        expect(bool(total), f"ruler: the length comes from the files ({text_of(app, 'time_total')})")
+        png = app.grab(os.path.join(OUT, "lanes-chained.png"))
+        block = pixel_at(png, app, ruler_point(app, 30, 120.0, lane=0))
+        gap = min((pixel_at(png, app, ruler_point(app, 60 + d / 20, 120.0, lane=0)) for d in range(-20, 21)), key=sum)
+        expect(sum(gap) + 60 < sum(block), f"ruler: a gap between the two files ({gap} vs {block})")
+
+    with launch(extra=("--export-range", "10-40")) as app:
+        ready(app)
+        time.sleep(1.0)
+        png = app.grab(os.path.join(OUT, "export-range.png"))
+        tinted = pixel_at(png, app, ruler_point(app, 27.5, 60.0, lane=0))
+        plain = pixel_at(png, app, ruler_point(app, 52.5, 60.0, lane=0))
+        expect(tinted[1] > plain[1] + 4, f"ruler: the export range is tinted ({tinted} vs {plain})")
+
+
 CHECKS = {
     "persist": check_persist,
     "transport": check_transport,
+    "ruler": check_ruler,
 }
 
 

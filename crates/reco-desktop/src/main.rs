@@ -519,6 +519,7 @@ impl MatchEvent for App {
             log!("app menu: {picked} (not wired in Module 0)");
         }
         self.preview_actions(cx, actions);
+        self.ruler_actions(cx, actions);
     }
 }
 

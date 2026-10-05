@@ -18,6 +18,9 @@ pub struct Args {
     pub files: Option<FileArgs>,
     /// Read frames back instead of sharing textures (`--preview-readback`).
     pub preview_readback: bool,
+    /// The export range to tint on the ruler, from `--export-range START-END`
+    /// in seconds (checks; Module 6's export dialog sets it).
+    pub export_range: Option<(f64, f64)>,
 }
 
 /// Camera files and calibration to open at startup (the Slint app's
@@ -122,6 +125,8 @@ impl Args {
                 out.window_size = Some(parse_size(value.as_ref())?);
             } else if arg == "--preview-readback" {
                 out.preview_readback = true;
+            } else if let Some((_, value)) = flag_value(arg, &mut iter, &["--export-range"])? {
+                out.export_range = Some(parse_range(&value)?);
             } else if let Some((flag, value)) =
                 flag_value(arg, &mut iter, &["--left", "--right", "--calibration"])?
             {
@@ -185,6 +190,18 @@ where
         }
     }
     Ok(None)
+}
+
+/// `START-END` in seconds (`10-40`, `12.5-60`) into a range.
+fn parse_range(value: &str) -> Result<(f64, f64), String> {
+    let bad = || format!("export range `{value}` is not START-END in seconds");
+    let (start, end) = value.split_once('-').ok_or_else(bad)?;
+    let start: f64 = start.trim().parse().map_err(|_| bad())?;
+    let end: f64 = end.trim().parse().map_err(|_| bad())?;
+    if start < 0.0 || end <= start {
+        return Err(bad());
+    }
+    Ok((start, end))
 }
 
 /// Parse `WxH` (for example `1280x820`) into points.
@@ -301,5 +318,21 @@ mod tests {
         assert!(Args::parse(["--window-size", "wide"]).is_err());
         assert!(Args::parse(["--window-size", "100x100"]).is_err());
         assert!(Args::parse(["--window-size"]).is_err());
+    }
+
+    #[test]
+    fn parses_an_export_range() {
+        assert_eq!(
+            Args::parse(["--export-range=10-40"]).unwrap().export_range,
+            Some((10.0, 40.0))
+        );
+        assert_eq!(
+            Args::parse(["--export-range", "12.5-60"])
+                .unwrap()
+                .export_range,
+            Some((12.5, 60.0))
+        );
+        assert!(Args::parse(["--export-range=40-10"]).is_err());
+        assert!(Args::parse(["--export-range=soon"]).is_err());
     }
 }
