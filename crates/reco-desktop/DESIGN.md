@@ -127,6 +127,21 @@ Files and calibration (Module 3):
 - The Recent menu keeps eight sessions (both cameras and the calibration)
   in `desktop.json`.
 
+Stitching and calibration (Module 4):
+
+- The render thread owns the live calibration. `Tune` sets the blend,
+  colour match, tilt, roll or layout; `SetSyncOffset` reopens playback at
+  the same frame and measures the lanes again; `SetFieldRoi` sets the
+  outline; `SaveCalibration` writes it (atomically) with the live values
+  folded in. After each, `Calibration(values)` reports them with `dirty`,
+  and the Adjust panel and Save follow it.
+- Straight ahead, the render pitch cancels the rig tilt
+  (`rig_correction::render_pitch`); the tilt levels the horizon as the
+  view turns.
+- The field outline's editor (the Slint app's page) is written on a job
+  thread into `$XDG_CACHE_HOME/reco/roi` (a sandboxed browser can't read
+  `/tmp`) and opened in the browser; checks set `RECO_DESKTOP_NO_BROWSER`.
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
@@ -297,6 +312,11 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   `DragResponse::Copy`.
 - `ids!(...)` in an array of tuples is `&[LiveId; 1]`; pass `*id` where a
   slice is wanted.
+- A cached panel (`new_batch`) keeps its own draw list, and a redraw of the
+  window doesn't reach it: only a redraw of one of its own areas does.
+  Showing or hiding a widget asks for no redraw at all, so `App::set_visible`
+  redraws the side panels when visibility changes.
+- A fold (`FoldHeader`) opens from its chevron only, not from its title.
 
 ## Modules
 

@@ -257,14 +257,47 @@ calibrations); and screenshots in `target/desktop-checks/m3/`.
 
 ## Module 4: stitching and calibration (§2.2, §2.4, §2.14)
 
-- [ ] Seam blend 0–0.3; Match colours; rig tilt −30..30°; rig roll
-      −15..15°; sync offset in frames with Apply.
-- [ ] Save Calibration shown when calibration or lens is dirty.
-- [ ] Intersect −1..1, camera axis offset −0.6..0.6, `x_ty` −0.1..0.1,
-      Reset.
-- [ ] Field ROI status; Set/Edit ROI (browser editor); Paste ROI from the
+Evidence for this module: `tools/check_m4.py` (checks `tune`, `sync` and
+`roi`, on the fast pair with a temporary copy of its calibration); the
+unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
+`target/desktop-checks/m4/`.
+
+- [x] Seam blend 0–0.3; Match colours; rig tilt −30..30°; rig roll
+      −15..15°; sync offset in frames with Apply. Evidence: "tune: the seam
+      blend shows the calibration's value", "tune: the tilt follows the
+      slider", "tune: tilting changes the picture", "sync: 30 frames apart,
+      the pair plays a second less", "sync: an offset as long as the videos
+      is refused", "sync: text that is not a number says so";
+      `tuning_reaches_the_renderer_and_marks_it_changed`,
+      `changes_stay_inside_their_sliders`,
+      `the_sync_offset_moves_the_cameras_within_the_videos`,
+      `a_new_sync_offset_brings_new_lanes`. Straight ahead the render pitch
+      cancels the tilt (`rig_correction::render_pitch`), so the tilt shows
+      once the view turns (`tilt_and_layout_change_the_picture`). (New: the
+      sliders show the calibration's own values from the start.)
+- [x] Save Calibration shown when calibration or lens is dirty. Evidence:
+      "tune: nothing to save yet", "tune: Save appears once something
+      changed", "tune: Save goes once saved", "tune: the file has the new
+      tilt", "tune: the tilt comes back after a reopen";
+      `a_saved_calibration_reloads_with_the_tuned_values`,
+      `saving_writes_the_file_and_clears_the_change`. Lens edits arrive
+      with Module 5 and take the same path.
+- [x] Intersect −1..1, camera axis offset −0.6..0.6, `x_ty` −0.1..0.1,
+      Reset. Evidence: "tune: the overlap follows its slider", "tune: Reset
+      layout restores the file's overlap"; `reset_restores_the_loaded_layout`.
+      Named in plain words (Overlap, Camera depth, Vertical shift), with
+      the engine's terms in the tooltips' sense.
+- [x] Field ROI status; Set/Edit ROI (browser editor); Paste ROI from the
       clipboard or a JSON field. (New: image preparation off the UI thread.)
+      Evidence: "roi: Edit in browser writes the editor", "roi: the editor
+      carries both cameras' frames", "roi: a pasted outline is used", "roi:
+      bad text says why", "roi: the outline is saved with the calibration",
+      "roi: Remove outline clears it"; `an_outline_needs_three_points_inside_the_picture`,
+      `the_editor_carries_both_frames_and_the_calibration`,
+      `the_editor_job_reports_its_page`. The outline is pasted into the
+      field (⌘V) rather than read from the clipboard by a button.
 - [ ] ROI points drawn over the lens preview. (New: aligned to the image.)
+      → Module 5, with the lens preview.
 
 ## Module 5: camera and lens (§2.4, §2.12)
 
