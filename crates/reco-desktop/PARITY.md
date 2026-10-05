@@ -136,18 +136,67 @@ lines.
 
 ## Module 2: transport and status (§2.5, §2.6, §2.13)
 
-- [ ] Step back, play/pause, step forward; enabled when files are loaded.
-- [ ] Current and total time.
-- [ ] Timeline over all frames; seek on release; export-range tint.
-- [ ] Record / Stop with recording state colours; quality (fast, balanced,
-      high) hidden while recording.
-- [ ] Preview aspect selector, persisted.
-- [ ] Status text (also the error channel), fps readout, version, Report bug.
-- [ ] Export progress, status text and Cancel in the status bar; Show in
-      folder after an export or recording.
-- [ ] Toasts: info, warn and error with TTL 4/7/10 s (plus custom), at most
+Evidence for this module: `tools/check_m2.py` (checks `persist`,
+`transport`, `ruler`, `toasts`, `record` and `perf` on the alfheim pair, the
+chained pair `cam0.mp4;cam0.mp4`, and the 5.3K match pair for `perf`); the
+unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
+`target/desktop-checks/m2/`. Check lines are quoted as they print.
+
+- [x] Step back, play/pause, step forward; enabled when files are loaded.
+      Evidence: "transport: step forward shows the next frame", "transport:
+      step back shows the frame before again", "transport: the play button
+      shows pause while playing" (`icon-paused.png`, `icon-playing.png`),
+      "transport: Space after the end plays from the start"; enabling is
+      Module 0's `apply_shell` gate. Holding a key repeats moves and seeks,
+      never play (`toggles_do_not_repeat`); a burst of seeks costs one seek
+      (`relative_seeks_accumulate`, `seek_burst_lands_on_the_sum`).
+- [x] Current and total time. Evidence: "ruler: the clock follows a scrub",
+      "ruler: the length comes from the files" (2:00 for the chained pair);
+      `length_is_where_both_cameras_have_video`, `lanes_arrive_after_open`.
+- [x] Timeline over all frames; seek on release; export-range tint.
+      Evidence: "ruler: releasing seeks there", "ruler: a gap between the two
+      files" (`lanes-chained.png`), "ruler: the export range is tinted"
+      (`export-range.png`); seeks go by frame index (`seek_to_frame_shows_that_frame`),
+      and one past the real end fails and keeps the frame
+      (`seek_past_the_end_is_an_error`).
+- [x] Record / Stop with recording state colours; quality (fast, balanced,
+      high) hidden while recording. Evidence: "record: the quality shows
+      before recording", "record: the badge shows while recording", "record:
+      the quality hides while recording", "record: 1920x1080 for Auto",
+      "record: about 3 s at 30 fps, one frame per frame played", "record:
+      quitting while recording leaves a file", "record: and it plays"
+      (`recording.png`); `recording_has_one_frame_per_source_frame`,
+      `recording_keeps_its_size_when_the_preview_resizes`,
+      `pausing_adds_no_frames`, `quitting_while_recording_finishes_the_file`.
+      (New: the whole picture at 1080 rows and the preview aspect, one frame
+      per source frame; the Slint app cropped a 1080p render and recorded per
+      render.)
+- [x] Preview aspect selector, persisted. Evidence: "persist: the aspect is
+      saved (4:3)", "persist: the aspect comes back after a restart",
+      "persist: a malformed settings file still opens"; `missing_fields_take_defaults`,
+      `unknown_values_fall_back`. The recording quality is saved the same way.
+- [x] Status text (also the error channel), fps readout, version, Report bug.
+      Evidence: "transport: Ready after opening", "transport: the status line
+      shows the frame rate while playing", "transport: Paused", "transport:
+      playback finishes at the end", "record: the status line says
+      recording"; errors also raise a toast ("toasts: a failed open raises an
+      error toast"); `status_says_what_playback_does`,
+      `recording_and_problems_come_first`. Version and "Report a bug…" sit in
+      the app menu (Module 0; the dialog arrives in Module 7).
+- [x] Show in folder after a recording. Evidence: "record: Show in folder
+      appears"; `finder_selects_the_file`.
+- [ ] Export progress, status text and Cancel; Show in folder after an
+      export. → Module 6 (the export job). The card exists since Module 0.
+- [x] Toasts: info, warn and error with TTL 4/7/10 s (plus custom), at most
       4, dismissable, clear of the Inspector. (New: rendered reliably, and
-      they do not overwrite the status line.)
+      they do not overwrite the status line.) Evidence: "toasts: four show",
+      "toasts: the oldest of five left first", "toasts: the newest is at the
+      bottom", "toasts: inside the viewer, clear of the Adjust panel and the
+      time panel", "toasts: the status line keeps its own text", "toasts: a
+      close button dismisses its toast", "toasts: an info toast leaves after
+      about four seconds", "toasts: a warning stays longer", "record: more
+      notices than fit show four" (`toasts.png`); `ttls_follow_the_severity`,
+      `at_most_four_newest_last`, `a_repeat_refreshes_instead_of_stacking`.
 
 ## Module 3: files (§2.2, §2.7)
 

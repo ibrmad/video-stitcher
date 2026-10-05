@@ -78,6 +78,34 @@ Preview bridge (Module 1). The render thread lives in `reco-app`
   reported once (`PreviewEvent::Stopped`); the picture and the panels stay.
   Space after the end plays again from the start.
 
+Time panel and status (Module 2):
+
+- Seeks go by frame index (`SeekTo`). Seeks in one batch of commands
+  collapse into one, and `SeekBy` counts from a pending target, so holding
+  `]` costs one seek per batch. A seek the videos cannot make keeps the
+  frame on screen and says so.
+- The ruler seeks on release and holds its target until the reported
+  playhead lands within 0.5 s of it (or 1.5 s pass), so the playhead never
+  jumps back while the worker seeks.
+- Lanes and the length come from the files: a probe thread opens each file
+  once for its duration, lays them end to end per camera, shifts them by the
+  sync offset, and the pair plays only while both cameras have video.
+- Recording: its own renderer at 1080 rows and the preview aspect (the
+  preview's renderer keeps its first render target), NV12 readback, and an
+  encoder thread behind a queue of eight frames that the render thread waits
+  on rather than dropping a frame. One frame per source frame shown, nothing
+  while paused, the last frames flushed on stop. Quitting while recording
+  is the one time the UI thread waits: up to 3 s for the file to close.
+- Toasts: four card slots in a layer over the viewer's canvas, fed by
+  `reco_app::toasts` (a pure model with expiry times) and one timer.
+  They never write the status line.
+- Settings live in `desktop.json` in reco-io's settings folder (namespace
+  `desktop`; `RECO_CONFIG_DIR` overrides it, and every check launch gets
+  its own). The preview aspect and the recording quality are stored by
+  name; anything missing or unknown reads as its default.
+- A worker panic is reported as `Stopped("The preview stopped
+  unexpectedly: …")` instead of a silent dead preview.
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
@@ -214,6 +242,25 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   `RecoButton` fade it, `RecoPrimaryButton` greys it.
 - Disabled buttons still take Tab focus, and Tab follows draw-list nesting
   rather than reading order (`nav.rs`). Known gaps until Module 2.
+- A press captures the pointer by itself: `FingerMove` and `FingerUp` keep
+  coming while dragging off the widget (`FingerUp` has `cancelled`). A
+  widget that emits several actions in one pass is read with
+  `filter_widget_actions_cast`, not `find_widget_action`.
+- A button's icon is swapped by assigning `draw_icon.svg` (a
+  `ScriptHandleRef` from a `#[live]` field); Makepad reloads the SVG when the
+  handle changes.
+- `new_batch: true` gives a View its own draw list, skipped while clean. A
+  widget that redraws every frame still makes the window walk its tree, so
+  the static side panels are cached and the draw time is measured
+  (`--perf-log`: about 0.1 to 0.3 ms a frame while playing).
+- Makepad's `Toaster` does not hit-test (clicks fall through), places itself
+  against the whole window and has fixed lifetimes, so Reco draws its own
+  toast cards.
+- `DropDown` has no `visible` field: hiding one hides its wrapper instead.
+- `#[derive(Script)]` rejects path types on fields (`perf::DrawStats`):
+  import the type and use the bare name.
+- `Event::Shutdown` arrives before quitting; it is where a recording is
+  finished.
 
 ## Modules
 
