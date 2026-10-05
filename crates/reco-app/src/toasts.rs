@@ -227,7 +227,10 @@ mod tests {
         );
         t.push(Severity::Info, "plain", "", now);
         let shown = t.visible();
-        assert_eq!((shown[0].id, shown[0].action.as_deref()), (id, Some("Download")));
+        assert_eq!(
+            (shown[0].id, shown[0].action.as_deref()),
+            (id, Some("Download"))
+        );
         assert_eq!(shown[1].action, None);
         assert_eq!(t.next_expiry(), Some(now + Duration::from_secs(4)));
     }

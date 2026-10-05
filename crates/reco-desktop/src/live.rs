@@ -242,6 +242,7 @@ mod tests {
             height: 1,
             zero_copy: true,
             gpu: String::new(),
+            vram: None,
         };
         assert_eq!(length_secs(&info), 60.0);
         assert_eq!(

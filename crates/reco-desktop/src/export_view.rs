@@ -388,6 +388,7 @@ impl App {
                 color_match: true,
                 replay,
                 events,
+                tracking: None,
             },
             job: None,
         });
@@ -510,6 +511,10 @@ impl App {
                     );
                     self.toast(cx, Severity::Error, "Export failed", &why);
                 }
+                ExportEvent::Tracking(status) => match status {
+                    Ok(()) => log!("export: AI tracking active"),
+                    Err(why) => log!("export: AI tracking not active: {why}"),
+                },
                 ExportEvent::Cancelled => {
                     log!("export: cancelled");
                     self.end_export(cx);

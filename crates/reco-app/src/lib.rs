@@ -4,6 +4,7 @@
 //! opens two camera videos and a calibration on its own thread and renders
 //! the stitched view into textures a UI can show without a copy.
 
+pub mod ai;
 pub mod bug_report;
 pub mod calibrate;
 pub mod durations;

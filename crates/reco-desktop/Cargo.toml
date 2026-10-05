@@ -9,6 +9,12 @@ license.workspace = true
 repository.workspace = true
 description = "Makepad 2 desktop app for Reco (replaces reco-gui; see DESIGN.md)"
 
+[features]
+# AI tracking in exports; `coreml` adds Apple's engine to the detector.
+default = ["ai"]
+ai = ["reco-app/ai"]
+coreml = ["ai", "reco-app/coreml"]
+
 [[bin]]
 name = "reco-desktop"
 path = "src/main.rs"
@@ -17,7 +23,7 @@ path = "src/main.rs"
 # Pinned per DESIGN.md Rule 3. The widget families are opt-in; the core
 # has every widget Module 0 uses.
 makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c", default-features = false }
-reco-app = { path = "../reco-app" }
+reco-app = { path = "../reco-app", default-features = false }
 reco-io = { path = "../reco-io" }
 serde_json = "1"
 

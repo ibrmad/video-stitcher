@@ -23,6 +23,21 @@ pub fn fast_set() -> Option<(PathBuf, PathBuf, PathBuf)> {
     }
 }
 
+/// A YOLO model for AI tracking (`RECO_FIXTURE_MODEL`, else the one beside
+/// the alfheim set).
+pub fn model() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let path = std::env::var_os("RECO_FIXTURE_MODEL")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("dev/pitchcam-data/alfheim/reco/yolo26n.onnx"));
+    if path.exists() {
+        Some(path)
+    } else {
+        eprintln!("skipping: no AI model (set RECO_FIXTURE_MODEL)");
+        None
+    }
+}
+
 /// A video of another size than the fast set (the 5.3K match pair's left
 /// file, or `RECO_FIXTURE_OTHER_SIZE`).
 pub fn other_size() -> Option<PathBuf> {

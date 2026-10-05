@@ -53,6 +53,16 @@ pub struct DesktopSettings {
     pub setup_width: Option<f64>,
     /// The Adjust panel's width, once dragged.
     pub adjust_width: Option<f64>,
+    /// The export's AI tracking (Module 6b): on or off, the mode ("field",
+    /// "ball", "sweep"), detect every N frames, the style preset, the
+    /// framing, pitch lock and the lookahead in seconds.
+    pub ai_enabled: bool,
+    pub ai_mode: String,
+    pub ai_interval: u32,
+    pub ai_preset: String,
+    pub ai_framing: String,
+    pub ai_lock_pitch: bool,
+    pub ai_lookahead: f64,
 }
 
 /// The smallest window the app opens at (the Slint app's minimum).
@@ -114,6 +124,13 @@ impl Default for DesktopSettings {
             window_maximized: false,
             setup_width: None,
             adjust_width: None,
+            ai_enabled: false,
+            ai_mode: "field".into(),
+            ai_interval: 15,
+            ai_preset: "broadcast".into(),
+            ai_framing: "action".into(),
+            ai_lock_pitch: false,
+            ai_lookahead: 2.5,
         }
     }
 }
@@ -257,6 +274,20 @@ mod tests {
     }
 
     #[test]
+    fn tracking_choices_default_as_the_slint_app() {
+        let d = DesktopSettings::default();
+        assert!(!d.ai_enabled, "tracking starts off");
+        assert_eq!(
+            (d.ai_mode.as_str(), d.ai_interval, d.ai_preset.as_str()),
+            ("field", 15, "broadcast")
+        );
+        assert_eq!((d.ai_framing.as_str(), d.ai_lock_pitch), ("action", false));
+        assert!((d.ai_lookahead - 2.5).abs() < 1e-9);
+        let old: DesktopSettings = serde_json::from_str(r#"{"export_codec":"hevc"}"#).unwrap();
+        assert_eq!(old.ai_preset, "broadcast", "a file from before 6b loads");
+    }
+
+    #[test]
     fn the_client_id_is_made_once() {
         let mut s = DesktopSettings::default();
         let id = s.client_id();
@@ -291,8 +322,14 @@ mod tests {
     fn the_window_is_remembered_windowed_and_full_screen() {
         let mut s = DesktopSettings::default();
         assert!(s.remember_window((1440.0, 900.0), false), "a change");
-        assert_eq!((s.window_size, s.window_maximized), (Some((1440.0, 900.0)), false));
-        assert!(!s.remember_window((1440.0, 900.0), false), "the same: nothing to save");
+        assert_eq!(
+            (s.window_size, s.window_maximized),
+            (Some((1440.0, 900.0)), false)
+        );
+        assert!(
+            !s.remember_window((1440.0, 900.0), false),
+            "the same: nothing to save"
+        );
         assert!(s.remember_window((2560.0, 1600.0), true));
         assert_eq!(
             (s.window_size, s.window_maximized),

@@ -274,6 +274,9 @@ pub struct PreviewInfo {
     pub zero_copy: bool,
     /// The GPU's name.
     pub gpu: String,
+    /// The GPU's free and total memory at open, bytes, where it says
+    /// (Metal, CUDA, DXGI): the export's lookahead zones come from it.
+    pub vram: Option<(u64, u64)>,
 }
 
 /// The UI's handle to the render thread. Dropping it stops the thread.
@@ -821,6 +824,7 @@ impl Worker {
                     height,
                     zero_copy: self.zero_copy,
                     gpu: gpu.gpu_name().to_string(),
+                    vram: gpu.available_vram(),
                 }));
                 log::info!(
                     "preview: {}x{} input, {} on {}",
@@ -1207,6 +1211,29 @@ mod tests {
             matches!(first, Some(PreviewEvent::Pixels { .. })),
             "{first:?}"
         );
+    }
+
+    #[test]
+    fn an_open_reports_the_gpus_memory() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let worker = readback_worker();
+        worker.send(PreviewCommand::Open {
+            left: InputPath::Single(left),
+            right: InputPath::Single(right),
+            calibration: cal,
+        });
+        let ready = wait_for(&worker, 30, |e| {
+            matches!(e, PreviewEvent::Ready(_) | PreviewEvent::Failed(_))
+        });
+        let Some(PreviewEvent::Ready(info)) = ready else {
+            panic!("{ready:?}")
+        };
+        if cfg!(target_os = "macos") {
+            let (free, total) = info.vram.expect("Metal reports its memory");
+            assert!(total > 0 && free <= total, "{free} of {total}");
+        }
     }
 
     #[test]

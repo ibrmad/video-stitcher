@@ -8,8 +8,17 @@ license.workspace = true
 repository.workspace = true
 description = "Reco's app logic without a UI framework: the live preview session and its render worker"
 
+[features]
+# AI tracking in exports (Module 6b): reco-autocam with ONNX Runtime on the
+# CPU, as reco-gui builds it; `coreml` adds Apple's engine.
+default = ["ai"]
+ai = ["dep:reco-autocam", "dep:reco-detect"]
+coreml = ["ai", "reco-autocam/coreml"]
+
 [dependencies]
 reco-core = { path = "../reco-core" }
+reco-autocam = { path = "../reco-autocam", optional = true }
+reco-detect = { path = "../reco-detect", optional = true }
 reco-io = { path = "../reco-io", features = ["ffmpeg", "config", "stacked-output"] }
 reco-control = { path = "../reco-control" }
 reco-calibrate = { path = "../reco-calibrate", features = ["io"] }

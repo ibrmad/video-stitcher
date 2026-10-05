@@ -45,6 +45,8 @@ pub struct ExportOptions {
     pub replay: bool,
     /// Also save the pipeline's events (`{output}.events.jsonl`).
     pub events: bool,
+    /// AI tracking (Module 6b), when on.
+    pub tracking: Option<crate::ai::Tracking>,
 }
 
 /// What an export reports.
@@ -74,6 +76,9 @@ pub enum ExportEvent {
     Failed(String),
     /// It was cancelled.
     Cancelled,
+    /// AI tracking started (`Ok`), or why it didn't (the export goes on
+    /// without it).
+    Tracking(Result<(), String>),
 }
 
 /// `path` with `.mp4` added when it has no extension.
@@ -325,6 +330,14 @@ fn run(
     out: &Outbox,
 ) -> ExportEvent {
     let output = with_mp4(&options.output);
+    if let Some(problem) = options
+        .tracking
+        .as_ref()
+        .and_then(crate::ai::Tracking::problem)
+    {
+        return ExportEvent::Failed(problem);
+    }
+    let field_roi = calibration.field_roi.clone();
     let (start, end) = options.range;
     let total = ((end - start) * options.fps).round().max(0.0) as u64;
     let codec: Codec = options.codec.parse().unwrap_or_default();
@@ -345,6 +358,9 @@ fn run(
     }
     if options.events {
         job = job.events(output.with_extension("events.jsonl"));
+    }
+    if let Some(tracking) = options.tracking.clone() {
+        job = with_tracking(job, tracking, field_roi, out.clone());
     }
     // The rate counts from the first frame: opening and seeking to the
     // start are not exporting.
@@ -381,6 +397,54 @@ fn run(
         },
         Err(e) => ExportEvent::Failed(failure_words(&e, &options.codec)),
     }
+}
+
+/// `job` with AI tracking: the lookahead buffer, and the detector,
+/// trackers and panner set up on the session as it opens (it says whether
+/// they started).
+#[cfg(feature = "ai")]
+fn with_tracking(
+    job: StitchJob,
+    tracking: crate::ai::Tracking,
+    field_roi: Option<reco_core::calibration::FieldRoi>,
+    out: Outbox,
+) -> StitchJob {
+    let job = if tracking.lookahead_secs > 0.0 {
+        job.lookahead(tracking.lookahead_secs)
+    } else {
+        job
+    };
+    job.on_session(move |session, source| {
+        let is_10bit =
+            source.gpu_pixel_format() == reco_core::render::renderer::GpuPixelFormat::P010;
+        let config = tracking.config(is_10bit, field_roi);
+        let fps = source.info().fps as f32;
+        let status =
+            match reco_autocam::setup_autocam(session, &config, fps, source.is_gpu_resident()) {
+                Ok(true) => Ok(()),
+                Ok(false) => Err("no detector this export can use on this machine".to_string()),
+                Err(e) => Err(e.to_string()),
+            };
+        match &status {
+            Ok(()) => log::info!("export: AI tracking active ({})", tracking.mode),
+            Err(why) => log::warn!("export: AI tracking not active: {why}"),
+        }
+        out.send(ExportEvent::Tracking(status));
+    })
+}
+
+/// Without the engine (a build without AI): the export says so and goes on.
+#[cfg(not(feature = "ai"))]
+fn with_tracking(
+    job: StitchJob,
+    _tracking: crate::ai::Tracking,
+    _field_roi: Option<reco_core::calibration::FieldRoi>,
+    out: Outbox,
+) -> StitchJob {
+    out.send(ExportEvent::Tracking(Err(
+        "AI tracking isn't in this build".to_string(),
+    )));
+    job
 }
 
 /// A panic's message.
@@ -480,6 +544,7 @@ mod tests {
             color_match: true,
             replay: false,
             events: false,
+            tracking: None,
         }
     }
 
@@ -662,6 +727,87 @@ mod tests {
         let video = VideoDecoder::open(path).expect("a playable file");
         assert_eq!((video.width(), video.height()), (1280, 720));
         let _ = std::fs::remove_file(path);
+    }
+
+    fn tracking(model: Option<PathBuf>) -> crate::ai::Tracking {
+        crate::ai::Tracking {
+            model,
+            mode: "field".into(),
+            interval: 15,
+            preset: "broadcast".into(),
+            knobs: crate::ai::PannerKnobs::of_preset("broadcast"),
+            lookahead_secs: 0.5,
+        }
+    }
+
+    /// Debug builds turn on wgpu's validation, which turns on Metal's, and
+    /// that asserts in reco-detect's Metal preprocessing (an early return
+    /// leaves an encoder open; FRICTION.md). Release runs it as the app does:
+    /// `cargo test --profile desktop -p reco-app an_export_tracks`.
+    #[cfg(feature = "ai")]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "needs an optimized build: Metal validation (FRICTION.md)"
+    )]
+    #[test]
+    fn an_export_tracks_with_the_model() {
+        let (Some((left, right, cal)), Some(model)) = (fixtures::fast_set(), fixtures::model())
+        else {
+            return;
+        };
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-ai-{}", std::process::id()));
+        let mut with_ai = options(output.clone(), (0.0, 1.0));
+        with_ai.events = true;
+        with_ai.tracking = Some(tracking(Some(model)));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            with_ai,
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 180, false);
+        assert!(
+            events.contains(&ExportEvent::Tracking(Ok(()))),
+            "tracking is active: {events:?}"
+        );
+        let Some(ExportEvent::Done { path, .. }) = events.last() else {
+            panic!("{events:?}")
+        };
+        let log =
+            std::fs::read_to_string(output.with_extension("events.jsonl")).unwrap_or_default();
+        assert!(log.contains("detect"), "the events file has the detections");
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(output.with_extension("events.jsonl"));
+    }
+
+    #[test]
+    fn tracking_without_its_model_fails_before_writing() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let output = std::env::temp_dir().join(format!(
+            "reco-app-export-nomodel-{}.mp4",
+            std::process::id()
+        ));
+        let mut no_model = options(output.clone(), (0.0, 1.0));
+        no_model.tracking = Some(tracking(Some(PathBuf::from("/no/such/yolo.onnx"))));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            no_model,
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 30, false);
+        assert_eq!(
+            events.last(),
+            Some(&ExportEvent::Failed(
+                "The AI model isn't there any more: /no/such/yolo.onnx".into()
+            ))
+        );
+        assert!(!output.exists(), "nothing written");
     }
 
     #[test]
