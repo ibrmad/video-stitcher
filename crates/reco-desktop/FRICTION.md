@@ -111,3 +111,69 @@ camera, so the field outline (drawn on raw frames) can't be overlaid where
 it belongs. The asks: render into a caller's texture (any size), and a raw
 mode.
 
+
+## A hit's rect is the area's visible part (Module 7, Makepad)
+
+`event.hits(cx, area)` reports `fe.rect` as `area.clipped_rect`: shifted by
+the scroll view and clipped to it. A list that finds the row under the
+pointer from `fe.abs.y - fe.rect.pos.y` counts from the visible top, so in
+the lens picker, scrolled two rows down, the highlight sat two rows above
+the pointer and the last two rows could never be picked (the owner found
+it). `RecoPickList` now asks each row's own area (`clipped_rect`, which
+knows the scroll) whether it holds the pointer, and arrow keys ask the
+App to scroll the highlighted row into view. The ask: hits carry the
+content's rect (or a position relative to it) as well as the visible one.
+
+## A checkbox's text sits on its box without padding (Module 7, Makepad)
+
+`CheckBox` starts its label 13 pt in (`label_walk` margin), counting on
+the default padding to clear the 15 pt mark box. With `padding: 0` (Reco's
+rows own their insets) the text overlapped the box by 2 pt, in the export
+sheet and in Preferences (the owner found it). `RecoCheckBox` sets the
+label's margin to the box and an 8 pt gap (`reco_check_label`); check_m6
+and check_m7 measure the gap. The ask: the label offset follows the mark's
+size.
+
+## Resizing a window doesn't keep it on the displays (Module 7, Makepad)
+
+`Window::resize` sets the outer frame (`setFrame`) as asked, even larger
+than every attached display, while `reposition` fits the window to the
+displays. Restoring a size saved on a large external display would open a
+window past the laptop's screen, so the app repositions it where it is
+after resizing. The ask: `resize` fits like `reposition` (and says it sets
+the outer size).
+
+## A hidden window still goes full screen (Module 7, Makepad)
+
+With `MAKEPAD_HIDE_WINDOWS=1` (every check), `maximize()` (macOS:
+`toggleFullScreen:`) still takes the window full screen on the owner's
+display: a one-off probe of "restore full screen" did. Checks therefore
+don't run a full-screen start; `remember_window`'s test and that probe
+cover it. The ask: hidden windows ignore full screen (or fake it).
+
+## Small gaps met in Module 7 (Makepad)
+
+- A single-line `TextInput` uses ↑/↓ itself and doesn't pass them on
+  (`KeyDownUnhandled`), so the lens picker's search can't hand the arrow
+  keys to its results; the list is reached with the pointer, as in the
+  Slint app.
+- `FileDialogAction::FolderSelected` carries no dialog id: the app's one
+  folder dialog (Preferences' recording folder) owns every answer.
+- `KEYCODE_VARIANTS` isn't re-exported by `makepad-widgets`; the test that
+  holds the shortcuts sheet to the key handler takes it from
+  `makepad-key-code` (a dev-dependency at the pinned rev).
+
+## Text on a 1x display is thin and soft (Module 7, Makepad)
+
+On macOS every glyph is drawn by exact curve coverage (`sample_slug_pixel`):
+no hinting, no font smoothing, baselines wherever layout puts them. On
+Retina that looks right; on a 1x external monitor the owner found the text
+"not really great": thin and grey next to macOS's own text, whose font
+smoothing makes strokes fuller (the same word in CoreText carried about
+45% more ink). The theme now re-registers `DrawText` with Makepad's own
+`sample_slug_pixel` changed at its end: below 2x, coverage `a` becomes
+`1 - (1 - a)^2` (`check_theme.py`: the title's ink at 1x went from 0.94 to
+1.12 of its 2x ink; Retina output is pixel-identical). The copy has to
+follow Makepad's function when the pinned rev moves. The asks: font
+smoothing (a gamma or a small dilation) for low-density displays, and
+baselines snapped to device pixels.

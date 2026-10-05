@@ -57,8 +57,7 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       ignores input" (the `/snap` input flag), "time panel folds to its
       control row"; `ready-time-folded.png`.
 - [x] All colours, spacing, radii and type sizes come from `src/theme.rs`.
-      Dark only; light tokens arrive with the dark-mode preference
-      (Module 7). Evidence: the `screens_use_theme_values_only` unit test
+      Dark only: no light theme is offered (ruling, Module 7). Evidence: the `screens_use_theme_values_only` unit test
       (no raw colours, sizes, spacing or type sizes in `src/ui/`),
       `tools/check_theme.py`, and "Setup panel is #0d0d0d", "section band
       is #212121".
@@ -68,7 +67,10 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       (Recent files, help, Change and band icons, Adjust values), "time
       panel's first icon starts on the edge 12", "`<id>` centred on the
       control row".
-- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state.
+- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state, on
+      Retina and on a 1x display (New, Module 7: 1x text is drawn fuller;
+      `check_theme.py` "title ink … (1.12x)", Retina unchanged; the owner
+      found it thin on an external monitor).
       Evidence: the screenshots, reviewed in two batched rounds after the
       Rerun restyle (fixes: the app menu button's border, empty camera
       rows, trailing icon alignment, the checkbox column, the time panel's
@@ -182,7 +184,7 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       recording"; errors also raise a toast ("toasts: a failed open raises an
       error toast"); `status_says_what_playback_does`,
       `recording_and_problems_come_first`. Version and "Report a bug…" sit in
-      the app menu (Module 0; the dialog arrives in Module 7).
+      the app menu (Module 0; the dialog is Module 7's).
 - [x] Show in folder after a recording. Evidence: "record: Show in folder
       appears"; `finder_selects_the_file`.
 - [ ] Export progress, status text and Cancel; Show in folder after an
@@ -425,18 +427,87 @@ tracking is Module 6b: `reco-autocam` is being changed in another branch.
 
 ## Module 7: preferences and help (§2.8–§2.10, §8)
 
-- [ ] Preferences: default codec, quality and seam blend; AI model path with
-      Browse; recording codec, quality and folder with Browse; dark mode;
-      telemetry opt-in; Save. (New: Cancel reverts everything.)
-- [ ] Keyboard shortcuts dialog, matching what is implemented; Website;
-      Forum.
-- [ ] Report a bug: message, contact, include logs, Send. (New: honours the
-      telemetry opt-in; clipboard copy is explicit.)
-- [ ] Update check shows a toast with a link. (New: it no longer opens the
-      browser by itself.)
-- [ ] Settings persistence: recent files, defaults, recording, preview
-      aspect, telemetry, dark mode. (New: window size, maximized state and
-      panel widths are restored.)
+Evidence for this module: `tools/check_m7.py` (checks `prefs`, `blend`,
+`shortcuts`, `bug`, `usage`, `update` and `persist`, on fresh settings
+folders, without network, browser or clipboard: each request, link and copy
+is a log line, and the payloads are kept for the check to read), the unit
+tests (`cargo test -p reco-app -p reco-desktop`), and screenshots in
+`target/desktop-checks/m7/`.
+
+- [x] Preferences (the app menu, and ⌘, in the macOS menu bar): export
+      codec and quality, recording codec, quality and folder with Choose…,
+      the seam blend new calibrations start with, the AI model with
+      Choose…, the usage-data opt-in; Save keeps and applies them (the view
+      bar's quality follows). New: Cancel, Escape or a press outside keeps
+      nothing; a missing folder or a model that isn't an `.onnx` file is
+      refused with the reason. Evidence: "prefs: the app menu opens
+      Preferences", "Cancel keeps nothing", "Escape keeps nothing (Balanced)",
+      "a missing folder is refused (That recording folder doesn't exist.)",
+      "a model that isn't .onnx is refused", "Choose… sets the folder",
+      "Choose… sets the model", "export defaults kept (hevc, high)",
+      "recording codec and quality kept (av1, fast)", "the seam blend is
+      kept", "the view bar shows the recording quality (Fast)", "a new
+      launch shows the folder and the model"; "blend: Auto-calibrate starts
+      with the saved seam blend"; `checked_folder`/`checked_model` tests,
+      `a_new_calibration_takes_the_default_blend` (a recalibration keeps
+      the seam its calibration had), `recording_uses_the_chosen_codec`.
+      Ruling: dark mode is not offered; the app has one look, the Rerun
+      dark look the owner chose (a light theme is a design project of its
+      own). The ⌘, menu item has no check (menu-bar commands don't reach
+      the remote).
+- [x] Keyboard shortcuts, listing exactly the keys the app answers (the
+      sheet and the key handler share one table), with Website and Forum.
+      Evidence: "shortcuts: the keys and what they do", "every key, the
+      pointer and the menu keys (11 rows)", "Website opens the project's
+      page", "Forum opens the forum", "Close closes it", "Escape closes
+      it"; `the_sheet_lists_every_key_the_preview_handles` (every key
+      Makepad knows: handled ⇔ listed),
+      `the_sheet_lists_the_menu_keys_only_with_the_menu_bar`.
+- [x] Report a bug: what went wrong, a contact, "Include system info and
+      logs" (the version with its commit, OS, GPU, the open files' names
+      only, the preview's figures, the last calibration run and the log's
+      newest 200 lines, the home folder shown as `~`). New: Send needs the
+      usage-data opt-in (a hint offers Preferences) and says whether it
+      went; Copy report puts it on the clipboard only when clicked.
+      Evidence: "bug: Send waits", "with usage data off, a hint offers
+      Preferences", "Copy report copies it", "the report starts with the
+      words and the contact", "with the version and the log", "the home
+      folder reads as ~", "without details, only the words and the
+      contact", "Send sends it", "a notice says it was sent", "with the
+      files' names only", "with the GPU"; the `bug_report` and
+      `telemetry` tests (the report fitted under 16 KB, oldest log lines
+      first).
+- [x] Usage data (opt-in): the Slint app's events and JSON: app_open, the
+      system's context, source info per opened match, export and
+      calibration outcomes, bug reports; none with it off. Evidence:
+      "usage: an opened match sends its source info", "and its outcome
+      ({'frames': 30, 'duration_sec': 1.0, 'codec': 'h264'})", "a failed
+      calibration sends its error", "with it off, nothing is sent";
+      `a_batch_is_the_slint_apps_json`, `each_event_has_its_name_and_figures`.
+      The real service was not posted to from a check or a probe (that
+      sends data out; the owner's call).
+- [x] Update check: GitHub's latest release at start, and a notice with
+      Download for a newer one. New: the browser opens only on the click.
+      Evidence: "update: a newer release shows a notice", "with Download",
+      "the browser waits for a click", "Download opens the release page",
+      "'v0.5.4' → 'update check: up to date'", "'v1 & calc' → 'update
+      check: no release in the answer'", "offline, GitHub isn't asked";
+      a one-off real request: "update check: up to date (0.5.4; the latest
+      is v0.5.4)"; `versions_compare_by_number`, `the_tag_comes_from_the_release`.
+      The app's version is the product's, 0.5.4 (it was 0.1.0, which every
+      release would have beaten), shown in the app menu with its commit.
+- [x] Settings persistence: recent sessions (Module 3), export and
+      recording defaults, the preview aspect (Module 2), usage data and its
+      id. New: the window's size and full screen and the side panels'
+      widths, saved a quiet second after a change (or on quit) and
+      restored at start, fitted to the attached displays (`--window-size`
+      still wins). Evidence: "persist: dragging the edges widens both
+      panels", "saved a quiet second later", "the window is remembered",
+      "at its size ((1440, 900))", "with the panels' widths", "--window-size
+      wins"; `the_window_is_remembered_windowed_and_full_screen`,
+      `a_restored_window_is_never_below_the_minimum`. Full screen at start
+      was seen once in a probe (the window came back 3440×1440); no check
+      runs it, as even a hidden window takes over the display.
 
 ## Module 8: parity sweep
 

@@ -371,6 +371,28 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   Showing or hiding a widget asks for no redraw at all, so `App::set_visible`
   redraws the side panels when visibility changes.
 - A fold (`FoldHeader`) opens from its chevron only, not from its title.
+- A hit's `fe.rect` is the area's visible part (scrolled and clipped), so a
+  list in a scroll view finds the row under the pointer from each row's
+  own `clipped_rect` (`ui::pick_list`), not from the list's top.
+- `CheckBox` starts its text 13 pt in, counting on padding Reco's rows
+  don't have: `RecoCheckBox` puts it after the 15 pt box and an 8 pt gap.
+- `Window::resize` sets the outer frame and may leave the displays;
+  `reposition` fits the window to them, so a restored size is followed by
+  a reposition where the window is.
+- Makepad covers the app's network, clipboard and log needs without a
+  crate: `cx.http_request` (answers in `Event::NetworkResponses`),
+  `cx.copy_to_clipboard`, and `log_ring::read_since` (always on, not only
+  with `--remote`).
+- `FileDialogAction::FolderSelected` carries no dialog id.
+- Text is exact curve coverage with no hinting or smoothing: fine on Retina,
+  thin on a 1x display. `theme.rs` re-registers `DrawText` (a fresh
+  `#(DrawText::script_shader(vm))` splatting `..mod.draw.DrawText`; deriving
+  the old object loses the shader's `vertex` and `fragment`) with a fuller
+  coverage curve below 2x. A theme script that writes shader code needs
+  `use mod.pod.*`, `use mod.math.*` and `use mod.shader.*`.
+- `--dpi N` draws at a chosen density on any display
+  (`cx.set_window_dpi_override`); `--window-size` stays in the display's
+  points.
 
 ## Modules
 
@@ -396,6 +418,14 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   `target/desktop-checks/m<N>/<state>.png`.
 - Test windows are started hidden (`MAKEPAD_HIDE_WINDOWS=1`) unless the owner
   is watching, and always closed with `/gq`.
+- Checks never reach outside: `drive.launch_env` sets
+  `RECO_DESKTOP_NO_NETWORK`, `RECO_DESKTOP_NO_BROWSER` and
+  `RECO_DESKTOP_NO_CLIPBOARD`, which turn each request, link and copy into a
+  log line (a switch naming a folder also keeps the payload there for the
+  check to read), and `RECO_DESKTOP_FAKE_RELEASE` answers the update check.
+  Dialogs are answered through `RECO_DESKTOP_DIALOG_ANSWERS`, and settings go
+  to a fresh `RECO_CONFIG_DIR`. Even a hidden window goes full screen, so no
+  check starts one full screen.
 
 ## Slint issues to fix, not copy
 
