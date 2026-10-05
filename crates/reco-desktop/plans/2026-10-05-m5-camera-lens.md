@@ -28,16 +28,29 @@ lens handlers (`on_changed_lens_param`, `on_reset_lens`, the lens picker,
   correction, each camera's params and profile name, and the loaded params
   (for slider ranges). Save folds the lens in (the pipeline's calibration
   already holds the params).
-- **Lens preview.** A `LensPreviewRenderer` made at the ring's size draws
-  the chosen camera flat, with or without correction, into the slot texture
-  (or the readback). Panning is off while it shows; the side and the mode
-  are commands.
+- **Lens preview.** Reco's `LensPreviewRenderer` draws the chosen camera
+  flat, with or without correction, into a new texture at the input's size
+  each frame; the worker copies it, fitted and centred, into the ring slot
+  (or the readback) with a small blit pass. Panning is off while it shows;
+  the side and the mode are commands. FRICTION: the per-frame input-size
+  texture.
 - **Lens picker.** It is a panel over the viewer, not a modal window: a
   search field, results (camera · lens · size), "Apply to" (Both, Left,
   Right), "Load from file…" and Close. The search runs on a short thread;
   the newest query wins.
-- **Fine-tune ranges** are the Slint app's: fx, fy, cx and cy within ±50%
-  of the loaded value; k1–k4 within ±`lens-k-range` (0.5).
+- **Fine-tune ranges** are the Slint app's (`set_lens_sliders`): fx and fy
+  within ±15% of the larger loaded focal length (at least 5 px), cx and cy
+  within ±10% of the image width and height (at least 5 px), k1–k4 within
+  ±0.3. Ranges come from the left camera, as there. (Corrected from the
+  first draft, which guessed ±50% and ±0.5.)
+- **Lens info.** Each camera's camera, lens and source: from a
+  calibration run (`CalibrationResult::{left,right}_lens_profile`), from
+  the picker ("Picker") or a file ("File"), and for a loaded calibration
+  detected from the video's telemetry (`detect_profile`) on a short
+  thread when the preview opens (New: the Slint app showed lens info only
+  after calibrating in the same session).
+- **Lens correction** is saved with the calibration
+  (`lens_correction_amount`), on or off as in the Slint app.
 - **Stats.** Once a second the worker reports fps, the average and p99
   frame time, decode, render and readback times, frames dropped and the
   GPU. The Stats section shows them, and the calibration's confidence and
