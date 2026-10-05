@@ -161,8 +161,12 @@ script_mod! {
     }
     // Makepad's dropdown paints its arrow under the face, so the arrow
     // vanishes when the face is opaque. This face draws a chevron last.
+    // The menu opens below the control, as Rerun's do: its rows stay where
+    // they were whatever is chosen, and a dropdown near the top never puts
+    // rows in the title bar, where a press drags the window instead.
     mod.widgets.RecoDropDown = DropDown{
         height: theme.reco_button margin: 0
+        popup_menu_position: #(makepad_widgets::drop_down::PopupMenuPosition::BelowInput)
         draw_text +: {text_style: theme.font_regular{font_size: theme.reco_font_body}}
         draw_bg +: {
             pixel: fn() {

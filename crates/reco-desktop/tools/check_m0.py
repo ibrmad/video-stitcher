@@ -433,6 +433,26 @@ def check_toggles():
         expect(app.errors() == [], "menu: no errors in the app log")
 
 
+def check_dropdowns():
+    """A dropdown's menu opens below it, rows where they always are: a click
+    on each row picks that row whatever was chosen, and no row lies in the
+    title bar (where a real press drags the window and never reaches the
+    menu; the owner found the top row unclickable)."""
+    with launch((1280, 820), "ready") as app:
+        r = app.rect("record_quality")
+        bottom = r[1] + r[3]
+        expect(bottom > 32, f"dropdown: the quality dropdown sits below the title bar ({r})")
+        for row, label in ((0, "Fast"), (2, "High"), (1, "Balanced"), (0, "Fast")):
+            click(app, r)
+            time.sleep(0.4)
+            # The menu's padding, then one 24 pt row each.
+            app.get("/click", x=r[0] + r[2] / 2, y=bottom + 16 + 24 * row, wait=1)
+            time.sleep(0.4)
+            picked = next((i.get("t") for i in app.snap("record_quality") if i.get("i") == "record_quality"), None)
+            expect(picked == label, f"dropdown: the click on row {row + 1} picks {label} ({picked})")
+        expect(app.errors() == [], "dropdown: no errors in the app log")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for state in STATES:
@@ -442,6 +462,7 @@ def main():
             check_state(size, state)
     check_adjust_edges()
     check_toggles()
+    check_dropdowns()
     if FAILURES:
         print(f"\nModule 0 check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
