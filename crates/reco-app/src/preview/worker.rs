@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
-use reco_core::calibration::FieldRoi;
+use reco_core::calibration::{FieldRoi, MatchCalibration};
 use reco_core::gpu::GpuContext;
 use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
@@ -152,6 +152,8 @@ pub enum PreviewCommand {
         /// The file.
         path: PathBuf,
     },
+    /// Send the tuned calibration (`PreviewEvent::Snapshot`), for an export.
+    Snapshot,
     /// Panic on the render thread (tests of the crash report).
     #[cfg(test)]
     Crash,
@@ -208,6 +210,13 @@ pub enum PreviewEvent {
     CalibrationSaved(PathBuf),
     /// It could not be written; why.
     CalibrationSaveFailed(String),
+    /// The calibration as tuned, for an export (answers `Snapshot`).
+    Snapshot {
+        /// The file's calibration with every live change folded in.
+        calibration: Box<MatchCalibration>,
+        /// Colour matching (a view setting, not in the calibration).
+        color_match: bool,
+    },
     /// A recording started.
     RecordingStarted {
         /// The file being written.
@@ -543,6 +552,7 @@ impl Worker {
                 self.send_calibration();
             }
             PreviewCommand::SaveCalibration { path } => self.save_calibration(&path),
+            PreviewCommand::Snapshot => self.send_snapshot(),
             PreviewCommand::Quit => self.quit = true,
         }
     }
@@ -690,6 +700,16 @@ impl Worker {
                 self.send_calibration();
             }
             Err(e) => self.stop(e.to_string()),
+        }
+    }
+
+    /// Send the tuned calibration, for an export.
+    fn send_snapshot(&self) {
+        if let Some(session) = self.session.as_ref() {
+            self.out.send(PreviewEvent::Snapshot {
+                calibration: Box::new(session.calibration_to_save()),
+                color_match: session.values().color_match,
+            });
         }
     }
 
@@ -1485,6 +1505,29 @@ mod tests {
         let back = reco_core::calibration::MatchCalibration::from_file(&path).unwrap();
         assert!((back.rig_tilt - 2f64.to_radians()).abs() < 1e-6);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_snapshot_carries_the_tuning() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        worker.send(PreviewCommand::Tune(Tuning::Blend(0.2)));
+        worker.send(PreviewCommand::Tune(Tuning::ColorMatch(false)));
+        worker.send(PreviewCommand::SetSyncOffset { frames: 12 });
+        worker.send(PreviewCommand::Snapshot);
+        let snapshot = wait_for(&worker, 10, |e| matches!(e, PreviewEvent::Snapshot { .. }));
+        let Some(PreviewEvent::Snapshot {
+            calibration,
+            color_match,
+        }) = snapshot
+        else {
+            panic!("no snapshot: {snapshot:?}");
+        };
+        assert!((calibration.blend_width - 0.2).abs() < 1e-6);
+        assert_eq!(calibration.sync_offset, 12);
+        assert!(!color_match);
     }
 
     #[test]
