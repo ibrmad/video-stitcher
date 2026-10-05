@@ -29,6 +29,7 @@ pub(crate) fn calibration_line(confidence: f64, matches: usize) -> String {
 impl App {
     /// The last second's frame figures.
     pub(crate) fn show_stats(&mut self, cx: &mut Cx, stats: &Stats) {
+        self.last_stats = Some(stats.clone());
         self.set_label(cx, ids!(stats_fps), &fps_line(stats.fps));
         self.set_label(cx, ids!(stats_frame), &ms_line(stats.frame_ms));
         self.set_label(cx, ids!(stats_slowest), &ms_line(stats.p99_ms));
@@ -43,6 +44,7 @@ impl App {
 
     /// The last calibration run's confidence and matches.
     pub(crate) fn show_calibration_stats(&mut self, cx: &mut Cx, confidence: f64, matches: usize) {
+        self.last_calibration_run = Some((confidence, matches));
         self.set_label(
             cx,
             ids!(stats_calibration),

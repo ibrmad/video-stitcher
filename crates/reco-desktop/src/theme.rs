@@ -349,6 +349,8 @@ script_mod! {
         reco_time_input: 72.0
         // The lens picker's results: ten rows, then it scrolls.
         reco_picker_list: 240.0
+        // A few lines of writing (the bug report's description).
+        reco_text_area: 72.0
         reco_toast_width: 320.0
         reco_progress_thickness: 4.0
         reco_slider_track: 4.0

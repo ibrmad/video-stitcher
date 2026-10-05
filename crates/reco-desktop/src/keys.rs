@@ -83,7 +83,9 @@ pub struct Shortcut {
     /// What they do.
     pub does: &'static str,
     /// The keys [`command_for_key`] answers for this row (none for the
-    /// pointer's and the menus' rows).
+    /// pointer's and the menus' rows). Read by the test that holds this
+    /// table to the handler.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub codes: &'static [KeyCode],
     /// A menu's key (the macOS menu bar's: listed only there).
     pub menu: bool,

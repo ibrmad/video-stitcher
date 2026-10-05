@@ -1,20 +1,41 @@
 //! The app's network uses: usage data (opt-in in Preferences), a bug report
-//! sent with it, and the update check. `RECO_DESKTOP_NO_NETWORK` turns each
-//! request into a log line, so checks never reach the network.
+//! sent with it, and the update check; and the one clipboard write (Copy
+//! report). Checks switch them off: `RECO_DESKTOP_NO_NETWORK` turns each
+//! request into a log line and `RECO_DESKTOP_NO_CLIPBOARD` each copy; when a
+//! switch names a folder, what would have gone out is kept there for the
+//! check to read.
 
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use makepad_widgets::*;
 use reco_app::telemetry::{self, batch_json, UsageEvent};
+use reco_app::toasts::Severity;
 
 use crate::App;
 
 /// Set: no request leaves the app; each is logged instead.
 const NO_NETWORK: &str = "RECO_DESKTOP_NO_NETWORK";
+/// Set: nothing is copied to the clipboard; each copy is logged instead.
+const NO_CLIPBOARD: &str = "RECO_DESKTOP_NO_CLIPBOARD";
 
-/// Whether requests stay in the app (checks).
-pub(crate) fn offline() -> bool {
-    std::env::var_os(NO_NETWORK).is_some()
+/// `None` when the switch `var` is unset; else the folder it names, if it
+/// names one.
+fn switched(var: &str) -> Option<Option<PathBuf>> {
+    let value = PathBuf::from(std::env::var_os(var)?);
+    Some(value.is_dir().then_some(value))
+}
+
+/// Keep `body` in `folder` (a switch's) as `<name>-<n>.txt`.
+fn keep(folder: Option<&Path>, name: &str, body: &str) {
+    static KEPT: AtomicU64 = AtomicU64::new(0);
+    if let Some(folder) = folder {
+        let n = KEPT.fetch_add(1, Ordering::Relaxed);
+        if let Err(e) = std::fs::write(folder.join(format!("{name}-{n}.txt")), body) {
+            log!("couldn't keep {name}: {e}");
+        }
+    }
 }
 
 /// "macos aarch64".
@@ -69,12 +90,14 @@ impl App {
             SystemTime::now(),
             &telemetry::batch_id(),
         );
-        if offline() {
+        if let Some(folder) = switched(NO_NETWORK) {
             log!(
                 "network: would send {} ({} bytes)",
                 event.name(),
                 body.len()
             );
+            keep(folder.as_deref(), event.name(), &body);
+            self.usage_answered(cx, event.name(), Ok(()));
             return;
         }
         let mut request = HttpRequest::new(telemetry::ENDPOINT.into(), HttpMethod::POST);
@@ -85,8 +108,43 @@ impl App {
         cx.http_request(id, request);
     }
 
+    /// The service's answer to a usage event: a bug report says how it
+    /// went; other events only log a failure.
+    fn usage_answered(&mut self, cx: &mut Cx, name: &str, result: Result<(), String>) {
+        match (name, result) {
+            ("bug_report", Ok(())) => self.toast(
+                cx,
+                Severity::Info,
+                "Report sent",
+                "Thank you. It went to Reco's developers.",
+            ),
+            ("bug_report", Err(why)) => {
+                log!("network: bug_report not sent ({why})");
+                self.toast(
+                    cx,
+                    Severity::Error,
+                    "The report wasn't sent",
+                    "Check the connection, or copy the report and post it on the forum.",
+                );
+            }
+            (_, Ok(())) => {}
+            (name, Err(why)) => log!("network: {name} not sent ({why})"),
+        }
+    }
+
+    /// Put `text` on the clipboard (logged, and kept in the switch's folder,
+    /// under `NO_CLIPBOARD`).
+    pub(crate) fn copy_text(&mut self, cx: &mut Cx, name: &str, text: &str) {
+        if let Some(folder) = switched(NO_CLIPBOARD) {
+            log!("clipboard: would copy {name} ({} bytes)", text.len());
+            keep(folder.as_deref(), name, text);
+            return;
+        }
+        cx.copy_to_clipboard(text);
+    }
+
     /// Answers to the app's requests.
-    pub(crate) fn network_responses(&mut self, _cx: &mut Cx, responses: &[NetworkResponse]) {
+    pub(crate) fn network_responses(&mut self, cx: &mut Cx, responses: &[NetworkResponse]) {
         for response in responses {
             match response {
                 NetworkResponse::HttpResponse {
@@ -94,14 +152,17 @@ impl App {
                     response,
                 } => {
                     if let Some(name) = self.usage_requests.remove(request_id) {
-                        if !(200..300).contains(&response.status_code) {
-                            log!("network: {name} refused (HTTP {})", response.status_code);
-                        }
+                        let result = if (200..300).contains(&response.status_code) {
+                            Ok(())
+                        } else {
+                            Err(format!("HTTP {}", response.status_code))
+                        };
+                        self.usage_answered(cx, name, result);
                     }
                 }
                 NetworkResponse::HttpError { request_id, error } => {
                     if let Some(name) = self.usage_requests.remove(request_id) {
-                        log!("network: {name} not sent ({})", error.message);
+                        self.usage_answered(cx, name, Err(error.message.clone()));
                     }
                 }
                 _ => {}

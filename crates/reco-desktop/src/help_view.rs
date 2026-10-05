@@ -37,6 +37,7 @@ impl App {
         match menu_picked(actions, owner) {
             Some(id) if id == live_id!(preferences) => self.open_preferences(cx),
             Some(id) if id == live_id!(shortcuts) => self.open_shortcuts(cx),
+            Some(id) if id == live_id!(report_bug) => self.open_bug_report(cx),
             Some(id) => log!("app menu: {id} (not wired yet)"),
             None => {}
         }

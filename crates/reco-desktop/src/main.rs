@@ -16,6 +16,7 @@ use std::sync::Arc;
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 
+mod bug_view;
 mod calibrate_view;
 mod cli;
 mod export_text;
@@ -52,6 +53,7 @@ use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::export::ExportRange;
 use reco_app::lens::{Lens, LensDetection, LensInfo, LensProfileSummary, ProfileSearch};
+use reco_app::preview::stats::Stats;
 use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
 use reco_app::roi::EditorJob;
@@ -109,6 +111,7 @@ script_mod! {
                     lens_picker := RecoLensPicker{}
                     prefs_sheet := RecoPrefsSheet{}
                     shortcuts_sheet := RecoShortcutsSheet{}
+                    bug_sheet := RecoBugSheet{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.
@@ -306,6 +309,12 @@ pub struct App {
     /// Usage events on their way, by request.
     #[rust]
     usage_requests: HashMap<LiveId, &'static str>,
+    /// The preview's last figures and the last calibration run's
+    /// confidence and matches (a bug report carries them).
+    #[rust]
+    last_stats: Option<Stats>,
+    #[rust]
+    last_calibration_run: Option<(f64, usize)>,
 }
 
 impl App {
@@ -675,6 +684,7 @@ impl MatchEvent for App {
         }
         self.app_menu_actions(cx, actions);
         self.prefs_actions(cx, actions);
+        self.bug_actions(cx, actions);
         self.preview_actions(cx, actions);
         self.ruler_actions(cx, actions);
         self.toast_actions(cx, actions);

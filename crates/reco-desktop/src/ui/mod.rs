@@ -1,6 +1,7 @@
 //! The window shell's widgets, registered in dependency order. Each file
 //! registers its widgets under `mod.widgets.Reco*`.
 
+mod bug_sheet;
 mod controls;
 mod export_sheet;
 pub mod file_list;
@@ -41,6 +42,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
     prefs_sheet::script_mod(vm);
     key_table::script_mod(vm);
     shortcuts_sheet::script_mod(vm);
+    bug_sheet::script_mod(vm);
     time_panel::script_mod(vm);
     shell::script_mod(vm);
 }

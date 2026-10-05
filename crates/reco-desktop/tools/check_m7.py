@@ -353,7 +353,95 @@ def check_shortcuts():
         expect(not app.errors(), f"shortcuts: no errors in the app log {app.errors()[:3]}")
 
 
-CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts}
+def kept(folder, name):
+    """What the app kept under a switch's folder for `name`, oldest first."""
+    files = sorted((f for f in os.listdir(folder) if f.startswith(f"{name}-")),
+                   key=lambda f: int(f.rsplit("-", 1)[1].split(".")[0]))
+    return [open(os.path.join(folder, f)).read() for f in files]
+
+
+def check_bug():
+    """Report a bug: Send waits for words and usage data (a hint offers
+    Preferences); Copy report copies the report, with or without the
+    details; with usage data on, Send sends it (no network in checks) with
+    the version, the GPU, the files' names and the log, the home folder as
+    ~, and says so."""
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    clipboard = tempfile.mkdtemp(prefix="reco-m7-clipboard-")
+    with launch(config, env={"RECO_DESKTOP_NO_CLIPBOARD": clipboard}) as app:
+        wait_for(lambda: app.rect("app_menu"), 15)
+        menu(app, REPORT_BUG)
+        expect(bool(wait_for(lambda: app.rect("bug_copy"), 5)), "bug: the app menu opens Report a bug")
+        time.sleep(0.3)
+        colour = face(app, "bug_copy")
+        expect(app.enabled("bug_send") is False, "bug: Send waits")
+        expect(app.rect("bug_prefs") is not None, "bug: with usage data off, a hint offers Preferences")
+        type_into(app, "bug_message", "It froze")
+        time.sleep(0.3)
+        expect(app.enabled("bug_send") is False, "bug: words alone don't enable Send while usage data is off")
+        save_shot(app, "bug")
+        click(app, "bug_copy")
+        expect(wait_for(lambda: logged(app, "clipboard: would copy bug_report"), 3) is not None,
+               "bug: Copy report copies it (no clipboard in checks)")
+        copied = kept(clipboard, "bug_report")
+        report = copied[0] if copied else ""
+        expect(report.startswith("## User description\nIt froze\n\n## Contact\n(not provided)\n"),
+               f"bug: the report starts with the words and the contact ({report[:60]!r})")
+        expect("## Environment\n- Reco 0.5.4" in report and "\n## Log (last " in report,
+               "bug: with the version and the log")
+        expect(HOME + "/" not in report, "bug: the home folder reads as ~")
+        click(app, "bug_details")
+        click(app, "bug_copy")
+        wait_for(lambda: len(kept(clipboard, "bug_report")) == 2, 3)
+        plain = (kept(clipboard, "bug_report") + [""])[1]
+        expect(plain == "## User description\nIt froze\n\n## Contact\n(not provided)\n",
+               f"bug: without details, only the words and the contact ({plain!r})")
+        click(app, "bug_prefs")
+        expect(bool(wait_for(lambda: not shows(app, "bug_copy", colour), 3)), "bug: Preferences… closes the sheet")
+        expect(bool(wait_for(lambda: app.rect("prefs_save"), 3)), "bug: and opens Preferences")
+        expect(not app.errors(), f"bug: no errors in the app log {app.errors()[:3]}")
+
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"telemetry_enabled": True}, f)
+    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
+    with launch(config, FAST, env={"RECO_DESKTOP_NO_NETWORK": sent}) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "bug: the preview opens")
+        wait_for(lambda: logged(app, "network: would send context"), 10)
+        menu(app, REPORT_BUG)
+        wait_for(lambda: app.rect("bug_copy"), 5)
+        time.sleep(0.3)
+        expect(app.enabled("bug_send") is False, "bug: Send waits for words")
+        type_into(app, "bug_message", "Export froze at 40%")
+        type_into(app, "bug_contact", "ann on the forum")
+        expect(wait_for(lambda: app.enabled("bug_send"), 3) is True, "bug: with words and usage data on, Send is ready")
+        click(app, "bug_send")
+        expect(wait_for(lambda: logged(app, "network: would send bug_report"), 3) is not None,
+               "bug: Send sends it (no network in checks)")
+        expect(bool(wait_for(lambda: title_rect(app, "Report sent"), 3)), "bug: a notice says it was sent")
+        batches = [json.loads(b) for b in kept(sent, "bug_report")]
+        report = batches[0]["events"][0]["props"]["report"] if batches else ""
+        expect(batches and batches[0]["events"][0]["name"] == "bug_report", "bug: as a bug_report event")
+        expect("## Contact\nann on the forum\n" in report and "Export froze at 40%" in report,
+               "bug: with the words and the contact")
+        expect("## Files\n- Left: cam0.mp4\n- Right: cam1.mp4\n- Calibration: match.json\n" in report,
+               "bug: with the files' names only")
+        expect("- GPU: " in report and "- GPU: not started" not in report, "bug: with the GPU")
+        expect(HOME + "/" not in report, "bug: and no home folder")
+        expect([json.loads(b)["events"][0]["name"] for b in kept(sent, "app_open")] == ["app_open"]
+               and len(kept(sent, "context")) == 1, "bug: usage data also sent app_open and the context once")
+        expect(not app.errors(), f"bug: no errors in the app log {app.errors()[:3]}")
+
+
+def title_rect(app, text):
+    """The rect of a toast title showing `text`, or None."""
+    for found in app.snap(text):
+        if found.get("t") == text and found.get("i") == "title":
+            return found["r"]
+    return None
+
+
+CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug}
 
 
 def main():

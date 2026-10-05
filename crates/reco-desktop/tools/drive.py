@@ -166,12 +166,12 @@ def read_png(path):
 def launch_env(base, env, hidden):
     """The environment for a launched app: hidden windows if asked, a fresh
     settings folder (RECO_CONFIG_DIR) unless one is given, so checks never
-    read or write the owner's settings, and no network or browser (each
-    request or link is a log line) unless env sets RECO_DESKTOP_NO_NETWORK
-    or RECO_DESKTOP_NO_BROWSER to None."""
+    read or write the owner's settings, and no network, browser or
+    clipboard (each request, link or copy is a log line) unless env sets
+    RECO_DESKTOP_NO_NETWORK, _NO_BROWSER or _NO_CLIPBOARD to None."""
     out = dict(base)
-    out["RECO_DESKTOP_NO_NETWORK"] = "1"
-    out["RECO_DESKTOP_NO_BROWSER"] = "1"
+    for switch in ("RECO_DESKTOP_NO_NETWORK", "RECO_DESKTOP_NO_BROWSER", "RECO_DESKTOP_NO_CLIPBOARD"):
+        out[switch] = "1"
     out.update(env or {})
     if hidden:
         out["MAKEPAD_HIDE_WINDOWS"] = "1"
