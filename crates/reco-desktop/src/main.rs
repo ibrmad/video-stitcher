@@ -21,6 +21,7 @@ mod export_text;
 mod export_view;
 mod file_rows;
 mod keys;
+mod lens_view;
 mod live;
 mod names;
 mod perf;
@@ -44,6 +45,7 @@ use perf::DrawStats;
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::export::ExportRange;
+use reco_app::lens::{Lens, LensDetection, LensInfo};
 use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
 use reco_app::roi::EditorJob;
@@ -268,6 +270,24 @@ pub struct App {
     /// The first left video the sheet's file name was made for.
     #[rust]
     export_named_for: Option<PathBuf>,
+    /// The latest live calibration values (the Lens section reads them).
+    #[rust]
+    latest_values: Option<CalibrationValues>,
+    /// The cameras' lenses being looked up, and the last calibration
+    /// run's lenses with its file (they name a generic lens truthfully).
+    #[rust]
+    lens_detection: Option<LensDetection>,
+    #[rust]
+    calibrated_lenses: Option<(PathBuf, Option<LensInfo>, Option<LensInfo>)>,
+    /// The lens the fine-tune ranges are centred on, and the one the
+    /// sliders show.
+    #[rust]
+    lens_base: Lens,
+    #[rust]
+    fine_lens: Lens,
+    /// The field-of-view slider is being dragged (echoes wait).
+    #[rust]
+    fov_dragging: bool,
 }
 
 impl App {
@@ -648,6 +668,8 @@ impl MatchEvent for App {
         self.recent_actions(cx, actions);
         self.tune_actions(cx, actions);
         self.outline_actions(cx, actions);
+        self.view_actions(cx, actions);
+        self.lens_actions(cx, actions);
         self.export_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
@@ -693,6 +715,7 @@ impl AppMain for App {
                 self.drain_calibration(cx);
                 self.drain_outline_editor(cx);
                 self.collect_codecs(cx);
+                self.collect_lenses(cx);
                 self.drain_export(cx);
             }
             _ => {}

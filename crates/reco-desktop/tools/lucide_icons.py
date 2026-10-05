@@ -25,6 +25,7 @@ ICONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "resou
 
 # Our file name (without .svg) -> (Lucide icon name, filled).
 ICONS = {
+    "aperture": ("aperture", False),
     "check": ("check", False),
     "chevron_down": ("chevron-down", False),
     "close": ("x", False),

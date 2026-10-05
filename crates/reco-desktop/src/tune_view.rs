@@ -87,7 +87,8 @@ impl App {
         // The sliders lead for changes made with them: an echo still on its
         // way would pull a knob back. They take the worker's values once per
         // open, from the first values of a newer open.
-        if values.opened > self.adopted_open {
+        let adopt = values.opened > self.adopted_open;
+        if adopt {
             self.adopted_open = values.opened;
             for ((slider, label, _, show), value) in rows().into_iter().zip(numbers) {
                 self.ui.slider(cx, slider).set_value(cx, value);
@@ -104,9 +105,11 @@ impl App {
         if !sync.key_focus(cx) {
             sync.set_text(cx, &values.sync_offset.to_string());
         }
+        self.show_lens_values(cx, &values, adopt);
         self.show_outline(cx, values.roi_points);
         let unsaved = values.dirty && self.project.calibration.is_some();
         self.set_visible(cx, ids!(save_calibration), unsaved);
+        self.latest_values = Some(values);
     }
 
     /// The Adjust panel's sliders, switch, Reset and Apply; Save.

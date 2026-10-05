@@ -252,9 +252,20 @@ impl App {
                 cx,
                 Severity::Warn,
                 "Using a generic lens profile",
-                "No lens profile matched these cameras, so a generic one was used. If the stitch looks wrong, try a lens profile (Module 5).",
+                "No lens profile matched these cameras, so a generic one was used. If the stitch looks wrong, pick one under Lens in the Adjust panel.",
             );
         }
+        // A run that looked the lenses up names them (a generic one
+        // truthfully); one that kept the old lenses leaves the lookup to the
+        // reopen.
+        self.calibrated_lenses =
+            (done.left_lens.is_some() || done.right_lens.is_some()).then(|| {
+                (
+                    done.path.clone(),
+                    done.left_lens.clone(),
+                    done.right_lens.clone(),
+                )
+            });
         self.offered_calibration = Some(done.path.clone());
         self.project.calibration = Some(done.path);
         self.calibration_failure = None;

@@ -73,6 +73,7 @@ impl App {
                 Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
                 Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
                 Some(PreviewEvent::Calibration(values)) => self.show_calibration_values(cx, values),
+                Some(PreviewEvent::Fov(degrees)) => self.show_fov(cx, degrees),
                 Some(PreviewEvent::CalibrationSaved(path)) => {
                     let name = path
                         .file_name()
@@ -164,6 +165,7 @@ impl App {
             &time_ruler::clock(live::length_secs(&info)),
         );
         self.fit_export_range(live::length_secs(&info));
+        self.detect_lenses(cx, &info);
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);

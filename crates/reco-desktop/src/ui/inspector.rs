@@ -48,7 +48,7 @@ script_mod! {
                                 Tip{text: "Stops the view from turning past the edges of the stitched picture."
                                     RecoLabelCell{RecoSubdued{text: "Stay inside"}}
                                 }
-                                constrained_look := Check{text: ""}
+                                constrained_look := Check{text: "" animator +: {active: {default: @on}}}
                             }
                         }
                     }
@@ -124,6 +124,112 @@ script_mod! {
                                 View{width: Fill height: Fit}
                                 Tip{text: "Back to the overlap, depth and shift in the calibration file."
                                     reset_layout := RecoFlatButton{text: "Reset layout"}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            lens_section := RecoSection{
+                header +: {
+                    title +: {text: "Lens"}
+                    help +: {text: "How each camera's fisheye picture is straightened. Fine-tune only if straight lines still bend."}
+                    Tip{text: "Lens profiles"
+                        lens_browse := RecoRowIcon{
+                            draw_icon +: {svg: crate_resource("self:resources/icons/aperture.svg")}
+                        }
+                    }
+                }
+                body +: {
+                    RecoRow{
+                        RecoLabelCell{RecoSubdued{text: "Left"}}
+                        left_lens_name := RecoMeta{text: ""}
+                    }
+                    RecoRow{
+                        RecoLabelCell{RecoSubdued{text: "Right"}}
+                        right_lens_name := RecoMeta{text: ""}
+                    }
+                    RecoRow{
+                        Tip{text: "Straightens each camera's fisheye picture before stitching."
+                            RecoLabelCell{RecoSubdued{text: "Correction"}}
+                        }
+                        lens_correction := Check{text: "" animator +: {active: {default: @on}}}
+                    }
+                    RecoRow{
+                        Tip{text: "Shows one camera on its own, flat, to judge its lens."
+                            RecoLabelCell{RecoSubdued{text: "Show"}}
+                        }
+                        lens_preview := RecoDropDown{width: Fill labels: ["Stitched picture" "Left camera" "Right camera"]}
+                    }
+                    lens_advanced := RecoAdvanced{
+                        header +: {title +: {text: "Fine-tune"}}
+                        body +: {
+                            RecoRow{
+                                Tip{text: "Which camera the sliders tune; Both moves the two in step."
+                                    RecoLabelCell{RecoSubdued{text: "Camera"}}
+                                }
+                                lens_camera := RecoDropDown{width: Fill labels: ["Left" "Right" "Both"]}
+                            }
+                            RecoRow{
+                                Tip{text: "The lens's focal length across the picture, in pixels."
+                                    RecoLabelCell{RecoSubdued{text: "Focal x"}}
+                                }
+                                lens_fx := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_fx_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "The lens's focal length up the picture, in pixels."
+                                    RecoLabelCell{RecoSubdued{text: "Focal y"}}
+                                }
+                                lens_fy := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_fy_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "Where the lens's axis meets the picture, across, in pixels."
+                                    RecoLabelCell{RecoSubdued{text: "Centre x"}}
+                                }
+                                lens_cx := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_cx_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "Where the lens's axis meets the picture, up, in pixels."
+                                    RecoLabelCell{RecoSubdued{text: "Centre y"}}
+                                }
+                                lens_cy := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_cy_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "The first fisheye distortion term."
+                                    RecoLabelCell{RecoSubdued{text: "k1"}}
+                                }
+                                lens_k1 := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_k1_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "The second fisheye distortion term."
+                                    RecoLabelCell{RecoSubdued{text: "k2"}}
+                                }
+                                lens_k2 := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_k2_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "The third fisheye distortion term."
+                                    RecoLabelCell{RecoSubdued{text: "k3"}}
+                                }
+                                lens_k3 := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_k3_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "The fourth fisheye distortion term."
+                                    RecoLabelCell{RecoSubdued{text: "k4"}}
+                                }
+                                lens_k4 := RecoSlider{min: 0.0 max: 1.0 default: 0.5}
+                                lens_k4_value := Value{text: ""}
+                            }
+                            RecoRow{
+                                View{width: Fill height: Fit}
+                                Tip{text: "Back to the lenses in the calibration file."
+                                    reset_lens := RecoFlatButton{text: "Reset lens"}
                                 }
                             }
                         }
