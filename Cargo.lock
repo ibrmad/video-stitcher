@@ -6092,6 +6092,8 @@ dependencies = [
  "reco-control",
  "reco-core",
  "reco-io",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

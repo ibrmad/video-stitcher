@@ -5,3 +5,5 @@
 //! the stitched view into textures a UI can show without a copy.
 
 pub mod preview;
+pub mod recording;
+pub mod settings;

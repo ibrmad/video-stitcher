@@ -26,6 +26,36 @@ impl PreviewAspect {
         }
     }
 
+    /// The settings name: "auto", "16:9", "4:3" or "21:9".
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Wide16x9 => "16:9",
+            Self::Classic4x3 => "4:3",
+            Self::Cinema21x9 => "21:9",
+        }
+    }
+
+    /// The aspect saved under `name`; Auto for anything else.
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "16:9" => Self::Wide16x9,
+            "4:3" => Self::Classic4x3,
+            "21:9" => Self::Cinema21x9,
+            _ => Self::Auto,
+        }
+    }
+
+    /// The dropdown index (Auto, 16:9, 4:3, 21:9).
+    pub fn index(self) -> usize {
+        match self {
+            Self::Auto => 0,
+            Self::Wide16x9 => 1,
+            Self::Classic4x3 => 2,
+            Self::Cinema21x9 => 3,
+        }
+    }
+
     /// Width over height, or `None` for Auto (fill).
     pub fn ratio(self) -> Option<f64> {
         match self {
@@ -144,5 +174,20 @@ mod tests {
         assert!(!should_resize(Some((800, 450)), (812, 440)));
         assert!(should_resize(Some((800, 450)), (820, 450)));
         assert!(should_resize(Some((800, 450)), (800, 470)));
+    }
+
+    #[test]
+    fn aspect_names_and_indices_round_trip() {
+        for aspect in [
+            PreviewAspect::Auto,
+            PreviewAspect::Wide16x9,
+            PreviewAspect::Classic4x3,
+            PreviewAspect::Cinema21x9,
+        ] {
+            assert_eq!(PreviewAspect::from_name(aspect.name()), aspect);
+            assert_eq!(PreviewAspect::from_index(aspect.index()), aspect);
+        }
+        assert_eq!(PreviewAspect::Classic4x3.name(), "4:3");
+        assert_eq!(PreviewAspect::from_name("5:4"), PreviewAspect::Auto);
     }
 }
