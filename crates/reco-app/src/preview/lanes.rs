@@ -7,8 +7,9 @@
 
 use std::path::PathBuf;
 
-use reco_io::ffmpeg::decoder::VideoDecoder;
 use reco_io::stitch_job::InputPath;
+
+use crate::durations::file_duration;
 
 /// Each camera's files on the stitched timeline, and how long the pair plays.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,15 +72,7 @@ pub fn probe(input: &InputPath) -> Vec<f64> {
         InputPath::Single(path) => vec![path.clone()],
         InputPath::Chained(paths) => paths.clone(),
     };
-    paths
-        .iter()
-        .map(|path| {
-            VideoDecoder::open(path)
-                .ok()
-                .and_then(|d| d.duration_secs())
-                .unwrap_or(0.0)
-        })
-        .collect()
+    paths.iter().map(|path| file_duration(path)).collect()
 }
 
 #[cfg(test)]
