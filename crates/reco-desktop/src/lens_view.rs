@@ -234,6 +234,7 @@ impl App {
     ) {
         self.set_label(cx, ids!(left_lens_name), &lens_line(left.as_ref()));
         self.set_label(cx, ids!(right_lens_name), &lens_line(right.as_ref()));
+        self.lens_names = (left, right);
     }
 
     /// The live lenses into the Lens section: correction, Reset lens, and
@@ -261,7 +262,7 @@ impl App {
     }
 
     /// The fine-tune sliders for the chosen camera (Both shows the left).
-    fn show_fine_tune(&mut self, cx: &mut Cx, values: &CalibrationValues) {
+    pub(crate) fn show_fine_tune(&mut self, cx: &mut Cx, values: &CalibrationValues) {
         let cameras = cameras_at(self.ui.drop_down(cx, ids!(lens_camera)).selected_item());
         self.fine_lens = if cameras == Cameras::Right {
             values.right_lens

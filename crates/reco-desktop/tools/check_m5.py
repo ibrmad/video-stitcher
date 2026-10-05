@@ -106,10 +106,28 @@ def calibration_copy():
     return (FAST[0], FAST[1], cal)
 
 
-def launch(files):
+def launch(files, answers=None):
     left, right, cal = files
     args = ["--window-size", "1280x980", "--left", left, "--right", right, "--calibration", cal]
-    return drive.App.launch(BIN, args)
+    env = None
+    if answers is not None:
+        fd, path = tempfile.mkstemp(prefix="reco-m5-answers-", suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            json.dump(answers, f)
+        env = {"RECO_DESKTOP_DIALOG_ANSWERS": path}
+    return drive.App.launch(BIN, args, env=env)
+
+
+def type_into(app, widget_id, text):
+    """Replace a text field's text with `text`."""
+    click(app, widget_id)
+    app.key("KeyA", cmd=1)
+    app.get("/k", t=text)
+
+
+def texts(app, widget_id):
+    """Every drawn widget's text with this id (template rows share ids)."""
+    return [i.get("t", "") for i in app.snap(widget_id) if i.get("i") == widget_id]
 
 
 def degrees(text):
@@ -239,7 +257,80 @@ def check_preview():
         expect(app.errors() == [], f"preview: no errors in the app log {app.errors()[:3]}")
 
 
-CHECKS = {"view": check_view, "lens": check_lens, "preview": check_preview}
+def check_picker():
+    """The lens picker searches Reco's profiles and applies one to both
+    cameras, naming it; a profile file loads for one camera through the
+    dialog."""
+    files = calibration_copy()
+    lens_file = os.path.join(os.path.dirname(files[2]), "custom_lens.json")
+    with open(lens_file, "w") as f:
+        json.dump({"width": 1280, "height": 960, "fx": 700.0, "fy": 700.0, "cx": 640.0,
+                   "cy": 480.0, "d": [0.05, 0.01, 0.0, 0.0]}, f)
+    with launch(files, answers={"lens": [lens_file]}) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "picker: the preview opens")
+        wait_for(lambda: text_of(app, "left_lens_name") not in (None, "", "Looking up…"), 20)
+        before = frame_pixels(app, "picker-before")
+        click(app, "lens_browse")
+        expect(bool(wait_for(lambda: app.rect("picker_search"), 5)), "picker: the lens profiles button opens it")
+        expect(text_of(app, "picker_hint") == "Type to search over 4,200 camera profiles.",
+               f"picker: it asks for a search ({text_of(app, 'picker_hint')})")
+        type_into(app, "picker_search", "hero9")
+        found = wait_for(lambda: [t for t in texts(app, "line") if "HERO9" in t.upper()], 10)
+        expect(bool(found), f"picker: a search lists matching profiles ({(found or [''])[0]})")
+        expect((text_of(app, "picker_hint") or "").endswith("profiles"),
+               f"picker: and says how many ({text_of(app, 'picker_hint')})")
+        save_shot(app, "picker")
+        r = app.rect("picker_results")
+        app.get("/click", x=r[0] + 40, y=r[1] + 12, wait=1)
+        expect(bool(wait_for(lambda: title_rect(app, "Lens profile applied"), 5)), "picker: picking applies it")
+        left, right = text_of(app, "left_lens_name"), text_of(app, "right_lens_name")
+        expect((left or "").endswith("(picked)") and (right or "").endswith("(picked)"),
+               f"picker: both cameras are named by it ({left} | {right})")
+        open_advanced(app, "lens_advanced")
+        expect(wait_for(lambda: app.enabled("reset_lens"), 5) is True, "picker: Reset lens can go back")
+        time.sleep(0.6)
+        expect(frame_pixels(app, "picker-after") != before, "picker: the picture follows")
+        click(app, "lens_browse")
+        time.sleep(0.5)
+        pick_row(app, "picker_cameras", 1)
+        click(app, "picker_file")
+        left = wait_for(lambda: text_of(app, "left_lens_name") if (text_of(app, "left_lens_name") or "").endswith("(file)") else None, 5)
+        expect(left == "custom_lens (file)", f"picker: a file loads for the left camera ({text_of(app, 'left_lens_name')})")
+        expect((text_of(app, "right_lens_name") or "").endswith("(picked)"),
+               f"picker: the right camera keeps its lens ({text_of(app, 'right_lens_name')})")
+        expect(app.errors() == [], f"picker: no errors in the app log {app.errors()[:3]}")
+
+
+def save_shot(app, name):
+    shutil.copyfile(app.get("/g", scale=1.0)["png"], os.path.join(OUT, f"{name}.png"))
+
+
+def check_stats():
+    """The Stats section names the GPU and shows the preview's figures while
+    it plays."""
+    files = calibration_copy()
+    with launch(files) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "stats: the preview opens")
+        open_advanced(app, "stats_section")
+        gpu = wait_for(lambda: text_of(app, "stats_gpu") if text_of(app, "stats_gpu") not in (None, "", "—") else None, 5)
+        expect(bool(gpu), f"stats: the GPU is named ({gpu})")
+        click(app, "play_pause")
+        fps = wait_for(lambda: text_of(app, "stats_fps") if (text_of(app, "stats_fps") or "").endswith("fps") else None, 5)
+        expect(bool(fps) and float(fps.split()[0]) > 20,
+               f"stats: the first second of playing reads near the source's 30 fps ({fps})")
+        frame, slowest = text_of(app, "stats_frame") or "", text_of(app, "stats_slowest") or ""
+        expect(frame.endswith("ms") and slowest.endswith("ms"), f"stats: the frame time and the slowest ({frame}, {slowest})")
+        steady = wait_for(lambda: float((text_of(app, "stats_fps") or "0 fps").split()[0]) > 20, 4)
+        expect(bool(steady), f"stats: a second of playing reads near the source's 30 fps ({text_of(app, 'stats_fps')})")
+        expect((text_of(app, "stats_decode") or "").endswith("ms") and (text_of(app, "stats_render") or "").endswith("ms"),
+               "stats: decode and render times")
+        click(app, "play_pause")
+        save_shot(app, "stats")
+        expect(app.errors() == [], f"stats: no errors in the app log {app.errors()[:3]}")
+
+
+CHECKS = {"view": check_view, "lens": check_lens, "preview": check_preview, "picker": check_picker,
+          "stats": check_stats}
 
 
 def main():

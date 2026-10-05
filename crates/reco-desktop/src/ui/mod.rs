@@ -6,8 +6,10 @@ mod export_sheet;
 pub mod file_list;
 mod fold;
 mod inspector;
+mod lens_picker;
 mod media_panel;
 pub mod panorama;
+pub mod pick_list;
 pub mod preview;
 mod shell;
 pub mod time_panel;
@@ -31,6 +33,8 @@ pub fn script_mod(vm: &mut ScriptVm) {
     viewer::script_mod(vm);
     inspector::script_mod(vm);
     export_sheet::script_mod(vm);
+    pick_list::script_mod(vm);
+    lens_picker::script_mod(vm);
     time_panel::script_mod(vm);
     shell::script_mod(vm);
 }

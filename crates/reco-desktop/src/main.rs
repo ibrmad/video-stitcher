@@ -21,6 +21,7 @@ mod export_text;
 mod export_view;
 mod file_rows;
 mod keys;
+mod lens_picker_view;
 mod lens_view;
 mod live;
 mod names;
@@ -30,6 +31,7 @@ mod recent_view;
 mod roi_view;
 mod session_view;
 mod shell_state;
+mod stats_view;
 mod theme;
 mod time_ruler;
 mod toast_view;
@@ -45,7 +47,7 @@ use perf::DrawStats;
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::export::ExportRange;
-use reco_app::lens::{Lens, LensDetection, LensInfo};
+use reco_app::lens::{Lens, LensDetection, LensInfo, LensProfileSummary, ProfileSearch};
 use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
 use reco_app::roi::EditorJob;
@@ -99,6 +101,7 @@ script_mod! {
                     flow: Overlay
                     shell := RecoShell{}
                     export_sheet := RecoExportSheet{}
+                    lens_picker := RecoLensPicker{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.
@@ -288,6 +291,14 @@ pub struct App {
     /// The field-of-view slider is being dragged (echoes wait).
     #[rust]
     fov_dragging: bool,
+    /// Each camera's lens name, as shown.
+    #[rust]
+    lens_names: (Option<LensInfo>, Option<LensInfo>),
+    /// The lens picker's search and its results.
+    #[rust]
+    profile_search: ProfileSearch,
+    #[rust]
+    profiles: Vec<LensProfileSummary>,
 }
 
 impl App {
@@ -670,6 +681,7 @@ impl MatchEvent for App {
         self.outline_actions(cx, actions);
         self.view_actions(cx, actions);
         self.lens_actions(cx, actions);
+        self.lens_picker_actions(cx, actions);
         self.export_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
@@ -716,6 +728,7 @@ impl AppMain for App {
                 self.drain_outline_editor(cx);
                 self.collect_codecs(cx);
                 self.collect_lenses(cx);
+                self.collect_profiles(cx);
                 self.drain_export(cx);
             }
             _ => {}

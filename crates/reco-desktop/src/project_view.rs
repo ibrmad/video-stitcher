@@ -36,6 +36,8 @@ pub(crate) enum Pick {
     Calibration,
     /// The file to export to (a Save dialog).
     Export,
+    /// A lens profile file.
+    LensFile,
 }
 
 impl Pick {
@@ -45,6 +47,7 @@ impl Pick {
             Pick::Videos(Camera::Right) => live_id!(pick_right),
             Pick::Calibration => live_id!(pick_calibration),
             Pick::Export => live_id!(pick_export),
+            Pick::LensFile => live_id!(pick_lens),
         }
     }
 
@@ -54,6 +57,7 @@ impl Pick {
             Pick::Videos(Camera::Right),
             Pick::Calibration,
             Pick::Export,
+            Pick::LensFile,
         ]
         .into_iter()
         .find(|p| p.id() == id)
@@ -66,6 +70,7 @@ impl Pick {
             Pick::Videos(Camera::Right) => "right",
             Pick::Calibration => "calibration",
             Pick::Export => "export",
+            Pick::LensFile => "lens",
         }
     }
 }
@@ -121,6 +126,9 @@ impl App {
                 .set_title("Load a calibration".into())
                 .add_filter("Calibration".into(), vec!["json".into()]),
             Pick::Export => return self.pick_export_file(cx),
+            Pick::LensFile => FileDialog::new()
+                .set_title("Load a lens profile".into())
+                .add_filter("Lens profile".into(), vec!["json".into()]),
         };
         // Start beside the videos already chosen.
         let near = self
@@ -159,6 +167,12 @@ impl App {
             Pick::Export => {
                 if let Some(path) = paths.into_iter().next() {
                     self.export_file_picked(cx, path);
+                }
+                return;
+            }
+            Pick::LensFile => {
+                if let Some(path) = paths.into_iter().next() {
+                    self.lens_file_picked(cx, path);
                 }
                 return;
             }

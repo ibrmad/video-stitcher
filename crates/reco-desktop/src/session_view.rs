@@ -74,6 +74,7 @@ impl App {
                 Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
                 Some(PreviewEvent::Calibration(values)) => self.show_calibration_values(cx, values),
                 Some(PreviewEvent::Fov(degrees)) => self.show_fov(cx, degrees),
+                Some(PreviewEvent::Stats(stats)) => self.show_stats(cx, &stats),
                 Some(PreviewEvent::CalibrationSaved(path)) => {
                     let name = path
                         .file_name()
@@ -166,6 +167,7 @@ impl App {
         );
         self.fit_export_range(live::length_secs(&info));
         self.detect_lenses(cx, &info);
+        self.show_gpu(cx, &info.gpu);
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);

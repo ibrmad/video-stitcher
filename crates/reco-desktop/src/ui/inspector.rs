@@ -236,6 +236,58 @@ script_mod! {
                     }
                 }
             }
+            stats_section := RecoSection{
+                animator +: {active: {default: @off}}
+                header +: {
+                    fold_button +: {animator +: {active: {default: @off}}}
+                    title +: {text: "Stats"}
+                    help +: {text: "How fast the preview runs, and how well the cameras were calibrated."}
+                }
+                body +: {
+                    RecoRow{
+                        Tip{text: "Frames the preview shows a second."
+                            RecoLabelCell{RecoSubdued{text: "Frame rate"}}
+                        }
+                        stats_fps := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "How long a frame takes on average."
+                            RecoLabelCell{RecoSubdued{text: "Frame time"}}
+                        }
+                        stats_frame := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "The slowest frame in a hundred."
+                            RecoLabelCell{RecoSubdued{text: "Slowest 1%"}}
+                        }
+                        stats_slowest := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "How long the preview waited for the next frame pair from the decoders (they read ahead)."
+                            RecoLabelCell{RecoSubdued{text: "Decode wait"}}
+                        }
+                        stats_decode := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "Stitching the frame and handing it to the window."
+                            RecoLabelCell{RecoSubdued{text: "Render"}}
+                        }
+                        stats_render := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "The graphics processor the preview runs on."
+                            RecoLabelCell{RecoSubdued{text: "GPU"}}
+                        }
+                        stats_gpu := RecoMeta{text: "—"}
+                    }
+                    RecoRow{
+                        Tip{text: "How well the last calibration matched the two cameras."
+                            RecoLabelCell{RecoSubdued{text: "Calibration"}}
+                        }
+                        stats_calibration := RecoMeta{text: "—"}
+                    }
+                }
+            }
         }
     }
 }

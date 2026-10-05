@@ -258,6 +258,7 @@ impl App {
         // A run that looked the lenses up names them (a generic one
         // truthfully); one that kept the old lenses leaves the lookup to the
         // reopen.
+        self.show_calibration_stats(cx, done.confidence, done.matches);
         self.calibrated_lenses =
             (done.left_lens.is_some() || done.right_lens.is_some()).then(|| {
                 (
