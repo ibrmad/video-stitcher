@@ -38,6 +38,11 @@ fn keep(folder: Option<&Path>, name: &str, body: &str) {
     }
 }
 
+/// Whether requests stay in the app (checks).
+pub(crate) fn offline() -> bool {
+    switched(NO_NETWORK).is_some()
+}
+
 /// "macos aarch64".
 pub(crate) fn os_line() -> String {
     format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)
@@ -183,11 +188,16 @@ impl App {
                             Err(format!("HTTP {}", response.status_code))
                         };
                         self.usage_answered(cx, name, result);
+                    } else if *request_id == live_id!(update_check) {
+                        let status = response.status_code;
+                        self.release_answer(cx, status, response.body_string());
                     }
                 }
                 NetworkResponse::HttpError { request_id, error } => {
                     if let Some(name) = self.usage_requests.remove(request_id) {
                         self.usage_answered(cx, name, Err(error.message.clone()));
+                    } else if *request_id == live_id!(update_check) {
+                        log!("update check: no answer ({})", error.message);
                     }
                 }
                 _ => {}

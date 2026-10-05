@@ -501,8 +501,36 @@ def check_usage():
                f"usage: a failed calibration sends its error ({failed[0]})")
 
 
+def check_update():
+    """A newer release (GitHub's answer faked in checks) shows a notice with
+    Download, which opens the release page only when clicked; the same
+    version, or a tag that isn't a plain name, shows nothing; offline,
+    nothing is asked."""
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    with launch(config, env={"RECO_DESKTOP_FAKE_RELEASE": "v9.9.9"}) as app:
+        expect(bool(wait_for(lambda: title_rect(app, "Update available: v9.9.9"), 10)),
+               "update: a newer release shows a notice")
+        expect(text_of(app, "action") == "Download", f"update: with Download ({text_of(app, 'action')})")
+        expect(not logged(app, "browser: would open"), "update: the browser waits for a click")
+        save_shot(app, "update")
+        click(app, "action")
+        expect(wait_for(lambda: logged(app, "browser: would open https://github.com/reco-project/video-stitcher/releases/tag/v9.9.9"), 3)
+               is not None, "update: Download opens the release page")
+        expect(wait_for(lambda: title_rect(app, "Update available: v9.9.9") is None, 3) is True,
+               "update: and closes the notice")
+        expect(not app.errors(), f"update: no errors in the app log {app.errors()[:3]}")
+    for tag, says in (("v0.5.4", "update check: up to date"), ("v1 & calc", "update check: no release in the answer")):
+        with launch(config, env={"RECO_DESKTOP_FAKE_RELEASE": tag}) as app:
+            expect(wait_for(lambda: logged(app, says), 10) is not None, f"update: {tag!r} → {says!r}")
+            time.sleep(0.5)
+            expect(not title_rect(app, f"Update available: {tag}"), f"update: no notice for {tag!r}")
+    with launch(config) as app:
+        expect(wait_for(lambda: logged(app, "update check: would ask GitHub"), 10) is not None,
+               "update: offline, GitHub isn't asked")
+
+
 CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug,
-          "usage": check_usage}
+          "usage": check_usage, "update": check_update}
 
 
 def main():

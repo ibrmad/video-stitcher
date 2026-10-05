@@ -1,7 +1,8 @@
 //! Toasts, drawn: four card slots in a layer over the viewer's canvas,
 //! bottom right, so notices stay clear of the Adjust panel and the time
 //! panel. A card is a floating panel as Rerun's menus are: a dot for its
-//! kind, the title, a wrapping detail and a close button. The cards take
+//! kind, the title, a wrapping detail, a button when the notice offers one
+//! (Download), and a close button. The cards take
 //! the pointer; the layer itself does not. The App fills the slots from
 //! `reco_app::toasts` (toast_view.rs).
 
@@ -37,6 +38,12 @@ script_mod! {
             width: Fill height: Fit
             padding: Inset{left: theme.reco_dot + theme.reco_gap right: theme.reco_gap_s}
             body := RecoSubdued{width: Fill text: ""}
+        }
+        action_row := View{
+            visible: false
+            width: Fill height: Fit
+            padding: Inset{left: theme.reco_dot + theme.reco_gap top: theme.reco_gap_s}
+            action := RecoButton{text: ""}
         }
     }
 

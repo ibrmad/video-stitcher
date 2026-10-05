@@ -39,6 +39,8 @@ pub struct Toast {
     pub title: String,
     /// The detail; may be empty.
     pub body: String,
+    /// A button's label (what it does is the caller's), if it offers one.
+    pub action: Option<String>,
     /// When it leaves.
     pub expires_at: Instant,
 }
@@ -75,7 +77,32 @@ impl Toasts {
         ttl: Duration,
         now: Instant,
     ) -> u64 {
-        let (title, body) = (title.into(), body.into());
+        self.push_toast(severity, title.into(), body.into(), None, ttl, now)
+    }
+
+    /// Show a toast with a button labelled `action` for `ttl`; its id.
+    pub fn push_with_action(
+        &mut self,
+        severity: Severity,
+        title: impl Into<String>,
+        body: impl Into<String>,
+        action: impl Into<String>,
+        ttl: Duration,
+        now: Instant,
+    ) -> u64 {
+        let action = Some(action.into());
+        self.push_toast(severity, title.into(), body.into(), action, ttl, now)
+    }
+
+    fn push_toast(
+        &mut self,
+        severity: Severity,
+        title: String,
+        body: String,
+        action: Option<String>,
+        ttl: Duration,
+        now: Instant,
+    ) -> u64 {
         let same = |t: &Toast| t.severity == severity && t.title == title && t.body == body;
         if let Some(index) = self.shown.iter().position(same) {
             let mut toast = self.shown.remove(index);
@@ -91,6 +118,7 @@ impl Toasts {
             severity,
             title,
             body,
+            action,
             expires_at: now + ttl,
         });
         if self.shown.len() > MAX_VISIBLE {
@@ -183,6 +211,25 @@ mod tests {
         assert_eq!(again, first);
         assert_eq!(titles(&t), ["other", "Couldn't seek"]);
         assert_eq!(t.visible()[1].expires_at, later + Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_toast_can_offer_an_action() {
+        let now = Instant::now();
+        let mut t = Toasts::default();
+        let id = t.push_with_action(
+            Severity::Info,
+            "Update available: v0.6.0",
+            "This is 0.5.4.",
+            "Download",
+            Duration::from_secs(30),
+            now,
+        );
+        t.push(Severity::Info, "plain", "", now);
+        let shown = t.visible();
+        assert_eq!((shown[0].id, shown[0].action.as_deref()), (id, Some("Download")));
+        assert_eq!(shown[1].action, None);
+        assert_eq!(t.next_expiry(), Some(now + Duration::from_secs(4)));
     }
 
     #[test]

@@ -1,12 +1,15 @@
 //! The app menu in the App: Preferences, Keyboard shortcuts, Report a bug,
 //! and this build's version.
 
+use std::time::Duration;
+
 use makepad_widgets::*;
 use reco_app::help;
 use reco_app::reveal::open_in_browser;
 use reco_app::toasts::Severity;
 
 use crate::keys::SHORTCUTS;
+use crate::network::offline;
 use crate::ui::key_table::RecoKeyTable;
 use crate::App;
 
@@ -29,6 +32,10 @@ pub(crate) fn app_menu_rows() -> Vec<MenuRow> {
 
 /// Set: links are logged, not opened (checks).
 const NO_BROWSER: &str = "RECO_DESKTOP_NO_BROWSER";
+/// A release tag that stands in for GitHub's answer (checks).
+const FAKE_RELEASE: &str = "RECO_DESKTOP_FAKE_RELEASE";
+/// How long the update notice stays.
+const UPDATE_NOTICE: Duration = Duration::from_secs(30);
 
 impl App {
     /// The app menu's commands.
@@ -61,6 +68,54 @@ impl App {
             table.set_rows(cx, shortcut_rows(cfg!(target_os = "macos")));
         }
         self.ui.modal(cx, ids!(shortcuts_sheet)).open(cx);
+    }
+
+    /// Ask GitHub for the latest release, once at start (checks: a fake
+    /// answer, or nothing).
+    pub(crate) fn check_for_update(&mut self, cx: &mut Cx) {
+        if let Some(tag) = std::env::var_os(FAKE_RELEASE) {
+            let answer = serde_json::json!({"tag_name": tag.to_string_lossy()});
+            self.release_answer(cx, 200, Some(answer.to_string()));
+            return;
+        }
+        if offline() {
+            log!("update check: would ask GitHub");
+            return;
+        }
+        let mut request = HttpRequest::new(help::LATEST_RELEASE.into(), HttpMethod::GET);
+        request.set_header("User-Agent".into(), "reco-desktop".into());
+        request.set_header("Accept".into(), "application/vnd.github+json".into());
+        request.set_max_response_body_bytes(1 << 20);
+        cx.http_request(live_id!(update_check), request);
+    }
+
+    /// GitHub's answer: a newer release gets a notice with Download (the
+    /// browser opens only on a click).
+    pub(crate) fn release_answer(&mut self, cx: &mut Cx, status: u16, body: Option<String>) {
+        if status != 200 {
+            log!("update check: GitHub answered {status}");
+            return;
+        }
+        let Some(tag) = body.as_deref().and_then(help::release_tag) else {
+            log!("update check: no release in the answer");
+            return;
+        };
+        let current = env!("CARGO_PKG_VERSION");
+        if !help::is_newer(&tag, current) {
+            log!("update check: up to date ({current}; the latest is {tag})");
+            return;
+        }
+        log!("update check: {tag} is out (this is {current})");
+        self.toast_with_link(
+            cx,
+            Severity::Info,
+            (
+                &format!("Update available: {tag}"),
+                &format!("This is {current}."),
+            ),
+            ("Download", &help::release_page(&tag)),
+            UPDATE_NOTICE,
+        );
     }
 
     /// Open `url` (a link or a page) in the browser, logged instead under

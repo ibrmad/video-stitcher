@@ -1,6 +1,7 @@
 //! Toasts in the App: notices pushed from anywhere, shown in the viewer's
 //! four card slots, expired by one timer, dismissed by their close buttons.
-//! They never touch the status line.
+//! A notice can offer a link (Download): its button opens it and closes the
+//! notice. They never touch the status line.
 
 use std::time::{Duration, Instant};
 
@@ -40,9 +41,28 @@ impl App {
         self.show_toasts(cx);
     }
 
+    /// Show a notice for `ttl` with a button labelled `label` that opens
+    /// `url`.
+    pub(crate) fn toast_with_link(
+        &mut self,
+        cx: &mut Cx,
+        severity: Severity,
+        (title, body): (&str, &str),
+        (label, url): (&str, &str),
+        ttl: Duration,
+    ) {
+        let id = self
+            .toasts
+            .push_with_action(severity, title, body, label, ttl, Instant::now());
+        self.toast_links.insert(id, url.to_string());
+        self.show_toasts(cx);
+    }
+
     /// Fill the slots from the model; arm the timer for the next expiry.
     fn show_toasts(&mut self, cx: &mut Cx) {
         let shown = self.toasts.visible().to_vec();
+        self.toast_links
+            .retain(|id, _| shown.iter().any(|t| t.id == *id));
         for (index, slot) in slots().into_iter().enumerate() {
             let toast = shown.get(index);
             self.ui.widget(cx, &[slot]).set_visible(cx, toast.is_some());
@@ -56,6 +76,12 @@ impl App {
             self.ui
                 .widget(cx, &[slot, live_id!(body_row)])
                 .set_visible(cx, !toast.body.is_empty());
+            self.ui
+                .widget(cx, &[slot, live_id!(action_row)])
+                .set_visible(cx, toast.action.is_some());
+            self.ui
+                .button(cx, &[slot, live_id!(action)])
+                .set_text(cx, toast.action.as_deref().unwrap_or(""));
             for (dot, severity) in [
                 (live_id!(dot_info), Severity::Info),
                 (live_id!(dot_warn), Severity::Warn),
@@ -84,21 +110,28 @@ impl App {
         self.show_toasts(cx);
     }
 
-    /// A close button was clicked: dismiss its toast.
+    /// A close button was clicked: dismiss its toast. An action button:
+    /// open its link, and dismiss it too.
     pub(crate) fn toast_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         let ids: Vec<u64> = self.toasts.visible().iter().map(|t| t.id).collect();
-        let closed: Vec<u64> = slots()
-            .into_iter()
-            .zip(ids)
-            .filter(|(slot, _)| {
-                self.ui
-                    .button(cx, &[*slot, live_id!(close)])
-                    .clicked(actions)
-            })
-            .map(|(_, id)| id)
-            .collect();
-        if closed.is_empty() {
+        let clicked = |app: &Self, cx: &mut Cx, button: LiveId| -> Vec<u64> {
+            slots()
+                .into_iter()
+                .zip(ids.iter().copied())
+                .filter(|(slot, _)| app.ui.button(cx, &[*slot, button]).clicked(actions))
+                .map(|(_, id)| id)
+                .collect()
+        };
+        let closed = clicked(self, cx, live_id!(close));
+        let acted = clicked(self, cx, live_id!(action));
+        if closed.is_empty() && acted.is_empty() {
             return;
+        }
+        for id in acted {
+            if let Some(url) = self.toast_links.remove(&id) {
+                self.open_link(cx, &url);
+            }
+            self.toasts.dismiss(id);
         }
         for id in closed {
             self.toasts.dismiss(id);

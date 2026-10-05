@@ -315,6 +315,9 @@ pub struct App {
     last_stats: Option<Stats>,
     #[rust]
     last_calibration_run: Option<(f64, usize)>,
+    /// The links notices offer, by toast.
+    #[rust]
+    toast_links: HashMap<u64, String>,
 }
 
 impl App {
@@ -662,6 +665,7 @@ impl MatchEvent for App {
             }
             self.refresh_recent(cx);
             self.project_changed(cx);
+            self.check_for_update(cx);
         }
         if self.args.toast_demo && self.args.files.is_none() {
             self.toast_demo(cx);
