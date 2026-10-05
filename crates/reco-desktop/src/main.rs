@@ -24,6 +24,7 @@ mod ui;
 use cli::{Args, LookPreview};
 use live::Live;
 use names::middle_ellipsis;
+use reco_app::settings::{self, DesktopSettings};
 use shell_state::{Panel, ShellState};
 use ui::panorama::RecoPanorama;
 use ui::time_panel::RecoTimeRuler;
@@ -173,6 +174,9 @@ pub struct App {
     /// The last input came from the pointer, not the keyboard.
     #[rust]
     pointer_input: bool,
+    /// What the app remembers between runs (desktop.json).
+    #[rust]
+    settings: DesktopSettings,
 }
 
 impl App {
@@ -435,6 +439,29 @@ impl App {
         }
     }
 
+    /// Show the saved choices in their widgets.
+    fn apply_settings(&mut self, cx: &mut Cx) {
+        let aspect = self.settings.aspect();
+        self.ui
+            .drop_down(cx, ids!(aspect))
+            .set_selected_item(cx, aspect.index());
+        if let Some(mut preview) = self
+            .ui
+            .widget(cx, ids!(preview))
+            .borrow_mut::<ui::preview::RecoPreview>()
+        {
+            preview.set_aspect(cx, aspect);
+        }
+    }
+
+    /// Save the settings; a failure is logged, not shown (nothing is lost
+    /// but the choice for the next run).
+    fn save_settings(&self) {
+        if let Err(e) = settings::save(&self.settings) {
+            error!("couldn't save the settings: {e}");
+        }
+    }
+
     fn toggle_timeline(&mut self, cx: &mut Cx) {
         self.timeline_folded = !self.timeline_folded;
         self.apply_shell(cx);
@@ -447,6 +474,8 @@ impl MatchEvent for App {
             Ok(args) => self.args = args,
             Err(err) => log!("ignoring command line: {err}"),
         }
+        self.settings = settings::load();
+        self.apply_settings(cx);
         self.ui
             .menu_button(cx, ids!(app_menu))
             .set_rows(app_menu_rows());

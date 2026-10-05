@@ -285,13 +285,16 @@ impl App {
             }
         }
         if let Some(index) = self.ui.drop_down(cx, ids!(aspect)).selected(actions) {
+            let aspect = PreviewAspect::from_index(index);
             if let Some(mut preview) = self
                 .ui
                 .widget(cx, ids!(preview))
                 .borrow_mut::<RecoPreview>()
             {
-                preview.set_aspect(cx, PreviewAspect::from_index(index));
+                preview.set_aspect(cx, aspect);
             }
+            self.settings.set_aspect(aspect);
+            self.save_settings();
             // A dropdown takes the keyboard on a click. A pick made with the
             // mouse gives it back to the preview's shortcuts; arrow keys on
             // a focused dropdown keep stepping through the choices.
