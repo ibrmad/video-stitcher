@@ -385,11 +385,12 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   with `--remote`).
 - `FileDialogAction::FolderSelected` carries no dialog id.
 - Text is exact curve coverage with no hinting or smoothing: fine on Retina,
-  thin on a 1x display. `theme.rs` re-registers `DrawText` (a fresh
-  `#(DrawText::script_shader(vm))` splatting `..mod.draw.DrawText`; deriving
-  the old object loses the shader's `vertex` and `fragment`) with a fuller
-  coverage curve below 2x. A theme script that writes shader code needs
-  `use mod.pod.*`, `use mod.math.*` and `use mod.shader.*`.
+  thin on a 1x display. A shader's default is replaced by re-registering a
+  fresh `#(DrawText::script_shader(vm))` that splats `..mod.draw.DrawText`
+  (deriving the old object loses the shader's `vertex` and `fragment`), and
+  a script that writes shader code needs `use mod.pod.*`, `use mod.math.*`
+  and `use mod.shader.*`; a fuller coverage curve made that way looked
+  worse to the owner than bigger type.
 - `--dpi N` draws at a chosen density on any display
   (`cx.set_window_dpi_override`); `--window-size` stays in the display's
   points.

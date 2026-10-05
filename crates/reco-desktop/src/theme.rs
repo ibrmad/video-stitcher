@@ -27,10 +27,6 @@ use makepad_widgets::*;
 script_mod! {
     use mod.text.*
     use mod.res.*
-    // The text shader below uses the shader language's math.
-    use mod.pod.*
-    use mod.math.*
-    use mod.shader.*
 
     mod.themes.reco_dark = mod.themes.dark{
         // Geometry. Rendered radii: controls 4 pt, cards and menus 6 pt.
@@ -386,70 +382,4 @@ script_mod! {
         reco_inspector_floor: 206.0
     }
     mod.theme = mod.themes.reco_dark
-
-    // Text on low-density displays (a 1x external monitor): Makepad draws
-    // exact, unhinted coverage, which reads thin and grey there next to
-    // macOS's own text (its font smoothing makes strokes fuller). This is
-    // Makepad's own `sample_slug_pixel` (the path every glyph takes on macOS)
-    // with one change at the end: below 2x, coverage `a` becomes
-    // `1 - (1 - a)^2`, fuller the lower the density, so strokes keep their
-    // soft edges but gain weight. At 2x the curve is off and Retina text
-    // stays exactly as it was. check_theme.py measures both.
-    mod.draw.DrawText = mod.std.set_type_default() do #(DrawText::script_shader(vm)){
-        ..mod.draw.DrawText
-        sample_slug_pixel: fn() {
-            if self.slug_curve_count() < 0.5 {
-                return vec4(0.0, 0.0, 0.0, 0.0)
-            }
-
-            let sample = self.pos
-            let px_x = max(abs(dFdx(sample.x)) + abs(dFdy(sample.x)), 0.00001)
-            let px_y = max(abs(dFdx(sample.y)) + abs(dFdy(sample.y)), 0.00001)
-            let alpha_base = if self.aa_4x4 > 0.5 {
-                let x0 = px_x * 0.125
-                let x1 = px_x * 0.375
-                let y0 = px_y * 0.125
-                let y1 = px_y * 0.375
-                let a0 = self.alpha_at(sample + vec2(-x1, -y1), px_x, px_y)
-                let a1 = self.alpha_at(sample + vec2(-x0, -y1), px_x, px_y)
-                let a2 = self.alpha_at(sample + vec2( x0, -y1), px_x, px_y)
-                let a3 = self.alpha_at(sample + vec2( x1, -y1), px_x, px_y)
-                let a4 = self.alpha_at(sample + vec2(-x1, -y0), px_x, px_y)
-                let a5 = self.alpha_at(sample + vec2(-x0, -y0), px_x, px_y)
-                let a6 = self.alpha_at(sample + vec2( x0, -y0), px_x, px_y)
-                let a7 = self.alpha_at(sample + vec2( x1, -y0), px_x, px_y)
-                let a8 = self.alpha_at(sample + vec2(-x1,  y0), px_x, px_y)
-                let a9 = self.alpha_at(sample + vec2(-x0,  y0), px_x, px_y)
-                let a10 = self.alpha_at(sample + vec2( x0,  y0), px_x, px_y)
-                let a11 = self.alpha_at(sample + vec2( x1,  y0), px_x, px_y)
-                let a12 = self.alpha_at(sample + vec2(-x1,  y1), px_x, px_y)
-                let a13 = self.alpha_at(sample + vec2(-x0,  y1), px_x, px_y)
-                let a14 = self.alpha_at(sample + vec2( x0,  y1), px_x, px_y)
-                let a15 = self.alpha_at(sample + vec2( x1,  y1), px_x, px_y)
-                clamp(
-                    (a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15)
-                        * 0.0625,
-                    0.0,
-                    1.0
-                )
-            } else if self.aa_2x2 > 0.5 {
-                let offset = vec2(px_x * 0.25, px_y * 0.25)
-                let a0 = self.alpha_at(sample + vec2(-offset.x, -offset.y), px_x, px_y)
-                let a1 = self.alpha_at(sample + vec2(offset.x, -offset.y), px_x, px_y)
-                let a2 = self.alpha_at(sample + vec2(-offset.x, offset.y), px_x, px_y)
-                let a3 = self.alpha_at(sample + vec2(offset.x, offset.y), px_x, px_y)
-                clamp((a0 + a1 + a2 + a3) * 0.25, 0.0, 1.0)
-            } else {
-                self.alpha_at(sample, px_x, px_y)
-            }
-            let darken = clamp(max(px_x, px_y) * self.stem_darken, 0.0, self.stem_darken_max)
-            let edge_weight = clamp(1.0 - abs(alpha_base * 2.0 - 1.0), 0.0, 1.0)
-            let stock = clamp(alpha_base + darken * edge_weight, 0.0, 1.0)
-            let low_density = clamp(2.0 - self.draw_pass.dpi_factor, 0.0, 1.0)
-            let gap = 1.0 - stock
-            let alpha = mix(stock, 1.0 - gap * gap, low_density)
-            let color = self.get_color()
-            return vec4(color.rgb * color.a * alpha, color.a * alpha)
-        }
-    }
 }

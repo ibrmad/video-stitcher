@@ -170,10 +170,8 @@ no hinting, no font smoothing, baselines wherever layout puts them. On
 Retina that looks right; on a 1x external monitor the owner found the text
 "not really great": thin and grey next to macOS's own text, whose font
 smoothing makes strokes fuller (the same word in CoreText carried about
-45% more ink). The theme now re-registers `DrawText` with Makepad's own
-`sample_slug_pixel` changed at its end: below 2x, coverage `a` becomes
-`1 - (1 - a)^2` (`check_theme.py`: the title's ink at 1x went from 0.94 to
-1.12 of its 2x ink; Retina output is pixel-identical). The copy has to
-follow Makepad's function when the pinned rev moves. The asks: font
-smoothing (a gamma or a small dilation) for low-density displays, and
-baselines snapped to device pixels.
+45% more ink). A fuller coverage curve below 2x (Makepad's own
+`sample_slug_pixel` re-registered in the theme with `1 - (1 - a)^2`) was
+tried and the owner found it "much worse": the answer is size, so the
+design gets more room (bigger type, icons and rows). The asks stand: font
+smoothing for low-density displays, and baselines snapped to device pixels.

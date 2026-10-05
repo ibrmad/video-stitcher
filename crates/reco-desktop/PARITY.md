@@ -67,10 +67,10 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       (Recent files, help, Change and band icons, Adjust values), "time
       panel's first icon starts on the edge 12", "`<id>` centred on the
       control row".
-- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state, on
-      Retina and on a 1x display (New, Module 7: 1x text is drawn fuller;
-      `check_theme.py` "title ink … (1.12x)", Retina unchanged; the owner
-      found it thin on an external monitor).
+- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state.
+      (On a 1x external monitor the owner found the compact text too small
+      and thin; the design is getting more room, owner's choice of
+      2026-10-05.)
       Evidence: the screenshots, reviewed in two batched rounds after the
       Rerun restyle (fixes: the app menu button's border, empty camera
       rows, trailing icon alignment, the checkbox column, the time panel's
