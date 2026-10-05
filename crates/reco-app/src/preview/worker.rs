@@ -132,6 +132,9 @@ pub enum PreviewCommand {
     },
     /// Stop recording and close the file.
     StopRecording,
+    /// Close the open videos (a recording is finished first). The thread
+    /// and its texture ring stay for the next `Open`.
+    Close,
     /// Panic on the render thread (tests of the crash report).
     #[cfg(test)]
     Crash,
@@ -502,6 +505,7 @@ impl Worker {
                 quality,
             } => self.start_recording(&path, size, quality),
             PreviewCommand::StopRecording => self.finish_recording(),
+            PreviewCommand::Close => self.close(),
             PreviewCommand::Quit => self.quit = true,
         }
     }
@@ -606,7 +610,30 @@ impl Worker {
         }
     }
 
+    /// Drop the open videos, finishing a recording first. The ring stays:
+    /// the UI may still show one of its textures until the next open.
+    fn close(&mut self) {
+        self.finish_recording();
+        self.session = None;
+        self.lanes_rx = None;
+        self.pending_seek = None;
+        self.problem = None;
+        self.easing = false;
+        self.dirty = false;
+        self.last_time = (0, PlayState::Empty);
+    }
+
+    /// The shown ring waits, retired, until the UI adopts the next one. A
+    /// ring never adopted was never shown, so it goes now.
+    fn retire_ring(&mut self) {
+        if let Some(shown) = self.ring.take().filter(|r| r.adopted) {
+            self.retired_ring = Some(shown);
+        }
+    }
+
     fn open(&mut self, left: &InputPath, right: &InputPath, calibration: &std::path::Path) {
+        // New videos end a recording of the old ones.
+        self.finish_recording();
         self.out.send(PreviewEvent::Opening);
         if self.gpu.is_none() {
             match GpuContext::new_blocking() {
@@ -662,7 +689,7 @@ impl Worker {
                         });
                 self.lanes_rx = probe.is_ok().then_some(rx);
                 self.session = Some(session);
-                self.ring = None;
+                self.retire_ring();
                 self.problem = None;
                 self.dirty = true;
             }
@@ -768,7 +795,9 @@ impl Worker {
             return true;
         }
         let _ = gpu.device().poll(wgpu::PollType::wait_indefinitely());
-        self.retired_ring = self.ring.take();
+        if let Some(shown) = self.ring.take() {
+            self.retired_ring = Some(shown);
+        }
         self.ring = Some(Ring {
             generation: self.generation,
             textures,
@@ -1282,6 +1311,28 @@ mod tests {
             playable,
             "the recording was finished after the worker was dropped"
         );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn close_finishes_and_a_new_open_plays_again() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let path = temp_video("closed");
+        start_recording(&worker, &path);
+        worker.send(PreviewCommand::Close);
+        let saved = wait_for(&worker, 20, |e| {
+            matches!(e, PreviewEvent::RecordingSaved(_))
+        });
+        assert!(saved.is_some(), "closing finishes the recording");
+        worker.send(PreviewCommand::TogglePlay);
+        let moved = wait_for(&worker, 1, |e| matches!(e, PreviewEvent::Time { .. }));
+        assert!(moved.is_none(), "nothing plays once closed: {moved:?}");
+        assert!(open_fast(&worker), "the same worker opens again");
+        let shown = wait_for(&worker, 10, |e| matches!(e, PreviewEvent::Pixels { .. }));
+        assert!(shown.is_some());
         let _ = std::fs::remove_file(&path);
     }
 }
