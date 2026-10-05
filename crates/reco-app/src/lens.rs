@@ -5,9 +5,10 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 
-use reco_calibrate::lens_database::{LensDatabase, detect_profile};
+use reco_calibrate::lens_database::{LensDatabase, detect_profile, load_from_file};
+pub use reco_calibrate::types::LensProfileSummary;
 use reco_calibrate::types::{LensProfileInfo, ProfileSource};
 use reco_core::calibration::CameraParams;
 
@@ -224,6 +225,71 @@ impl LensDetection {
     }
 }
 
+/// A profile's line in the picker: "GoPro HERO9 Black · Wide · 5312 × 2988".
+pub fn profile_line(profile: &LensProfileSummary) -> String {
+    format!(
+        "{} · {} · {} × {}",
+        profile.camera, profile.lens, profile.width, profile.height
+    )
+}
+
+/// A database profile's lens at `size` (the calibration's lens size).
+pub fn profile_lens(profile: &LensProfileSummary, size: (u32, u32)) -> Option<Lens> {
+    LensDatabase::embedded()
+        .load_by_summary(profile)
+        .map(|params| Lens::of(&scaled_to(&params, size.0, size.1)))
+}
+
+/// A profile file's lens at `size` (Gyroflow and Reco formats).
+pub fn file_lens(path: &Path, size: (u32, u32)) -> Result<Lens, String> {
+    load_from_file(path)
+        .map(|params| Lens::of(&scaled_to(&params, size.0, size.1)))
+        .map_err(|e| e.to_string())
+}
+
+/// The picker's search: each query on a short thread; only the newest
+/// query's results are kept.
+pub struct ProfileSearch {
+    newest: u64,
+    tx: Sender<(u64, Vec<LensProfileSummary>)>,
+    rx: Receiver<(u64, Vec<LensProfileSummary>)>,
+}
+
+impl Default for ProfileSearch {
+    fn default() -> Self {
+        let (tx, rx) = mpsc::channel();
+        Self { newest: 0, tx, rx }
+    }
+}
+
+impl ProfileSearch {
+    /// Search for `query` among profiles, `size` first; `waker` runs when
+    /// the results are in.
+    pub fn search(&mut self, query: &str, size: (u32, u32), waker: Arc<dyn Fn() + Send + Sync>) {
+        self.newest += 1;
+        let (number, query, tx) = (self.newest, query.to_string(), self.tx.clone());
+        let _ = std::thread::Builder::new()
+            .name("reco-lens-search".into())
+            .spawn(move || {
+                let found = LensDatabase::embedded().search(&query, size.0, size.1);
+                if tx.send((number, found)).is_ok() {
+                    waker();
+                }
+            });
+    }
+
+    /// The newest query's results, once in (never blocks).
+    pub fn try_results(&mut self) -> Option<Vec<LensProfileSummary>> {
+        let mut newest = None;
+        while let Ok((number, found)) = self.rx.try_recv() {
+            if number == self.newest {
+                newest = Some(found);
+            }
+        }
+        newest
+    }
+}
+
 /// A lens profile (from the database or a file) scaled to a
 /// `width`×`height` video, as the Slint app's picker did.
 pub fn scaled_to(profile: &CameraParams, width: u32, height: u32) -> CameraParams {
@@ -362,6 +428,73 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(result.is_some(), "it answers, known or not");
+    }
+
+    #[test]
+    fn profiles_read_as_camera_lens_and_size() {
+        let profile = LensProfileSummary {
+            camera: "GoPro HERO9 Black".into(),
+            lens: "Wide".into(),
+            width: 5312,
+            height: 2988,
+        };
+        assert_eq!(
+            profile_line(&profile),
+            "GoPro HERO9 Black · Wide · 5312 × 2988"
+        );
+    }
+
+    fn search_until(search: &mut ProfileSearch) -> Option<Vec<LensProfileSummary>> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while std::time::Instant::now() < deadline {
+            if let Some(found) = search.try_results() {
+                return Some(found);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        None
+    }
+
+    #[test]
+    fn the_newest_search_wins() {
+        let mut search = ProfileSearch::default();
+        search.search("gopro", (5312, 2988), Arc::new(|| {}));
+        search.search("hero9", (5312, 2988), Arc::new(|| {}));
+        let found = search_until(&mut search).expect("results");
+        assert!(!found.is_empty());
+        assert!(
+            found
+                .iter()
+                .all(|p| profile_line(p).to_lowercase().contains("hero9")),
+            "only the newest query's results"
+        );
+        assert!(search.try_results().is_none(), "an older answer is dropped");
+    }
+
+    #[test]
+    fn a_profile_gives_its_lens_at_the_calibration_size() {
+        let mut search = ProfileSearch::default();
+        search.search("hero9", (0, 0), Arc::new(|| {}));
+        let profile = search_until(&mut search).unwrap().remove(0);
+        let native = profile_lens(&profile, (profile.width, profile.height)).expect("its lens");
+        let double = profile_lens(&profile, (profile.width * 2, profile.height * 2)).unwrap();
+        assert!((double.fx - native.fx * 2.0).abs() < 1e-6);
+        assert_eq!(double.k, native.k);
+    }
+
+    #[test]
+    fn a_profile_file_gives_its_lens() {
+        let path = std::env::temp_dir().join(format!("reco-app-lens-{}.json", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"{"width": 1920, "height": 1080, "fx": 900.0, "fy": 880.0, "cx": 960.0, "cy": 540.0, "d": [0.03, 0.06, -0.07, 0.02]}"#,
+        )
+        .unwrap();
+        let lens = file_lens(&path, (3840, 2160)).expect("a Reco lens file");
+        assert_eq!((lens.fx, lens.cy), (1800.0, 1080.0));
+        std::fs::write(&path, "{").unwrap();
+        assert!(file_lens(&path, (3840, 2160)).is_err(), "not a lens file");
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
