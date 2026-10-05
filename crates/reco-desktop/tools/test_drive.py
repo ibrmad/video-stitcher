@@ -92,6 +92,23 @@ class LaunchEnv(unittest.TestCase):
         self.assertNotIn("MAKEPAD_HIDE_WINDOWS", env)
 
 
+class GapAfterMark(unittest.TestCase):
+    def strip(self, columns):
+        """A one-row image: 0 is background, 1 is ink."""
+        rgba = bytearray()
+        for ink in columns:
+            rgba += bytes([200, 200, 200, 255] if ink else [13, 13, 13, 255])
+        return drive.Png(len(columns), 1, bytes(rgba))
+
+    def test_measures_the_space_between_box_and_text(self):
+        png = self.strip([1] * 30 + [0] * 16 + [1, 1, 0, 1] + [0] * 4)
+        self.assertEqual(drive.gap_after_mark(png, (0, 0, 27, 0.5), 2.0), 8.0)
+
+    def test_stuck_text_has_no_gap(self):
+        png = self.strip([1] * 40 + [0] * 4)
+        self.assertEqual(drive.gap_after_mark(png, (0, 0, 22, 0.5), 2.0), 0.0)
+
+
 class ConflictWait(unittest.TestCase):
     def test_waits_out_the_quiet_window(self):
         answer = {"err": "user_interacting", "applied": False, "activity": {"idle_ms": 669, "quiet_ms": 2000}}

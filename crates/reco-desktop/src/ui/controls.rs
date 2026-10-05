@@ -153,8 +153,11 @@ script_mod! {
     mod.widgets.RecoCheckBox = CheckBox{
         margin: 0
         padding: 0
+        // The text starts clear of the box (Makepad's default margin counts
+        // on padding this checkbox doesn't have).
+        label_walk +: {margin: Inset{left: theme.reco_check_label}}
         draw_text +: {text_style: theme.font_regular{font_size: theme.reco_font_body}}
-        draw_bg +: {border_color_focus: theme.reco_accent}
+        draw_bg +: {size: theme.reco_check_box border_color_focus: theme.reco_accent}
     }
     // Makepad's dropdown paints its arrow under the face, so the arrow
     // vanishes when the face is opaque. This face draws a chevron last.

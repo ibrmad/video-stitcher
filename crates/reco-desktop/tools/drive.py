@@ -83,6 +83,27 @@ class Png:
         return tuple(self.rgba[i:i + 4])
 
 
+def gap_after_mark(png, rect, scale):
+    """Points of background between the first ink in `rect` (points; a
+    checkbox's box) and the next (its text); 0 when they touch."""
+    x0, y0, w, h = rect
+    top = int(y0 * scale)
+    rows = range(top, max(top + 1, int((y0 + h) * scale)))
+    columns = [max(max(png.pixel(x, y)[:3]) for y in rows)
+               for x in range(int(x0 * scale), int((x0 + w) * scale))]
+    background = min(columns)
+    ink = [c > background + 12 for c in columns]
+    i = 0
+    while i < len(ink) and not ink[i]:
+        i += 1
+    while i < len(ink) and ink[i]:
+        i += 1
+    start = i
+    while i < len(ink) and not ink[i]:
+        i += 1
+    return (i - start) / scale if i < len(ink) else 0.0
+
+
 def _paeth(a, b, c):
     p = a + b - c
     pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)

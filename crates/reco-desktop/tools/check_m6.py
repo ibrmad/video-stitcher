@@ -131,6 +131,13 @@ def brightest(app, box):
     return max(max(png.pixel(x, y)[:3]) for y in range(y0, y1) for x in range(x0, x1))
 
 
+def mark_gap(app, widget_id):
+    """Points between a checkbox's box and its text."""
+    png = app.grab(os.path.join(OUT, "probe.png"))
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    return drive.gap_after_mark(png, app.rect(widget_id), scale)
+
+
 def size_face(app):
     """The colour inside the Size field, right of its text."""
     r = app.rect("export_size")
@@ -203,6 +210,9 @@ def check_export():
         expect(ink < 40, f"export: the range sliders show no readout (brightest {ink})")
         wait_for(lambda: logged(app, "export codecs:"), 10)
         save_shot(app, "sheet")
+        for box in ("export_replay", "export_events"):
+            gap = mark_gap(app, box)
+            expect(gap >= 6, f"export: {box}'s text clears its box ({gap} pt)")
         before = text_of(app, "time_current")
         click(app, "export_browse")
         expect(wait_for(lambda: text_of(app, "export_output") == answered + ".mp4", 5),

@@ -353,6 +353,10 @@ script_mod! {
         reco_progress_thickness: 4.0
         reco_slider_track: 4.0
         reco_slider_knob: 5.0
+        // A checkbox's mark box, and where its text starts: after the box
+        // and the 8 pt gap controls keep (Makepad's 13 assumes padding).
+        reco_check_box: 15.0
+        reco_check_label: 23.0
         reco_time_width: 52.0
         reco_ruler_height: 16.0
         reco_playhead_head: 5.0
