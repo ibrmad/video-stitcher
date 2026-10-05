@@ -97,7 +97,8 @@ pub fn default_output(first_left: &Path) -> PathBuf {
 
 /// The file to export to, from what was typed: `.mp4` added when there is no
 /// extension, a bare name put beside the left camera's first file. Refused:
-/// nothing typed, a folder that doesn't exist, a folder itself, and one of
+/// nothing typed, a folder that doesn't exist, a folder itself, a file that
+/// isn't MP4, MOV or MKV (it would be overwritten with video), and one of
 /// the videos being exported (the export would overwrite it while reading).
 pub fn checked_output(
     typed: &str,
@@ -119,6 +120,15 @@ pub fn checked_output(
         ));
     }
     let path = with_mp4(&path);
+    let kind = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    if !matches!(kind.as_deref(), Some("mp4" | "mov" | "mkv")) {
+        return Err(
+            "Exports are MP4, MOV or MKV files: end the name in .mp4, .mov or .mkv.".into(),
+        );
+    }
     let folder = path.parent().unwrap_or(Path::new(""));
     if !folder.is_dir() {
         return Err(format!("The folder {} doesn't exist.", folder.display()));
@@ -217,6 +227,17 @@ impl ExportRange {
     /// Whether it covers the whole match.
     pub fn is_whole(&self) -> bool {
         self.start == 0.0 && self.end == self.length
+    }
+
+    /// The same part of a match whose length is now `length` (a new sync
+    /// offset changes it): all of it stays all of it.
+    pub fn refit(&self, length: f64) -> Self {
+        let mut range = Self::whole(length);
+        if !self.is_whole() {
+            range.set_end(self.end);
+            range.set_start(self.start);
+        }
+        range
     }
 
     /// Start and end as fractions of the length (for sliders).
@@ -580,6 +601,23 @@ mod tests {
     }
 
     #[test]
+    fn a_range_keeps_its_place_when_the_length_changes() {
+        assert_eq!(
+            ExportRange::whole(60.0).refit(59.0),
+            ExportRange::whole(59.0),
+            "all of it stays all of it"
+        );
+        let r = ExportRange::new(10.0, 40.0, 60.0);
+        let shorter = r.refit(30.0);
+        assert_eq!((shorter.start(), shorter.end()), (10.0, 30.0));
+        let longer = r.refit(90.0);
+        assert_eq!((longer.start(), longer.end()), (10.0, 40.0));
+        let mut empty = ExportRange::whole(60.0);
+        empty.set_end(0.0);
+        assert!(empty.refit(50.0).is_empty(), "an empty range stays empty");
+    }
+
+    #[test]
     fn sizes_and_codecs_have_names() {
         assert_eq!(size_index("4K"), 3);
         assert_eq!(size_index("720p"), 1);
@@ -665,6 +703,14 @@ mod tests {
         assert!(
             checked_output("  ", &left, &inputs).is_err(),
             "nothing typed"
+        );
+        assert!(
+            checked_output("match.json", &left, &inputs).is_err(),
+            "not a video file (a calibration would be overwritten)"
+        );
+        assert_eq!(
+            checked_output("match.MOV", &left, &inputs),
+            Ok(folder.join("match.MOV"))
         );
         assert!(
             checked_output(
