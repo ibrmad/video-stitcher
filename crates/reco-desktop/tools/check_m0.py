@@ -25,7 +25,7 @@ BAND = "#212121"
 VIEWPORT = "#000000"
 ACCENT = "#34d399"
 ACCENT_FILL = "#007541"
-LANE = "#0f4a30"
+LANE = "#1a7446"
 LANE_EMPTY = "#171717"
 PLAYHEAD = "#ffffff"
 # Rows start this far inside a panel (theme.reco_pad), and a status line's
@@ -39,7 +39,7 @@ GAP = 8
 # The sample match: 1:45:00 with the playhead at 12:34; the ruler's height
 # and a lane's (theme.reco_ruler_height, reco_row).
 LENGTH, PLAYHEAD_AT = 6300.0, 754.0
-RULER, LANE_HEIGHT = 20, 24
+RULER, LANE_HEIGHT = 16, 16
 
 # Every --look-preview state in job order; None is a fresh start.
 STATES = (None, "one-camera", "cameras", "calibrating", "calibration-failed", "ready", "exporting")
@@ -79,6 +79,10 @@ def shown(state):
         "change_right": right,
         "link_idle": not right,
         "link_on": right,
+        # The time panel shows lanes once a camera has video, and the time
+        # once there is a stitched preview to play.
+        "lanes": left,
+        "time_display": stitched,
         "lane_left_badge_on": left,
         "lane_right_badge_on": right,
         "auto_calibrate": not stitched,
@@ -98,10 +102,12 @@ def takes_input(state):
         "step_back": stitched,
         "play_pause": stitched,
         "step_forward": stitched,
-        "timeline": stitched,
         "aspect": stitched,
         "record_button": state == "ready",
     }
+    # The timeline is drawn (and so gated) once the lanes show.
+    if state is not None:
+        gates["timeline"] = stitched
     if not stitched:
         gates["auto_calibrate"] = state in ("cameras", "calibration-failed")
     return gates
@@ -198,7 +204,7 @@ def check_state(size, state):
         expect(abs(info["sz"][0] - size[0]) <= 2 and abs(info["sz"][1] - size[1]) <= 2,
                f"{name}: window size {info['sz']} matches {size}")
         for wid in ("app_menu", "export_button", "toggle_media", "toggle_timeline", "toggle_inspector",
-                    "view_bar", "play_pause", "time_current", "timeline", "lanes"):
+                    "view_bar", "play_pause"):
             expect(visible(app, wid), f"{name}: `{wid}` is on screen")
         expect(visible(app, "media_panel"), f"{name}: Setup panel open")
         for wid, want in shown(state).items():
@@ -263,17 +269,30 @@ def check_state(size, state):
 
         # The time panel: each camera's files in its lane, the playhead only
         # over a stitched preview, the controls on one line.
-        rx, ry, rw, rh = app.rect("timeline")
-        for lane, has in ((0, state is not None), (1, state not in (None, "one-camera"))):
-            y = ry + RULER + lane * LANE_HEIGHT + LANE_HEIGHT / 2
-            fill = pixel_at(png, scale, rx + rw * 0.73, y)
-            want = LANE if has else LANE_EMPTY
-            expect(drive.close_to(fill, want, tol=3),
-                   f"{name}: lane {lane + 1} shows {'files' if has else 'no video'} ({fill[:3]})")
-        head_x = rx + rw * PLAYHEAD_AT / LENGTH
-        head = pixel_at(png, scale, head_x, ry + RULER + LANE_HEIGHT / 2)
-        expect(drive.close_to(head, PLAYHEAD, tol=40) == stitched,
-               f"{name}: playhead {'shown' if stitched else 'hidden'} ({head[:3]})")
+        if state is not None:
+            rx, ry, rw, rh = app.rect("timeline")
+            for lane, has in ((0, True), (1, state != "one-camera")):
+                y = ry + RULER + lane * LANE_HEIGHT + LANE_HEIGHT / 2
+                fill = pixel_at(png, scale, rx + rw * 0.73, y)
+                want = LANE if has else LANE_EMPTY
+                expect(drive.close_to(fill, want, tol=3),
+                       f"{name}: lane {lane + 1} shows {'files' if has else 'no video'} ({fill[:3]})")
+            head_x = rx + rw * PLAYHEAD_AT / LENGTH
+            head = pixel_at(png, scale, head_x, ry + RULER + LANE_HEIGHT / 2)
+            expect(drive.close_to(head, PLAYHEAD, tol=40) == stitched,
+                   f"{name}: playhead {'shown' if stitched else 'hidden'} ({head[:3]})")
+        # One family of transport icons: play is the largest; the steps are
+        # quieter and smaller.
+        heights = {}
+        for wid in ("step_back", "play_pause", "step_forward"):
+            x, y, w, h = app.rect(wid)
+            rows = [py_ for py_ in range(int(y * scale), int((y + h) * scale))
+                    if any(abs(lum(png.pixel(px_, py_)) - lum(drive.hex_rgb(PANEL))) > 40
+                           for px_ in range(int(x * scale), int((x + w) * scale)))]
+            heights[wid] = (rows[-1] - rows[0] + 1) / scale if rows else 0
+        expect(heights["step_back"] <= heights["play_pause"] - 2
+               and heights["step_forward"] <= heights["play_pause"] - 2,
+               f"{name}: step icons smaller than play ({heights})")
         px, py, pw, ph = app.rect("play_pause")
         centre = py + ph / 2
         for wid in ("step_back", "step_forward", "time_current", "status_text"):
@@ -301,7 +320,8 @@ def check_state(size, state):
             ink = ink_left(png, scale, (0, sy + 2, sx + sw, sy + sh - 2), PANEL)
             expect(ink is not None and PAD - 1 <= ink <= PAD + 2,
                    f"{name}: time panel's first icon starts on the edge {PAD} (ink at {ink})")
-            check_box_edge(app, "lane_left_badge_on" if state else "lane_left_badge", PAD, name)
+            if state:
+                check_box_edge(app, "lane_left_badge_on", PAD, name)
 
         # The next step fits the viewer: no text runs into its right edge.
         if not stitched:

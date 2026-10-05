@@ -1,9 +1,10 @@
 //! The time panel, after Rerun's: a control row (step, play, the time and a
 //! status line), then the time ruler with one lane per camera. A lane shows
 //! the camera's files as blocks with a gap at each file boundary; the white
-//! playhead crosses ruler and lanes. The lanes fold away with the panel
-//! toggle, leaving the control row. Module 0 shows sample data; Module 2
-//! wires playback and scrubbing.
+//! playhead crosses ruler and lanes. It shows only what exists: the lanes
+//! once a camera has video, the time once there is a stitch to play. The
+//! lanes also fold away with the panel toggle. Module 0 shows sample data;
+//! Module 2 wires playback and scrubbing.
 
 use crate::time_ruler::{clock, ticks};
 use makepad_widgets::*;
@@ -15,9 +16,9 @@ script_mod! {
     mod.widgets.RecoTimeRulerBase = #(RecoTimeRuler::register_widget(vm))
     mod.widgets.RecoTimeRuler = set_type_default() do mod.widgets.RecoTimeRulerBase{
         width: Fill
-        height: theme.reco_ruler_height + theme.reco_row * 2.0
+        height: theme.reco_ruler_height + theme.reco_lane_row * 2.0
         ruler_height: theme.reco_ruler_height
-        lane_height: theme.reco_row
+        lane_height: theme.reco_lane_row
         lane_inset: theme.reco_lane_inset
         chapter_gap: theme.reco_chapter_gap
         tick_length: theme.reco_tick_length
@@ -63,7 +64,11 @@ script_mod! {
         }
     }
 
-    let LaneLabel = RecoRow{padding: Inset{left: theme.reco_pad right: theme.reco_gap}}
+    // A lane's badge; the Setup panel names the cameras, a tooltip here.
+    let LaneRow = View{
+        width: Fit height: theme.reco_lane_row flow: Right align: Align{y: 0.5}
+        padding: Inset{left: theme.reco_pad right: theme.reco_gap}
+    }
 
     mod.widgets.RecoTimePanel = SolidView{
         width: Fill height: Fit flow: Down
@@ -72,8 +77,9 @@ script_mod! {
         controls := View{
             width: Fill height: theme.reco_controls_height flow: Right spacing: theme.reco_gap_s
             align: Align{y: 0.5}
-            // The first icon's ink starts on the content edge.
-            padding: Inset{left: theme.reco_pad - (theme.reco_icon_button - theme.reco_icon) * 0.5 right: theme.reco_pad}
+            // The first glyph's ink starts on the content edge, above the
+            // lane badges: less the button's inset and the glyph's own.
+            padding: Inset{left: theme.reco_pad - (theme.reco_icon_button - theme.reco_icon) * 0.5 - theme.reco_glyph_inset right: theme.reco_pad}
             // Everything starts disabled (no flash at startup); the app
             // enables it once a stitched preview exists.
             Tip{text: "Back one frame"
@@ -94,7 +100,7 @@ script_mod! {
                     draw_icon +: {svg: crate_resource("self:resources/icons/step_forward.svg")}
                 }
             }
-            View{
+            time_display := View{
                 width: Fit height: Fit flow: Right spacing: theme.reco_gap_s
                 margin: Inset{left: theme.reco_gap}
                 time_current := RecoStrong{text: "0:00"}
@@ -108,17 +114,25 @@ script_mod! {
             width: Fill height: Fit flow: Right
             padding: Inset{right: theme.reco_pad bottom: theme.reco_gap_s}
             View{
-                width: theme.reco_lane_label_width height: Fit flow: Down
-                View{width: Fill height: theme.reco_ruler_height}
-                LaneLabel{
-                    lane_left_badge := RecoBadge{label.text: "L"}
-                    lane_left_badge_on := RecoBadgeOn{visible: false label.text: "L"}
-                    RecoText{text: "Left camera"}
+                width: Fit height: Fit flow: Down
+                View{width: Fit height: theme.reco_ruler_height}
+                LaneRow{
+                    Tip{text: "Left camera"
+                        View{
+                            width: Fit height: Fit
+                            lane_left_badge := RecoBadge{label.text: "L"}
+                            lane_left_badge_on := RecoBadgeOn{visible: false label.text: "L"}
+                        }
+                    }
                 }
-                LaneLabel{
-                    lane_right_badge := RecoBadge{label.text: "R"}
-                    lane_right_badge_on := RecoBadgeOn{visible: false label.text: "R"}
-                    RecoText{text: "Right camera"}
+                LaneRow{
+                    Tip{text: "Right camera"
+                        View{
+                            width: Fit height: Fit
+                            lane_right_badge := RecoBadge{label.text: "R"}
+                            lane_right_badge_on := RecoBadgeOn{visible: false label.text: "R"}
+                        }
+                    }
                 }
             }
             // Full path: this block's `use mod.widgets.*` predates the

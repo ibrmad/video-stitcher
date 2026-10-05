@@ -10,7 +10,7 @@ wrong (see the issues list in [DESIGN.md](DESIGN.md)).
 ## Module 0: shell and look (§1, §4)
 
 The look follows the Rerun viewer (DESIGN.md, Look). Evidence for this
-module: `tools/check_m0.py` (860 checks over every `--look-preview` state:
+module: `tools/check_m0.py` (837 checks over every `--look-preview` state:
 start, one camera, both cameras, calibrating, calibration failed, ready,
 exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
 (`cargo test -p reco-desktop`), and screenshots in
@@ -45,14 +45,17 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       Advanced tiers closed. Evidence: "Adjust panel open / closed",
       "Adjust stops at its 200 pt minimum", "Adjust panel stays closed
       before a stitch", `adjust-1280x820.png`.
-- [x] Time panel across the bottom: step, play, the time and a status line;
-      a ruler and a lane per camera with its files; the playhead over a
-      stitched preview; folds to its control row. Controls take no input
-      before a stitch. Evidence: "lane 1 / 2 shows files / no video",
+- [x] Time panel across the bottom, showing only what exists: step, play
+      (the largest of the three) and a status line; the time once there is
+      a stitch; once a camera has video, a ruler and a lane per camera (its
+      badge, its files as slim blocks); the playhead over a stitched
+      preview; folds to its control row. Controls take no input before a
+      stitch. Evidence: "step icons smaller than play", "`lanes` /
+      `time_display` shown / hidden", "lane 1 / 2 shows files / no video",
       "playhead shown / hidden", "`step_back` / `play_pause` /
       `step_forward` / `timeline` / `aspect` / `record_button` takes /
-      ignores input" (the `/snap` input flag, in every state), "time panel
-      folds to its control row"; `ready-time-folded.png`.
+      ignores input" (the `/snap` input flag), "time panel folds to its
+      control row"; `ready-time-folded.png`.
 - [x] All colours, spacing, radii and type sizes come from `src/theme.rs`.
       Dark only; light tokens arrive with the dark-mode preference
       (Module 7). Evidence: the `screens_use_theme_values_only` unit test

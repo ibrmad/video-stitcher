@@ -89,9 +89,11 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   then collapsible section bands over rows. Adjust rows are property rows
   (label, control, value) whose labels explain themselves in tooltips. The
   viewer has a view bar (name, preview aspect, Record) over a black canvas.
-  The time panel spans the bottom: a control row (step, play, the time, a
-  status line), then a ruler and one lane per camera showing each file as a
-  block. The lanes fold away (⌘3), leaving the control row.
+  The time panel spans the bottom and shows only what exists: a control
+  row (step, play, and a status line; the time once there is a stitch to
+  play), then, once a camera has video, a ruler and one lane per camera: its
+  L or R badge and each file as a slim block, a gap at every file boundary.
+  The lanes fold away (⌘3), leaving the control row.
 
 ## Rules
 
@@ -162,6 +164,9 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
 - The remote snapshot reports a widget's `#[redraw]` area, so a custom
   widget makes its whole box the redraw area.
 - Negative margins work, and are how trailing icons line up (Rule 11).
+- An SVG icon is scaled by its drawn content, not its viewBox, so a small
+  drawing is blown up to fill the icon box. Every icon pins its 16 by 16
+  box with an invisible rect (the `every_icon_pins_its_viewbox` test).
 - Buttons and dropdowns add 4 pt above and below themselves; Reco's
   versions set `margin: 0`.
 - A plain `View` with `show_bg` draws nothing; a filled box is a

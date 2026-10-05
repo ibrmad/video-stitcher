@@ -284,7 +284,7 @@ script_mod! {
 
         // The time panel: camera lanes, chapters and the playhead.
         reco_lane_fill: #x2c2b2b
-        reco_lane_fill_on: #x0f4a30
+        reco_lane_fill_on: #x1a7446
         reco_lane_edge: #x0d0d0d
         reco_tick: #x3a3939
         reco_playhead: #xffffff
@@ -314,6 +314,8 @@ script_mod! {
         reco_icon_small: 12.0
         // Icons at the end of a panel row, title row or section band.
         reco_row_icon: 14.0
+        // The transport glyphs sit this far inside their 16 pt box.
+        reco_glyph_inset: 4.0
         reco_icon_tiny: 10.0
         reco_chevron: 12.0
         reco_badge: 16.0
@@ -330,14 +332,15 @@ script_mod! {
         reco_slider_track: 4.0
         reco_slider_knob: 5.0
         reco_time_width: 52.0
-        reco_lane_label_width: 132.0
-        reco_ruler_height: 20.0
+        reco_ruler_height: 16.0
         reco_playhead_head: 5.0
-        reco_chapter_gap: 1.0
+        reco_chapter_gap: 2.0
         reco_controls_height: 28.0
         reco_tick_length: 5.0
         reco_tick_spacing: 72.0
-        reco_lane_inset: 5.0
+        // A lane row and the file blocks inside it.
+        reco_lane_row: 16.0
+        reco_lane_inset: 4.0
         reco_playhead_width: 1.5
         reco_menu_width: 200.0
         // Room for the macOS window buttons at the left of the title bar.

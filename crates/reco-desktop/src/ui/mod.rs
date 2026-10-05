@@ -65,6 +65,33 @@ mod tests {
 
     /// Makepad skips an SVG it cannot find without logging anything, so a
     /// typo in an icon path would otherwise only show as a missing icon.
+    /// Makepad scales an SVG's drawn content, not its viewBox, to the icon
+    /// box, so every icon pins its full 16 by 16 box with an invisible rect.
+    /// Without it a small drawing is blown up to fill the box: the step
+    /// icons once drew larger than Play.
+    #[test]
+    fn every_icon_pins_its_viewbox() {
+        let icons = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join("icons");
+        let pin = r#"<rect x="0" y="0" width="16" height="16" fill="none"/>"#;
+        let mut loose = Vec::new();
+        for entry in std::fs::read_dir(&icons).expect("icons folder") {
+            let path = entry.expect("readable entry").path();
+            if path.extension().is_some_and(|ext| ext == "svg") {
+                let text = std::fs::read_to_string(&path).expect("readable icon");
+                if !text.contains(pin) {
+                    loose.push(path.file_name().unwrap().to_string_lossy().into_owned());
+                }
+            }
+        }
+        loose.sort();
+        assert!(
+            loose.is_empty(),
+            "icons without a pinned 16x16 box: {loose:?}"
+        );
+    }
+
     #[test]
     fn every_self_resource_exists() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));

@@ -170,7 +170,9 @@ impl App {
         self.ui
             .splitter(cx, ids!(inner_split))
             .set_collapse(cx, inspector);
-        self.set_visible(cx, ids!(lanes), !self.timeline_folded);
+        // Lanes once a camera has video, unless folded away.
+        let has_video = self.preview.is_some();
+        self.set_visible(cx, ids!(lanes), has_video && !self.timeline_folded);
 
         let loaded = self.shell.files_loaded();
         let exporting = self.preview == Some(LookPreview::Exporting);
@@ -351,6 +353,7 @@ impl App {
         // Time panel: the time, a status line, and each camera's files.
         let length = if left { SAMPLE_LENGTH } else { 0.0 };
         let playhead = if calibrated { SAMPLE_PLAYHEAD } else { 0.0 };
+        self.set_visible(cx, ids!(time_display), calibrated);
         self.set_label(cx, ids!(time_current), &time_ruler::clock(playhead));
         self.set_label(cx, ids!(time_total), &time_ruler::clock(length));
         let status = match state {
