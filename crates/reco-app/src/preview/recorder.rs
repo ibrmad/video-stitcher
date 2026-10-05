@@ -140,6 +140,24 @@ impl Recorder {
         }
     }
 
+    /// Follow the preview's tuning: its blend, colour match, tilt, roll and
+    /// layout, so the file shows what the preview shows.
+    pub fn follow(&mut self, preview: &StitchRenderer) {
+        let viewport = preview.pipeline().viewport();
+        self.renderer.set_blend_width(viewport.blend_width);
+        self.renderer.set_color_match(viewport.color_match);
+        self.renderer.set_rig_tilt(viewport.rig_tilt);
+        self.renderer.set_rig_roll(viewport.rig_roll);
+        self.renderer
+            .update_layout(preview.calibration().layout.clone());
+    }
+
+    /// The recording renderer's viewport (tests).
+    #[cfg(test)]
+    pub(crate) fn viewport(&self) -> &reco_core::render::viewport::ViewportConfig {
+        self.renderer.pipeline().viewport()
+    }
+
     fn send(&self, nv12: Vec<u8>) -> Result<(), String> {
         let tx = self.frames.as_ref().ok_or("the recording has stopped")?;
         tx.send(nv12).map_err(|_| "the encoder stopped".to_string())

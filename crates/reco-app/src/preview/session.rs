@@ -289,6 +289,10 @@ impl PreviewSession {
             Tuning::ResetLayout => self.renderer.update_layout(self.loaded_layout.clone()),
         }
         self.dirty = true;
+        // A recording shows what the preview shows.
+        if let Some(recorder) = self.recorder.as_mut() {
+            recorder.follow(&self.renderer);
+        }
         // Tilt and the layout move the picture's edges: keep the view inside.
         self.clamp();
     }
@@ -761,5 +765,25 @@ mod tests {
             render_to_cpu(&mut session),
             "the overlap changes the picture"
         );
+    }
+
+    #[test]
+    fn a_recording_follows_the_tuning() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let path =
+            std::env::temp_dir().join(format!("reco-app-tuned-rec-{}.mp4", std::process::id()));
+        session
+            .start_recording(&path, (640, 360), crate::recording::RecordingQuality::Fast)
+            .expect("start");
+        session.tune(Tuning::Blend(0.25));
+        session.tune(Tuning::Tilt(5.0));
+        session.tune(Tuning::Intersect(0.4));
+        let recorder = session.recorder.as_ref().unwrap();
+        assert_eq!(recorder.viewport().blend_width, 0.25);
+        assert!((recorder.viewport().rig_tilt - 5f32.to_radians()).abs() < 1e-6);
+        let _ = session.stop_recording();
+        let _ = std::fs::remove_file(&path);
     }
 }
