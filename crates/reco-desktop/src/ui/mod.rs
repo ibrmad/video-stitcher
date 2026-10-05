@@ -6,6 +6,7 @@ mod export_sheet;
 pub mod file_list;
 mod fold;
 mod inspector;
+pub mod key_table;
 mod lens_picker;
 mod media_panel;
 pub mod panorama;
@@ -13,6 +14,7 @@ pub mod pick_list;
 mod prefs_sheet;
 pub mod preview;
 mod shell;
+mod shortcuts_sheet;
 pub mod time_panel;
 mod toasts;
 mod top_bar;
@@ -37,6 +39,8 @@ pub fn script_mod(vm: &mut ScriptVm) {
     pick_list::script_mod(vm);
     lens_picker::script_mod(vm);
     prefs_sheet::script_mod(vm);
+    key_table::script_mod(vm);
+    shortcuts_sheet::script_mod(vm);
     time_panel::script_mod(vm);
     shell::script_mod(vm);
 }

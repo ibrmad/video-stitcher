@@ -20,3 +20,8 @@ makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290
 reco-app = { path = "../reco-app" }
 reco-io = { path = "../reco-io" }
 serde_json = "1"
+
+[dev-dependencies]
+# Every key Makepad knows (KEYCODE_VARIANTS), so a test can find a handled
+# key the shortcuts sheet doesn't list. Already in the lockfile.
+makepad-key-code = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c" }

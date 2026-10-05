@@ -108,6 +108,7 @@ script_mod! {
                     export_sheet := RecoExportSheet{}
                     lens_picker := RecoLensPicker{}
                     prefs_sheet := RecoPrefsSheet{}
+                    shortcuts_sheet := RecoShortcutsSheet{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.

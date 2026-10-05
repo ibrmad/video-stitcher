@@ -88,6 +88,7 @@ class LaunchEnv(unittest.TestCase):
 
     def test_checks_stay_off_the_network(self):
         self.assertEqual(drive.launch_env({}, None, hidden=True)["RECO_DESKTOP_NO_NETWORK"], "1")
+        self.assertEqual(drive.launch_env({}, None, hidden=True)["RECO_DESKTOP_NO_BROWSER"], "1")
         online = drive.launch_env({}, {"RECO_DESKTOP_NO_NETWORK": None}, hidden=True)
         self.assertNotIn("RECO_DESKTOP_NO_NETWORK", online)
 

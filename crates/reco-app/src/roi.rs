@@ -5,7 +5,6 @@
 //! copies.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
@@ -152,23 +151,6 @@ impl EditorJob {
     pub fn try_result(&self) -> Option<Result<PathBuf, String>> {
         self.result.try_recv().ok()
     }
-}
-
-/// Open `page` in the default browser; returns once the command started.
-pub fn open_in_browser(page: &Path) -> std::io::Result<()> {
-    let (program, args) = if cfg!(target_os = "macos") {
-        ("open", vec![page.display().to_string()])
-    } else if cfg!(target_os = "windows") {
-        (
-            "cmd",
-            vec!["/c".into(), "start".into(), page.display().to_string()],
-        )
-    } else {
-        ("xdg-open", vec![page.display().to_string()])
-    };
-    let mut child = Command::new(program).args(args).spawn()?;
-    std::thread::spawn(move || child.wait());
-    Ok(())
 }
 
 #[cfg(test)]

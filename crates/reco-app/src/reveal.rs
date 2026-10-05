@@ -1,6 +1,7 @@
-//! "Show in folder": show a file in the system's file manager. Finder and
-//! Explorer select it; elsewhere its folder opens. The command is spawned
-//! and not waited for (a small thread reaps it).
+//! "Show in folder": show a file in the system's file manager (Finder and
+//! Explorer select it; elsewhere its folder opens), and open a page or a
+//! link in the browser. Each command is spawned and not waited for (a small
+//! thread reaps it).
 
 use std::path::Path;
 use std::process::Command;
@@ -20,6 +21,30 @@ pub fn reveal_command(path: &Path) -> (String, Vec<String>) {
     }
 }
 
+/// The program and arguments that open `target` (a page or a link) in the
+/// default browser.
+pub fn browser_command(target: &str) -> (String, Vec<String>) {
+    if cfg!(target_os = "macos") {
+        ("open".into(), vec![target.into()])
+    } else if cfg!(target_os = "windows") {
+        (
+            "cmd".into(),
+            vec!["/c".into(), "start".into(), String::new(), target.into()],
+        )
+    } else {
+        ("xdg-open".into(), vec![target.into()])
+    }
+}
+
+/// Open `target` (a page or a link) in the default browser; returns once
+/// the command started.
+pub fn open_in_browser(target: &str) -> std::io::Result<()> {
+    let (program, args) = browser_command(target);
+    let mut child = Command::new(program).args(args).spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
 /// Show `path` in the file manager; returns once the command started.
 pub fn reveal(path: &Path) -> std::io::Result<()> {
     let (program, args) = reveal_command(path);
@@ -31,6 +56,27 @@ pub fn reveal(path: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_browser_opens_a_page_or_a_link() {
+        let link = "https://forum.reco-project.org/";
+        let (program, args) = browser_command(link);
+        let expected: (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+            ("open", vec![link])
+        } else if cfg!(target_os = "windows") {
+            // `start` takes a quoted first word for a window title.
+            ("cmd", vec!["/c", "start", "", link])
+        } else {
+            ("xdg-open", vec![link])
+        };
+        assert_eq!(
+            (
+                program.as_str(),
+                args.iter().map(String::as_str).collect::<Vec<_>>()
+            ),
+            expected
+        );
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

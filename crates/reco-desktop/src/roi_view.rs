@@ -8,13 +8,10 @@ use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 use reco_app::preview::worker::PreviewCommand;
 use reco_app::project::Camera;
-use reco_app::roi::{editor_folder, open_in_browser, parse_outline, EditorJob, EditorRequest};
+use reco_app::roi::{editor_folder, parse_outline, EditorJob, EditorRequest};
 use reco_app::toasts::Severity;
 
 use crate::App;
-
-/// Checks write the editor without opening a browser.
-const NO_BROWSER: &str = "RECO_DESKTOP_NO_BROWSER";
 
 impl App {
     /// The outline's status: how many points it has.
@@ -85,16 +82,8 @@ impl App {
         match result {
             Ok(page) => {
                 log!("outline editor: {}", page.display());
-                if std::env::var_os(NO_BROWSER).is_none() {
-                    if let Err(e) = open_in_browser(&page) {
-                        self.toast(
-                            cx,
-                            Severity::Error,
-                            "Couldn't open the browser",
-                            &e.to_string(),
-                        );
-                        return;
-                    }
+                if !self.open_link(cx, &page.display().to_string()) {
+                    return;
                 }
                 self.toast(
                     cx,

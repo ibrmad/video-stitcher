@@ -76,6 +76,78 @@ pub fn command_for_key(key: KeyCode, modifiers: &KeyModifiers) -> Option<KeyComm
     })
 }
 
+/// One row of the Keyboard shortcuts sheet.
+pub struct Shortcut {
+    /// The keys, as the sheet shows them.
+    pub keys: &'static str,
+    /// What they do.
+    pub does: &'static str,
+    /// The keys [`command_for_key`] answers for this row (none for the
+    /// pointer's and the menus' rows).
+    pub codes: &'static [KeyCode],
+    /// A menu's key (the macOS menu bar's: listed only there).
+    pub menu: bool,
+}
+
+const fn key(keys: &'static str, does: &'static str, codes: &'static [KeyCode]) -> Shortcut {
+    Shortcut {
+        keys,
+        does,
+        codes,
+        menu: false,
+    }
+}
+
+const fn menu(keys: &'static str, does: &'static str) -> Shortcut {
+    Shortcut {
+        keys,
+        does,
+        codes: &[],
+        menu: true,
+    }
+}
+
+/// Every shortcut, in the sheet's order: the preview's keys (the table the
+/// key handler is tested against), the pointer, then the menus' keys.
+pub const SHORTCUTS: &[Shortcut] = &[
+    key("Space", "Play or pause", &[KeyCode::Space]),
+    key(
+        "[  /  ]",
+        "Back or forward 5 seconds",
+        &[KeyCode::LBracket, KeyCode::RBracket],
+    ),
+    key(
+        "← → ↑ ↓",
+        "Pan the view",
+        &[
+            KeyCode::ArrowLeft,
+            KeyCode::ArrowRight,
+            KeyCode::ArrowUp,
+            KeyCode::ArrowDown,
+        ],
+    ),
+    key(
+        "+  /  −",
+        "Zoom in or out",
+        &[
+            KeyCode::Equals,
+            KeyCode::NumpadAdd,
+            KeyCode::Minus,
+            KeyCode::NumpadSubtract,
+        ],
+    ),
+    key("R", "Reset the view", &[KeyCode::KeyR]),
+    key("F  /  F11", "Full screen", &[KeyCode::KeyF, KeyCode::F11]),
+    key("Drag", "Pan the view", &[]),
+    key("Scroll", "Zoom in or out", &[]),
+    menu(
+        "⌘1  ⌘2  ⌘3",
+        "Show or hide the Setup, Adjust and Time panels",
+    ),
+    menu("⌘,", "Preferences"),
+    menu("⌘Q", "Quit"),
+];
+
 /// Whether holding the key repeats the command: moves and seeks do; play,
 /// reset and fullscreen act once per press.
 pub fn repeats(command: KeyCommand) -> bool {
@@ -174,6 +246,28 @@ mod tests {
             assert_eq!(command_for_key(KeyCode::Equals, &modifiers), None);
             assert_eq!(command_for_key(KeyCode::Space, &modifiers), None);
         }
+    }
+
+    #[test]
+    fn the_sheet_lists_every_key_the_preview_handles() {
+        let listed: Vec<KeyCode> = SHORTCUTS.iter().flat_map(|s| s.codes).copied().collect();
+        for key in makepad_key_code::KEYCODE_VARIANTS {
+            let handled = command_for_key(key, &KeyModifiers::default()).is_some();
+            assert_eq!(
+                handled,
+                listed.contains(&key),
+                "{key:?}: handled {handled}, listed {}",
+                listed.contains(&key)
+            );
+        }
+        assert!(
+            SHORTCUTS.iter().any(|s| s.keys == "Scroll"),
+            "the pointer's rows too"
+        );
+        assert!(
+            SHORTCUTS.iter().any(|s| s.keys == "⌘,"),
+            "the menus' keys too"
+        );
     }
 
     #[test]

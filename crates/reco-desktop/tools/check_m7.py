@@ -314,7 +314,46 @@ def check_blend():
     expect(not os.path.exists(os.path.join(folder, "cam0_calibration.json")), "blend: nothing saved beside the videos")
 
 
-CHECKS = {"prefs": check_prefs, "blend": check_blend}
+def texts(app, widget_id):
+    """Every drawn widget's text with this id, top to bottom (template rows
+    share ids)."""
+    found = [i for i in app.snap(widget_id) if i.get("i") == widget_id]
+    return [i.get("t", "") for i in sorted(found, key=lambda i: i["r"][1])]
+
+
+def check_shortcuts():
+    """Keyboard shortcuts lists the keys the app answers, Website and Forum
+    open their pages (logged in checks), and Close or Escape closes it."""
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    with launch(config) as app:
+        wait_for(lambda: app.rect("app_menu"), 15)
+        menu(app, SHORTCUTS)
+        expect(bool(wait_for(lambda: app.rect("shortcuts_close"), 5)), "shortcuts: the app menu opens Keyboard shortcuts")
+        time.sleep(0.3)
+        colour = face(app, "shortcuts_website")
+        keys, does = texts(app, "keys"), texts(app, "does")
+        expect(list(zip(keys, does))[:2] == [("Space", "Play or pause"), ("[  /  ]", "Back or forward 5 seconds")],
+               f"shortcuts: the keys and what they do ({list(zip(keys, does))[:2]})")
+        expect(len(keys) == 11 and "⌘," in keys and "Scroll" in keys,
+               f"shortcuts: every key, the pointer and the menu keys ({len(keys)} rows)")
+        save_shot(app, "shortcuts")
+        click(app, "shortcuts_website")
+        expect(wait_for(lambda: logged(app, "browser: would open https://github.com/reco-project/video-stitcher"), 3) is not None,
+               "shortcuts: Website opens the project's page")
+        click(app, "shortcuts_forum")
+        expect(wait_for(lambda: logged(app, "browser: would open https://forum.reco-project.org/"), 3) is not None,
+               "shortcuts: Forum opens the forum")
+        click(app, "shortcuts_close")
+        expect(bool(wait_for(lambda: not shows(app, "shortcuts_website", colour), 3)), "shortcuts: Close closes it")
+        menu(app, SHORTCUTS)
+        time.sleep(0.3)
+        expect(shows(app, "shortcuts_website", colour), "shortcuts: it opens again")
+        app.key("Escape")
+        expect(bool(wait_for(lambda: not shows(app, "shortcuts_website", colour), 3)), "shortcuts: Escape closes it")
+        expect(not app.errors(), f"shortcuts: no errors in the app log {app.errors()[:3]}")
+
+
+CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts}
 
 
 def main():

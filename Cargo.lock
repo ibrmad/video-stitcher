@@ -6210,6 +6210,7 @@ dependencies = [
 name = "reco-desktop"
 version = "0.5.4"
 dependencies = [
+ "makepad-key-code",
  "makepad-widgets",
  "reco-app",
  "reco-io",
