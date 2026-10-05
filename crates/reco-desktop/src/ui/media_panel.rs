@@ -212,6 +212,37 @@ script_mod! {
                             }
                         }
                     }
+                    // The pitch's outline in each camera, for AI tracking:
+                    // drawn in the browser editor, pasted back here.
+                    field_outline := FoldHeader{
+                        animator +: {active: {default: @off}}
+                        header: View{
+                            width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
+                            padding: Inset{left: theme.reco_pad right: theme.reco_pad}
+                            fold_button := RecoChevron{animator +: {active: {default: @off}}}
+                            RecoSubdued{text: "Field outline"}
+                            roi_status := RecoMeta{text: "None"}
+                        }
+                        body: View{
+                            width: Fill height: Fit flow: Down
+                            RecoRow{
+                                Tip{text: "Opens the current frames in your browser: draw the pitch's outline there and copy it."
+                                    roi_edit := RecoButton{text: "Edit in browser…"}
+                                }
+                            }
+                            RecoRow{
+                                roi_json := TextInput{
+                                    width: Fill height: theme.reco_button margin: 0
+                                    empty_text: "Paste the outline here"
+                                }
+                                roi_use := RecoButton{text: "Use"}
+                            }
+                            RecoRow{
+                                View{width: Fill height: Fit}
+                                roi_clear := RecoFlatButton{visible: false text: "Remove outline"}
+                            }
+                        }
+                    }
                 }
             }
         }

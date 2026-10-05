@@ -24,6 +24,7 @@ mod names;
 mod perf;
 mod project_view;
 mod recent_view;
+mod roi_view;
 mod session_view;
 mod shell_state;
 mod theme;
@@ -40,6 +41,7 @@ use perf::DrawStats;
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::project::{Camera, Project, Stage};
+use reco_app::roi::EditorJob;
 use reco_app::settings::{self, DesktopSettings};
 use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
@@ -234,6 +236,9 @@ pub struct App {
     /// Why the last calibration failed, until the next one or a file.
     #[rust]
     calibration_failure: Option<String>,
+    /// The field outline's browser editor, while it is being written.
+    #[rust]
+    outline_editor: Option<EditorJob>,
 }
 
 impl App {
@@ -605,6 +610,7 @@ impl MatchEvent for App {
         self.calibration_actions(cx, actions);
         self.recent_actions(cx, actions);
         self.tune_actions(cx, actions);
+        self.outline_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
 }
@@ -647,6 +653,7 @@ impl AppMain for App {
                 self.drain_preview(cx);
                 self.collect_durations(cx);
                 self.drain_calibration(cx);
+                self.drain_outline_editor(cx);
             }
             _ => {}
         }

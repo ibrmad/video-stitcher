@@ -67,7 +67,7 @@ fn rows() -> [TuneRow<'static>; 6] {
 }
 
 impl App {
-    fn send_preview(&self, command: PreviewCommand) {
+    pub(crate) fn send_preview(&self, command: PreviewCommand) {
         if let Some(live) = self.live.as_ref().filter(|l| l.open) {
             live.worker.send(command);
         }
@@ -95,6 +95,7 @@ impl App {
         if !sync.key_focus(cx) {
             sync.set_text(cx, &values.sync_offset.to_string());
         }
+        self.show_outline(cx, values.roi_points);
         let unsaved = values.dirty && self.project.calibration.is_some();
         self.set_visible(cx, ids!(save_calibration), unsaved);
     }

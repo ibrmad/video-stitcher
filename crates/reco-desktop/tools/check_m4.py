@@ -80,7 +80,7 @@ def click(app, widget_id):
     return r is not None
 
 
-def launch(files=None, extra=(), config_dir=None, answers_file=None):
+def launch(files=None, extra=(), config_dir=None, answers_file=None, more_env=None):
     args = ["--window-size", "1280x820"]
     if files:
         left, right, cal = files
@@ -90,6 +90,7 @@ def launch(files=None, extra=(), config_dir=None, answers_file=None):
         env["RECO_CONFIG_DIR"] = config_dir
     if answers_file:
         env["RECO_DESKTOP_DIALOG_ANSWERS"] = answers_file
+    env.update(more_env or {})
     return drive.App.launch(BIN, [*args, *extra], env=env or None)
 
 
@@ -207,9 +208,53 @@ def check_sync():
         save_shot(app, "sync")
 
 
+OUTLINE = '{"left": [[0.1, 0.4], [0.9, 0.4], [0.95, 0.95], [0.05, 0.95]], "right": [[0.1, 0.4], [0.9, 0.4], [0.5, 0.95]]}'
+
+
+def check_roi():
+    """The field outline: the browser editor is written (never opened in
+    checks), a pasted outline is used and saved, bad text says why, and
+    Remove outline clears it."""
+    files = calibration_copy()
+    cache = tempfile.mkdtemp(prefix="reco-m4-cache-")
+    env = {"XDG_CACHE_HOME": cache, "RECO_DESKTOP_NO_BROWSER": "1"}
+    with launch(files, more_env=env) as app:
+        expect(ready(app) is not None, "roi: the preview opens")
+        open_advanced(app, "field_outline")
+        expect(text_of(app, "roi_status") == "None", f"roi: no outline yet ({text_of(app, 'roi_status')})")
+        click(app, "roi_edit")
+        opened = wait_for(lambda: title_rect(app, "Outline editor ready"), 20)
+        expect(bool(opened), "roi: Edit in browser writes the editor")
+        page = os.path.join(cache, "reco", "roi", "roi_editor.html")
+        html = open(page).read() if os.path.exists(page) else ""
+        expect(html.count("data:image/png;base64,") == 2, "roi: the editor carries both cameras' frames")
+        click(app, "roi_json")
+        app.get("/k", t="not an outline")
+        click(app, "roi_use")
+        expect(bool(wait_for(lambda: title_rect(app, "That isn't a field outline"), 5)), "roi: bad text says why")
+        click(app, "roi_json")
+        app.key("KeyA", cmd=1)
+        app.get("/k", t=OUTLINE)
+        click(app, "roi_use")
+        used = wait_for(lambda: text_of(app, "roi_status") == "7 points", 5)
+        expect(bool(used), f"roi: a pasted outline is used ({text_of(app, 'roi_status')})")
+        expect(bool(wait_for(lambda: app.rect("save_calibration"), 5)), "roi: Save appears")
+        click(app, "save_calibration")
+        wait_for(lambda: title_rect(app, "Calibration saved"), 10)
+        roi = json.load(open(files[2])).get("field_roi") or {}
+        expect(len(roi.get("left", [])) == 4 and len(roi.get("right", [])) == 3,
+               f"roi: the outline is saved with the calibration ({roi})")
+        click(app, "roi_clear")
+        cleared = wait_for(lambda: text_of(app, "roi_status") == "None", 5)
+        expect(bool(cleared), f"roi: Remove outline clears it ({text_of(app, 'roi_status')})")
+        save_shot(app, "roi")
+        expect(app.errors() == [], "roi: no errors in the app log")
+
+
 CHECKS = {
     "tune": check_tune,
     "sync": check_sync,
+    "roi": check_roi,
 }
 
 
