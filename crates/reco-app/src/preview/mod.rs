@@ -4,8 +4,10 @@
 pub mod clock;
 #[cfg(test)]
 pub(crate) mod fixtures;
+pub mod metal;
 pub mod playback;
 pub mod readback;
 pub mod session;
 pub mod slots;
 pub mod view;
+pub mod worker;
