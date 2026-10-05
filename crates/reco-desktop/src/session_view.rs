@@ -3,16 +3,21 @@
 //! actions into commands. Split from main.rs, which keeps the shell, the
 //! look preview and startup.
 
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 use reco_app::preview::lanes::Lanes;
 use reco_app::preview::playback::PlayState;
+use reco_app::preview::recorder::Recording;
 use reco_app::preview::view::PreviewAspect;
 use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
+};
+use reco_app::recording::{
+    recording_file_name, recording_folder, recording_size, RecordingQuality,
 };
 use reco_app::toasts::Severity;
 
@@ -65,6 +70,12 @@ impl App {
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
                 Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
                 Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
+                Some(PreviewEvent::RecordingStarted { path }) => self.recording_started(cx, path),
+                Some(PreviewEvent::Recorded { frames }) => self.recorded(cx, frames),
+                Some(PreviewEvent::RecordingSaved(recording)) => {
+                    self.recording_saved(cx, recording)
+                }
+                Some(PreviewEvent::RecordingFailed(reason)) => self.recording_failed(cx, &reason),
                 // The widget takes frames; nothing else is left.
                 Some(_) | None => {}
             }
@@ -228,15 +239,177 @@ impl App {
         } else {
             self.play_icon.clone()
         };
-        let button = self.ui.button(cx, ids!(play_pause));
+        self.swap_icon(cx, ids!(play_pause), want);
+    }
+
+    /// Swap a button's icon in place (Makepad reloads it when the handle
+    /// changes).
+    pub(crate) fn swap_icon(
+        &mut self,
+        cx: &mut Cx,
+        button: &[LiveId],
+        icon: Option<ScriptHandleRef>,
+    ) {
+        let button = self.ui.button(cx, button);
         if let Some(mut inner) = button.borrow_mut() {
             let same = inner.draw_icon.svg.as_ref().map(|h| h.as_handle())
-                == want.as_ref().map(|h| h.as_handle());
+                == icon.as_ref().map(|h| h.as_handle());
             if !same {
-                inner.draw_icon.svg = want;
+                inner.draw_icon.svg = icon;
             }
         }
         button.redraw(cx);
+    }
+
+    /// Record or stop. A recording is 1080 rows at the preview aspect, in
+    /// the saved folder or beside the left video, named as the Slint app
+    /// named them.
+    fn toggle_recording(&mut self) {
+        let Some(live) = self.live.as_ref() else {
+            return;
+        };
+        if live.recording.is_some() {
+            live.worker.send(PreviewCommand::StopRecording);
+            return;
+        }
+        let first_left = live.files.left.first().cloned().unwrap_or_default();
+        let folder = recording_folder(self.settings.recording_folder.as_deref(), &first_left);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        live.worker.send(PreviewCommand::StartRecording {
+            path: folder.join(recording_file_name(now)),
+            size: recording_size(self.settings.aspect()),
+            quality: self.settings.quality(),
+        });
+    }
+
+    /// The view bar while recording: the badge and Stop; otherwise the
+    /// quality and Record.
+    fn show_recording(&mut self, cx: &mut Cx, recording: bool) {
+        self.set_visible(cx, ids!(recording_badge), recording);
+        self.set_visible(cx, ids!(quality_tip), !recording);
+        if recording {
+            self.set_visible(cx, ids!(show_in_folder), false);
+            self.set_label(cx, ids!(recording_time), "0:00");
+        }
+        let icon = if recording {
+            self.stop_icon.clone()
+        } else {
+            self.record_icon.clone()
+        };
+        self.swap_icon(cx, ids!(record_button), icon);
+    }
+
+    fn recording_started(&mut self, cx: &mut Cx, path: PathBuf) {
+        if let Some(live) = self.live.as_mut() {
+            live.recording = Some(0);
+        }
+        self.show_recording(cx, true);
+        self.toast(
+            cx,
+            Severity::Info,
+            "Recording started",
+            &path.display().to_string(),
+        );
+    }
+
+    fn recorded(&mut self, cx: &mut Cx, frames: u64) {
+        let Some(live) = self.live.as_mut() else {
+            return;
+        };
+        live.recording = Some(frames);
+        let fps = live.info.as_ref().map_or(30.0, |i| i.fps.max(1.0));
+        let status = live.status();
+        self.set_label(
+            cx,
+            ids!(recording_time),
+            &time_ruler::clock(frames as f64 / fps),
+        );
+        self.set_label(cx, ids!(status_text), &status);
+    }
+
+    fn recording_saved(&mut self, cx: &mut Cx, recording: Recording) {
+        let file = recording
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(live) = self.live.as_mut() {
+            live.recording = None;
+            live.last_output = Some(recording.path.clone());
+        }
+        self.show_recording(cx, false);
+        self.set_visible(cx, ids!(show_in_folder), true);
+        self.toast_for(
+            cx,
+            Severity::Info,
+            "Recording saved",
+            &format!("{} frames · {file}", recording.frames),
+            Duration::from_secs(8),
+        );
+        self.refresh_status(cx);
+    }
+
+    fn recording_failed(&mut self, cx: &mut Cx, reason: &str) {
+        if let Some(live) = self.live.as_mut() {
+            live.recording = None;
+        }
+        self.show_recording(cx, false);
+        self.toast(cx, Severity::Error, "Recording failed", reason);
+        self.refresh_status(cx);
+    }
+
+    fn refresh_status(&mut self, cx: &mut Cx) {
+        if let Some(status) = self.live.as_ref().map(Live::status) {
+            self.set_label(cx, ids!(status_text), &status);
+        }
+    }
+
+    /// Record, the quality, and Show in folder.
+    pub(crate) fn record_actions(&mut self, cx: &mut Cx, actions: &Actions) {
+        if self.ui.button(cx, ids!(record_button)).clicked(actions) {
+            self.toggle_recording();
+        }
+        if let Some(index) = self
+            .ui
+            .drop_down(cx, ids!(record_quality))
+            .selected(actions)
+        {
+            self.settings
+                .set_quality(RecordingQuality::from_index(index));
+            self.save_settings();
+            if self.pointer_input {
+                cx.set_key_focus(Area::Empty);
+            }
+        }
+        if self.ui.button(cx, ids!(show_in_folder)).clicked(actions) {
+            if let Some(path) = self.live.as_ref().and_then(|l| l.last_output.clone()) {
+                if let Err(e) = reco_app::reveal::reveal(&path) {
+                    error!("couldn't show {}: {e}", path.display());
+                }
+            }
+        }
+    }
+
+    /// Quitting while recording: stop and wait up to 3 s for the file to
+    /// close, so it plays. The one time the UI thread waits (DESIGN Rule 4).
+    pub(crate) fn finish_recording_on_quit(&mut self) {
+        let Some(live) = self.live.as_ref() else {
+            return;
+        };
+        if live.recording.is_none() {
+            return;
+        }
+        live.worker.send(PreviewCommand::StopRecording);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline {
+            match live.worker.try_event() {
+                Some(PreviewEvent::RecordingSaved(_) | PreviewEvent::RecordingFailed(_)) => return,
+                Some(_) => {}
+                None => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
     }
 
     /// The playhead moved, or the play state changed.

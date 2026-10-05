@@ -48,6 +48,8 @@ script_mod! {
     startup() do #(App::script_component(vm)){
         play_icon: crate_resource("self:resources/icons/play.svg")
         pause_icon: crate_resource("self:resources/icons/pause.svg")
+        record_icon: crate_resource("self:resources/icons/record.svg")
+        stop_icon: crate_resource("self:resources/icons/stop.svg")
         ui: Root{
             main_window := Window{
                 window.title: "Reco"
@@ -183,6 +185,11 @@ pub struct App {
     play_icon: Option<ScriptHandleRef>,
     #[live]
     pause_icon: Option<ScriptHandleRef>,
+    /// The record button's two icons.
+    #[live]
+    record_icon: Option<ScriptHandleRef>,
+    #[live]
+    stop_icon: Option<ScriptHandleRef>,
     /// What the app remembers between runs (desktop.json).
     #[rust]
     settings: DesktopSettings,
@@ -230,6 +237,9 @@ impl App {
         self.set_button_enabled(cx, ids!(record_button), loaded && !exporting);
         self.ui.widget(cx, ids!(timeline)).set_disabled(cx, !loaded);
         self.ui.widget(cx, ids!(aspect)).set_disabled(cx, !loaded);
+        self.ui
+            .widget(cx, ids!(record_quality))
+            .set_disabled(cx, !loaded);
         let fold_hint = loaded && self.shell.auto_folded(Panel::Inspector);
         self.set_visible(cx, ids!(fold_hint), fold_hint);
         self.ui.redraw(cx);
@@ -467,6 +477,9 @@ impl App {
         {
             preview.set_aspect(cx, aspect);
         }
+        self.ui
+            .drop_down(cx, ids!(record_quality))
+            .set_selected_item(cx, self.settings.quality().index());
     }
 
     /// Save the settings; a failure is logged, not shown (nothing is lost
@@ -532,6 +545,7 @@ impl MatchEvent for App {
         self.preview_actions(cx, actions);
         self.ruler_actions(cx, actions);
         self.toast_actions(cx, actions);
+        self.record_actions(cx, actions);
     }
 }
 
@@ -548,6 +562,7 @@ impl AppMain for App {
         match event {
             Event::KeyDown(_) => self.pointer_input = false,
             Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
+            Event::Shutdown => self.finish_recording_on_quit(),
             _ => {}
         }
         match event {

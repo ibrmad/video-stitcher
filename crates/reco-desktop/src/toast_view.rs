@@ -27,7 +27,6 @@ impl App {
     }
 
     /// Show a notice for `ttl`.
-    #[allow(dead_code)] // Task 12: "Recording saved" stays 8 s.
     pub(crate) fn toast_for(
         &mut self,
         cx: &mut Cx,

@@ -48,6 +48,20 @@ script_mod! {
                     width: theme.reco_aspect_width labels: ["Auto" "16:9" "4:3" "21:9"]
                 }
             }
+            // A DropDown has no `visible`: its Tip hides it while recording.
+            quality_tip := Tip{text: "Recording quality"
+                record_quality := RecoDropDown{
+                    animator +: {disabled: {default: @on}}
+                    width: theme.reco_quality_width labels: ["Fast" "Balanced" "High"]
+                }
+            }
+            // While recording: a red dot and the time recorded.
+            recording_badge := View{
+                visible: false
+                width: Fit height: Fit flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
+                RecoDotError{}
+                recording_time := RecoText{text: "0:00" draw_text +: {color: theme.reco_record}}
+            }
             Tip{text: "Record the preview as you watch"
                 record_button := RecoIconButton{
                     animator +: {disabled: {default: @on}}

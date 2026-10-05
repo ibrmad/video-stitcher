@@ -257,11 +257,90 @@ def check_toasts():
         expect(bool(failed), "toasts: a failed open raises an error toast")
 
 
+def ffprobe(path):
+    """(width, height, frames) of a video, or None without ffprobe."""
+    tool = shutil.which("ffprobe")
+    if tool is None:
+        return None
+    out = subprocess.run([tool, "-v", "error", "-select_streams", "v:0", "-count_frames",
+                          "-show_entries", "stream=width,height,nb_read_frames", "-of", "json", path],
+                         capture_output=True, text=True)
+    stream = (json.loads(out.stdout or "{}").get("streams") or [{}])[0]
+    return stream.get("width"), stream.get("height"), int(stream.get("nb_read_frames") or 0)
+
+
+def recordings(folder):
+    return sorted(f for f in os.listdir(folder) if f.startswith("reco_recording_") and f.endswith(".mp4"))
+
+
+def check_record():
+    """Record: the badge and the quality, a 1920x1080 file with one frame per
+    frame played, toasts, Show in folder; quitting while recording still
+    leaves a playable file. Never clicks Show in folder (it opens Finder)."""
+    config = tempfile.mkdtemp(prefix="reco-desktop-config-")
+    folder = tempfile.mkdtemp(prefix="reco-desktop-recordings-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"recording_folder": folder}, f)
+    with launch(config_dir=config) as app:
+        ready(app)
+        time.sleep(1.0)
+        expect(app.rect("record_quality") is not None, "record: the quality shows before recording")
+        app.click_id("record_button")
+        expect(bool(wait_for(lambda: title_rect(app, "Recording started"), 10)), "record: a toast says recording started")
+        expect(app.rect("recording_badge") is not None, "record: the badge shows while recording")
+        save_shot(app, "recording")
+        expect(app.rect("record_quality") is None, "record: the quality hides while recording")
+        app.key("space")
+        time.sleep(3.0)
+        status = text_of(app, "status_text") or ""
+        expect(status.startswith("Recording ·"), f"record: the status line says recording ({status})")
+        app.key("space")
+        time.sleep(0.5)
+        app.click_id("record_button")
+        expect(bool(wait_for(lambda: title_rect(app, "Recording saved"), 15)), "record: a toast says the recording was saved")
+        expect(app.rect("show_in_folder") is not None, "record: Show in folder appears")
+        expect(app.rect("record_quality") is not None and app.rect("recording_badge") is None,
+               "record: the quality returns and the badge goes")
+        body = next((i.get("t", "") for i in app.snap("frames ·") if i.get("i") == "body"), "")
+        files = recordings(folder)
+        expect(len(files) == 1, f"record: one file in the recording folder ({files})")
+        probe = ffprobe(os.path.join(folder, files[0])) if files else None
+        if files and probe is None:
+            print("skip: ffprobe is not installed; the file's size and frames are not checked")
+        elif probe:
+            w, h, frames = probe
+            expect((w, h) == (1920, 1080), f"record: 1920x1080 for Auto ({w}x{h})")
+            expect(80 <= frames <= 100, f"record: about 3 s at 30 fps, one frame per frame played ({frames})")
+            told = body.split()[0] if body else ""
+            expect(told == str(frames), f"record: the toast counts the frames written ({body!r} vs {frames})")
+        # Three short recordings: six notices in a few seconds, all still due.
+        for _ in range(3):
+            app.click_id("record_button")
+            wait_for(lambda: app.rect("recording_badge"), 10)
+            app.click_id("record_button")
+            wait_for(lambda: app.rect("recording_badge") is None, 10)
+        slots = [app.rect(f"toast_{i}") is not None for i in range(4)]
+        expect(all(slots), f"record: more notices than fit show four ({slots})")
+        expect(app.errors() == [], "record: no errors in the app log")
+    with launch(config_dir=config) as app:
+        ready(app)
+        before = set(recordings(folder))
+        app.click_id("record_button")
+        wait_for(lambda: title_rect(app, "Recording started"), 10)
+        app.key("space")
+        time.sleep(1.5)
+    new = sorted(set(recordings(folder)) - before)
+    expect(len(new) == 1, f"record: quitting while recording leaves a file ({new})")
+    if new and shutil.which("ffprobe"):
+        expect(ffprobe(os.path.join(folder, new[0]))[2] > 0, "record: and it plays")
+
+
 CHECKS = {
     "persist": check_persist,
     "transport": check_transport,
     "ruler": check_ruler,
     "toasts": check_toasts,
+    "record": check_record,
 }
 
 

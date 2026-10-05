@@ -1,6 +1,7 @@
 //! The App's side of a live preview: the worker handle, what it plays, and
 //! a meter for the frame rate shown in the status line.
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use reco_app::preview::lanes::Lanes;
@@ -32,6 +33,10 @@ pub struct Live {
     pub problem: Option<String>,
     /// Each camera's files, once probed.
     pub lanes: Option<Lanes>,
+    /// Frames recorded so far, while recording.
+    pub recording: Option<u64>,
+    /// The last file written, for Show in folder.
+    pub last_output: Option<PathBuf>,
 }
 
 impl Live {
@@ -48,6 +53,8 @@ impl Live {
             fps_reading: None,
             problem: None,
             lanes: None,
+            recording: None,
+            last_output: None,
         }
     }
 
@@ -57,7 +64,9 @@ impl Live {
             state: self.info.as_ref().map(|_| self.state),
             played: self.played,
             fps: self.fps_reading,
-            recording: None,
+            recording: self
+                .recording
+                .map(|frames| frames as f64 / self.info.as_ref().map_or(30.0, |i| i.fps.max(1.0))),
             problem: self.problem.as_deref(),
         })
     }

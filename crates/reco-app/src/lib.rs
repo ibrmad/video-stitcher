@@ -6,5 +6,6 @@
 
 pub mod preview;
 pub mod recording;
+pub mod reveal;
 pub mod settings;
 pub mod toasts;

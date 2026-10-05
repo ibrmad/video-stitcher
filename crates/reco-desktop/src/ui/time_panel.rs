@@ -112,6 +112,8 @@ script_mod! {
             }
             View{width: Fill height: Fit}
             status_text := RecoSubdued{text: ""}
+            // After a recording: the file in Finder.
+            show_in_folder := RecoFlatButton{visible: false text: "Show in folder"}
         }
         lanes := View{
             width: Fill height: Fit flow: Right
