@@ -73,7 +73,8 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       Rerun restyle (fixes: the app menu button's border, empty camera
       rows, trailing icon alignment, the checkbox column, the time panel's
       edge, dark menus).
-- [ ] Owner approved the look.
+- [x] Owner approved the look (2026-10-05: "good enough for now", after the
+      Rerun restyle and the time panel tidy-up).
 
 ## Module 1: preview (§2.3, §6)
 
