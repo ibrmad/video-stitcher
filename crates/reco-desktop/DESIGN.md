@@ -106,6 +106,27 @@ Time panel and status (Module 2):
 - A worker panic is reported as `Stopped("The preview stopped
   unexpectedly: …")` instead of a silent dead preview.
 
+Files and calibration (Module 3):
+
+- `reco_app::project` holds each camera's files and the calibration; the
+  stage (no videos, one camera, both, ready) decides the next-step card,
+  and `sync_live` opens, reopens or closes the preview from it. The render
+  thread stays for the app's life: `Close` drops the videos but keeps the
+  texture ring, and a reopen retires the shown ring until the UI adopts
+  the next one.
+- File lengths come from `reco_app::durations`, measured on short-lived
+  threads and remembered.
+- `reco_app::calibrate` runs a calibration as a cancellable job, reports
+  its seven steps, and saves `{first left stem}_calibration.json` beside
+  the first left file (atomically). That file loads by itself the next time
+  the pair is set up.
+- System file dialogs answer as actions. On macOS the open panel runs
+  `runModal`, queued onto the main queue: the one time the UI thread waits
+  on the user (the render thread keeps going). Checks answer dialogs from
+  `RECO_DESKTOP_DIALOG_ANSWERS` through the same path.
+- The Recent menu keeps eight sessions (both cameras and the calibration)
+  in `desktop.json`.
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
@@ -265,6 +286,17 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   import the type and use the bare name.
 - `Event::Shutdown` arrives before quitting; it is where a recording is
   finished.
+- A list of rows from a template follows FlatList: collect the named child
+  in `on_after_apply`, make rows with `WidgetRef::script_from_value`, and
+  register them with `widget_tree_insert_child` so snapshots see them
+  (`ui::file_list`).
+- A menu opens from anywhere with `MenuAction::Open` and the menu button's
+  `menu_owner()`; its picks come back through `menu_picked` like the
+  button's own.
+- A window accepts dropped files by answering `Event::Drag` with
+  `DragResponse::Copy`.
+- `ids!(...)` in an array of tuples is `&[LiveId; 1]`; pass `*id` where a
+  slice is wanted.
 
 ## Modules
 

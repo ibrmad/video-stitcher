@@ -61,3 +61,11 @@ pair's frame count. The app opens each file once with
 `VideoDecoder::open(path)?.duration_secs()` on a short-lived probe thread
 and lays the files out itself (`reco_app::preview::lanes`). The ask: a
 public probe of a chained input's file durations.
+
+## Calibration takes single files (Module 3)
+
+`calibrate_videos` takes one left and one right file, so the app
+calibrates each camera's first file, as the Slint app did. A recalibration
+starts at the preview's time only while it falls inside both first files.
+The ask: calibrate a chained input at a stitched-timeline time.
+

@@ -200,18 +200,60 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
 
 ## Module 3: files (§2.2, §2.7)
 
-- [ ] Left: add videos (multi-select mp4/mov/avi/mkv, appended as
+Evidence for this module: `tools/check_m3.py` (checks `files`, `list`,
+`calibrate` and `recent`; dialogs answered through
+`RECO_DESKTOP_DIALOG_ANSWERS`, videos linked into temporary folders, and the
+real 5.3K pair calibrated in `calibrate`); the unit tests (`cargo test -p
+reco-app -p reco-desktop`, plus `-- --ignored` for the two full
+calibrations); and screenshots in `target/desktop-checks/m3/`.
+
+- [x] Left: add videos (multi-select mp4/mov/avi/mkv, appended as
       segments), Clear, segment list with remove and drag-to-reorder,
-      "No video selected".
-- [ ] Right: the same.
-- [ ] Calibration: Auto Calibrate / Re-calibrate / Calibrating… with step
+      "No video selected". Evidence: "files: the left camera shows its file
+      and length", "list: the left camera's files show in recording order",
+      "list: a row's remove button removes its file", "list: dragging a row
+      moves its file", "list: Alt+Up moves the selected file back", "list:
+      Remove all empties the camera" (`list-open.png`);
+      `gopro_files_go_in_recording_then_chapter_order`,
+      `only_videos_are_added_once`, `moves_and_removes_stay_in_bounds`,
+      `a_drop_beside_itself_moves_nothing`, `keys_select_remove_and_move`. An
+      empty camera shows its Add… button (Module 0's design) instead of "No
+      video selected". (New: GoPro chapters go in recording order; the
+      keyboard can select, remove and move files.)
+- [x] Right: the same. Evidence: "files: the next-step card adds the right
+      camera"; the same list widget and model.
+- [x] Calibration: Auto Calibrate / Re-calibrate / Calibrating… with step
       text; Load…; calibration file chip with remove. (New: Cancel, and
-      Advanced locked while calibrating.)
-- [ ] Calibration Advanced: frames (2/4/6/8), IMU seeds, AKAZE threshold,
-      Detect Y min and max, skip end.
-- [ ] Recent files dialog: left videos, right videos, calibrations; click
-      loads; Clear all; Close.
-- [ ] (New) Drop videos onto the window.
+      Advanced locked while calibrating.) Evidence: "calibrate: the steps
+      show", "calibrate: the card says so", "calibrate: the status line
+      counts the steps", "calibrate: Cancel stops it", "calibrate: footage
+      with no matches fails plainly", "calibrate: Load calibration file opens
+      the preview", "calibrate: removing it closes the preview", "calibrate:
+      the real pair calibrates" (12 s on the 5.3K pair), "calibrate: the
+      calibration is saved beside the left video" (`calibrating.png`,
+      `calibration-failed.png`, `calibrated-real.png`);
+      `cancelling_stops_the_job`, `footage_with_no_matches_fails_plainly`,
+      `calibrating_saves_beside_the_left_file`; Cancel from the card and the
+      Setup panel, and the lock: "calibrate: the card's Cancel stops it",
+      "calibrate: the Advanced options lock while it runs", "calibrate: and
+      unlocks them". (New: a
+      calibration saved beside the left video loads by itself: "files: a
+      calibration saved beside the left video loads".)
+- [x] Calibration Advanced: frames (2/4/6/8), IMU seeds, AKAZE threshold,
+      Detect Y min and max, skip end. Evidence: `options_map_onto_the_config`;
+      the Frames dropdown starts at the calibration's default (4), found when
+      a run on the fast pair calibrated with the dropdown's first item.
+- [x] Recent files dialog: left videos, right videos, calibrations; click
+      loads; Clear all; Close. Evidence: "recent: the session is
+      remembered", "recent: Recent files opens the menu", "recent: picking
+      the session opens it again", "recent: Clear recent files forgets them";
+      `recent_sessions_are_newest_first_without_repeats`. (New, per Module
+      0's design: a Recent menu of sessions, each restoring both cameras and
+      the calibration in one click, in place of three separate lists.)
+- [x] (New) Drop videos onto the window. Evidence:
+      `drops_go_to_the_row_or_the_first_empty_camera` (routing). The drop
+      itself is wired to Makepad's `Event::Drag`/`Event::Drop` but not
+      machine-checked: the remote cannot drop files.
 
 ## Module 4: stitching and calibration (§2.2, §2.4, §2.14)
 
