@@ -335,12 +335,31 @@ def check_record():
         expect(ffprobe(os.path.join(folder, new[0]))[2] > 0, "record: and it plays")
 
 
+def check_perf():
+    """Rule 8: drawing a frame takes under 4 ms on average while playing."""
+    for name, files in (("fast", FAST), ("real", REAL)):
+        if not all(os.path.exists(p) for p in files):
+            print(f"skip: perf {name}: fixtures not found")
+            continue
+        with launch(files, extra=("--perf-log",)) as app:
+            ready(app)
+            app.key("space")
+            time.sleep(6.5)
+            app.key("space")
+            lines = [line for line in app.log_lines() if "ui draw:" in line]
+        averages = [float(line.split("avg ")[1].split(" ms")[0]) for line in lines]
+        print(f"perf {name}: {lines[-1].split('- ')[-1] if lines else 'no summary'}")
+        expect(len(averages) >= 2, f"perf {name}: draw times are logged ({len(averages)} summaries)")
+        expect(all(a < 4.0 for a in averages), f"perf {name}: under 4 ms a frame on average ({averages})")
+
+
 CHECKS = {
     "persist": check_persist,
     "transport": check_transport,
     "ruler": check_ruler,
     "toasts": check_toasts,
     "record": check_record,
+    "perf": check_perf,
 }
 
 

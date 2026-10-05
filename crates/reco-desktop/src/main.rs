@@ -15,6 +15,7 @@ mod cli;
 mod keys;
 mod live;
 mod names;
+mod perf;
 mod session_view;
 mod shell_state;
 mod theme;
@@ -25,6 +26,7 @@ mod ui;
 use cli::{Args, LookPreview};
 use live::Live;
 use names::middle_ellipsis;
+use perf::DrawStats;
 use reco_app::settings::{self, DesktopSettings};
 use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
@@ -199,6 +201,9 @@ pub struct App {
     /// Fires when the next toast is due to leave.
     #[rust]
     toast_timer: Timer,
+    /// Draw times for `--perf-log`.
+    #[rust]
+    draw_stats: DrawStats,
 }
 
 impl App {
@@ -588,6 +593,16 @@ impl AppMain for App {
             self.expire_toasts(cx);
         }
         self.match_event(cx, event);
+        let draw = matches!(event, Event::Draw(_));
+        let started = std::time::Instant::now();
         self.ui.handle_event(cx, event, &mut Scope::empty());
+        if draw && self.args.perf_log {
+            if let Some(line) = self
+                .draw_stats
+                .add(started.elapsed(), std::time::Instant::now())
+            {
+                log!("{line}");
+            }
+        }
     }
 }
