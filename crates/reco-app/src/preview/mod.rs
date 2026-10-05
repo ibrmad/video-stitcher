@@ -8,6 +8,7 @@ pub mod lanes;
 pub mod metal;
 pub mod playback;
 pub mod readback;
+pub mod recorder;
 pub mod session;
 pub mod slots;
 pub mod view;

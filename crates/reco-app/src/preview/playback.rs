@@ -145,6 +145,15 @@ impl Playback {
         self.seek_to(seek_target(current, (seconds * fps).round() as i64, total))
     }
 
+    /// The exact source rate as a fraction (30000/1001 for 29.97), for the
+    /// encoder; the rounded rate when the source does not say.
+    pub fn fps_rational(&self) -> (i32, i32) {
+        self.info
+            .as_ref()
+            .and_then(|i| i.fps_rational)
+            .unwrap_or_else(|| ((self.fps().round() as i32).max(1), 1))
+    }
+
     /// Replace the engine's length estimate (it ignores the sync offset)
     /// with the probed one.
     pub fn set_total_frames(&mut self, frames: u64) {

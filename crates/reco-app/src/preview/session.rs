@@ -17,6 +17,8 @@ use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
 
 use super::playback::Playback;
+use super::recorder::{Recorder, Recording};
+use crate::recording::RecordingQuality;
 
 /// The pipeline's output and the ring's format (never sRGB: the shader
 /// writes sRGB-encoded values already).
@@ -45,6 +47,8 @@ pub enum SessionError {
     Render(String),
     /// No frame decoded yet.
     NoFrame,
+    /// Recording failed.
+    Record(String),
 }
 
 impl std::fmt::Display for SessionError {
@@ -54,6 +58,7 @@ impl std::fmt::Display for SessionError {
             Self::Source(e) => write!(f, "Couldn't open the videos: {e}"),
             Self::Render(e) => write!(f, "The preview failed to render: {e}"),
             Self::NoFrame => write!(f, "No frame decoded yet"),
+            Self::Record(e) => write!(f, "Couldn't record: {e}"),
         }
     }
 }
@@ -66,6 +71,7 @@ pub struct PreviewSession {
     playback: Playback,
     pose: PoseControl,
     size: (u32, u32),
+    recorder: Option<Recorder>,
 }
 
 fn pose_config() -> PoseControlConfig {
@@ -109,6 +115,43 @@ fn check_first_frame(playback: &Playback, (width, height): (u32, u32)) -> Result
     Ok(())
 }
 
+/// Reco's renderer for `calibration` at `size`, set up as the preview uses
+/// it: the calibration's lens correction, blend, tilt and roll, and colour
+/// match on.
+pub(crate) fn build_renderer(
+    gpu: GpuContext,
+    calibration: MatchCalibration,
+    input: (u32, u32),
+    size: (u32, u32),
+    format: wgpu::TextureFormat,
+) -> Result<StitchRenderer, SessionError> {
+    let lens_correction = calibration.lens_correction_amount;
+    let viewport = ViewportConfig {
+        width: size.0,
+        height: size.1,
+        fov_degrees: FOV_DEFAULT,
+        blend_width: calibration.blend_width,
+        rig_tilt: calibration.rig_tilt as f32,
+        rig_roll: calibration.rig_roll as f32,
+        ..ViewportConfig::default()
+    };
+    let mut renderer = StitchRenderer::new(
+        calibration,
+        gpu,
+        viewport,
+        input.0,
+        input.1,
+        format,
+        InputFormat::Yuv420p,
+    )
+    .map_err(|e| SessionError::Render(e.to_string()))?;
+    renderer
+        .pipeline_mut()
+        .set_lens_correction_amount(lens_correction);
+    renderer.set_color_match(true);
+    Ok(renderer)
+}
+
 impl PreviewSession {
     /// Read the calibration, open both videos, decode the first frame and
     /// build the renderer for a `size` render target. Blocking: run it on
@@ -128,35 +171,13 @@ impl PreviewSession {
             .map_err(|e| SessionError::Source(e.to_string()))?;
         let (input_w, input_h) = playback.input_dimensions().ok_or(SessionError::NoFrame)?;
         check_first_frame(&playback, (input_w, input_h))?;
-        let lens_correction = calibration.lens_correction_amount;
-        let viewport = ViewportConfig {
-            width: size.0,
-            height: size.1,
-            fov_degrees: FOV_DEFAULT,
-            blend_width: calibration.blend_width,
-            rig_tilt: calibration.rig_tilt as f32,
-            rig_roll: calibration.rig_roll as f32,
-            ..ViewportConfig::default()
-        };
-        let mut renderer = StitchRenderer::new(
-            calibration,
-            gpu,
-            viewport,
-            input_w,
-            input_h,
-            OUTPUT_FORMAT,
-            InputFormat::Yuv420p,
-        )
-        .map_err(|e| SessionError::Render(e.to_string()))?;
-        renderer
-            .pipeline_mut()
-            .set_lens_correction_amount(lens_correction);
-        renderer.set_color_match(true);
+        let renderer = build_renderer(gpu, calibration, (input_w, input_h), size, OUTPUT_FORMAT)?;
         let mut session = Self {
             renderer,
             playback,
             pose: PoseControl::new(pose_config()),
             size,
+            recorder: None,
         };
         session.clamp();
         Ok(session)
@@ -244,6 +265,56 @@ impl PreviewSession {
     /// The GPU the renderer uses.
     pub fn gpu(&self) -> &GpuContext {
         self.renderer.gpu()
+    }
+
+    /// Start recording to `path` at `size` (blocking for a moment while the
+    /// encoder opens: run on the worker).
+    pub fn start_recording(
+        &mut self,
+        path: &Path,
+        size: (u32, u32),
+        quality: RecordingQuality,
+    ) -> Result<(), SessionError> {
+        let input = self
+            .playback
+            .input_dimensions()
+            .ok_or(SessionError::NoFrame)?;
+        let recorder = Recorder::start(
+            self.gpu().clone(),
+            self.renderer.calibration().clone(),
+            input,
+            size,
+            self.playback.fps_rational(),
+            path,
+            quality,
+        )
+        .map_err(SessionError::Record)?;
+        self.recorder = Some(recorder);
+        Ok(())
+    }
+
+    /// Whether a recording is running.
+    pub fn is_recording(&self) -> bool {
+        self.recorder.is_some()
+    }
+
+    /// Record the frame on screen with the current pose. The worker calls
+    /// this once per new source frame.
+    pub fn record_frame(&mut self) -> Result<(), SessionError> {
+        let (Some(recorder), Some(frame)) = (self.recorder.as_mut(), self.playback.current_frame())
+        else {
+            return Ok(());
+        };
+        recorder
+            .record(frame, self.pose.current_pose())
+            .map_err(SessionError::Record)
+    }
+
+    /// Stop: flush, close the file, report it (`None` when not recording).
+    pub fn stop_recording(&mut self) -> Option<Result<Recording, SessionError>> {
+        self.recorder
+            .take()
+            .map(|r| r.finish().map_err(SessionError::Record))
     }
 
     /// Keep the pose inside the picture (constrained look, always on in
