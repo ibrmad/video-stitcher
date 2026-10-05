@@ -1,0 +1,600 @@
+//! Export: the stitched match written to a file by Reco's `StitchJob` on its
+//! own thread, with progress, Cancel and a plain outcome. The options are
+//! the Slint app's export dialog's, without AI tracking (Module 6b).
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::{Duration, Instant};
+
+use reco_core::calibration::MatchCalibration;
+use reco_io::ffmpeg::encoder::{VideoCodec, available_encoders};
+use reco_io::output::{Codec, Format, Quality};
+use reco_io::stitch_job::{InputPath, StitchError, StitchJob};
+
+/// The export sizes, named as the Slint app named them.
+pub const RESOLUTIONS: [(&str, u32, u32); 4] = [
+    ("1080p", 1920, 1080),
+    ("720p", 1280, 720),
+    ("2K", 2560, 1440),
+    ("4K", 3840, 2160),
+];
+
+/// What to export and how.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportOptions {
+    /// The file to write (`.mp4` is added when it has no extension).
+    pub output: PathBuf,
+    /// Frame size.
+    pub size: (u32, u32),
+    /// "h264", "hevc" or "av1".
+    pub codec: String,
+    /// "fast", "balanced" or "high".
+    pub quality: String,
+    /// Start and end on the stitched timeline, seconds (`checked_range`).
+    pub range: (f64, f64),
+    /// The source frame rate, for the progress total.
+    pub fps: f64,
+    /// Seam blend, from the live tuning.
+    pub blend: f32,
+    /// Colour matching, from the live tuning.
+    pub color_match: bool,
+    /// Also record the stacked raw input for re-stitching
+    /// (`{output}.replay.mkv`).
+    pub replay: bool,
+    /// Also save the pipeline's events (`{output}.events.jsonl`).
+    pub events: bool,
+}
+
+/// What an export reports.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExportEvent {
+    /// Frames written so far, of how many, at what rate.
+    Progress {
+        /// Frames written.
+        frames: u64,
+        /// Frames in the range.
+        total: u64,
+        /// Frames per second so far.
+        fps: f64,
+    },
+    /// The last frames are being written and the file closed.
+    Finalizing,
+    /// Written.
+    Done {
+        /// The file.
+        path: PathBuf,
+        /// Frames written.
+        frames: u64,
+        /// How long it took.
+        seconds: f64,
+    },
+    /// It failed; why.
+    Failed(String),
+    /// It was cancelled.
+    Cancelled,
+}
+
+/// `path` with `.mp4` added when it has no extension.
+pub fn with_mp4(path: &Path) -> PathBuf {
+    if path.extension().is_some() {
+        path.to_path_buf()
+    } else {
+        path.with_extension("mp4")
+    }
+}
+
+/// Where an export goes by default: `{first left stem}_stitched.mp4` beside
+/// the left camera's first file.
+pub fn default_output(first_left: &Path) -> PathBuf {
+    let stem = first_left
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "match".into());
+    first_left.with_file_name(format!("{stem}_stitched.mp4"))
+}
+
+/// The file to export to, from what was typed: `.mp4` added when there is no
+/// extension, a bare name put beside the left camera's first file. Refused:
+/// nothing typed, a folder that doesn't exist, a folder itself, and one of
+/// the videos being exported (the export would overwrite it while reading).
+pub fn checked_output(
+    typed: &str,
+    first_left: &Path,
+    inputs: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let typed = typed.trim();
+    if typed.is_empty() {
+        return Err("Choose where to save the export.".into());
+    }
+    let mut path = PathBuf::from(typed);
+    if path.is_relative() {
+        path = first_left.parent().unwrap_or(Path::new("")).join(path);
+    }
+    if path.is_dir() {
+        return Err(format!(
+            "{} is a folder; name a file in it.",
+            path.display()
+        ));
+    }
+    let path = with_mp4(&path);
+    let folder = path.parent().unwrap_or(Path::new(""));
+    if !folder.is_dir() {
+        return Err(format!("The folder {} doesn't exist.", folder.display()));
+    }
+    // Compare real paths: the same file can be named two ways.
+    let real = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let target = real(&path);
+    if inputs.iter().any(|input| real(input) == target) {
+        return Err("That is one of the videos being exported; choose another file.".into());
+    }
+    Ok(path)
+}
+
+/// Why an empty range can't be exported.
+const EMPTY_RANGE: &str = "The range is empty: the end must come after the start.";
+
+/// Whether nothing lies between `start` and `end` (NaN included).
+fn is_empty_range(start: f64, end: f64) -> bool {
+    start.partial_cmp(&end) != Some(std::cmp::Ordering::Less)
+}
+
+/// The range to export inside `length` seconds: an end of 0 means the end;
+/// both are kept inside the videos. An empty range is refused.
+pub fn checked_range(range: (f64, f64), length: f64) -> Result<(f64, f64), String> {
+    let end = if range.1 > 0.0 {
+        range.1.min(length)
+    } else {
+        length
+    };
+    let start = range.0.max(0.0);
+    if is_empty_range(start, end) {
+        return Err(EMPTY_RANGE.into());
+    }
+    Ok((start, end))
+}
+
+/// The codecs this machine can encode ("h264", "hevc", "av1"); h264 when
+/// none answer. Blocking (it asks each encoder): run it off the UI thread.
+pub fn available_codecs() -> Vec<String> {
+    let mut codecs: Vec<String> = [
+        ("h264", VideoCodec::H264),
+        ("hevc", VideoCodec::Hevc),
+        ("av1", VideoCodec::Av1),
+    ]
+    .into_iter()
+    .filter(|(_, codec)| !available_encoders(*codec).is_empty())
+    .map(|(name, _)| name.to_string())
+    .collect();
+    if codecs.is_empty() {
+        codecs.push("h264".into());
+    }
+    codecs
+}
+
+/// How often progress is reported (the last frame always is).
+const PROGRESS_EVERY: Duration = Duration::from_millis(100);
+
+/// Sends events to the UI and wakes it.
+#[derive(Clone)]
+struct Outbox {
+    tx: Sender<ExportEvent>,
+    waker: Arc<dyn Fn() + Send + Sync>,
+}
+
+impl Outbox {
+    fn send(&self, event: ExportEvent) {
+        if self.tx.send(event).is_ok() {
+            (self.waker)();
+        }
+    }
+}
+
+/// The words for a failed export.
+fn failure_words(error: &StitchError, codec: &str) -> String {
+    match error {
+        StitchError::EmptyOutput { .. } => {
+            format!("The file has no picture: this machine may not encode {codec}. Try H.264.")
+        }
+        other => other.to_string(),
+    }
+}
+
+/// Run the export on this thread; the last event says how it ended.
+fn run(
+    left: InputPath,
+    right: InputPath,
+    calibration: MatchCalibration,
+    options: ExportOptions,
+    cancel: &AtomicBool,
+    out: &Outbox,
+) -> ExportEvent {
+    let output = with_mp4(&options.output);
+    let (start, end) = options.range;
+    let total = ((end - start) * options.fps).round().max(0.0) as u64;
+    let codec: Codec = options.codec.parse().unwrap_or_default();
+    let quality: Quality = options.quality.parse().unwrap_or_default();
+    let mut job = StitchJob::with_calibration(left, right, calibration, &output)
+        .codec(codec)
+        .quality(quality)
+        .format(Format::for_output(&output.to_string_lossy()))
+        .resolution(options.size.0, options.size.1)
+        .blend_width(options.blend)
+        .color_match(options.color_match)
+        .end_time(end);
+    if start > 0.0 {
+        job = job.start_time(start);
+    }
+    if options.replay {
+        job = job.with_replay_recording(output.with_extension("replay.mkv"));
+    }
+    if options.events {
+        job = job.events(output.with_extension("events.jsonl"));
+    }
+    // The rate counts from the first frame: opening and seeking to the
+    // start are not exporting.
+    let progress = out.clone();
+    let mut first: Option<Instant> = None;
+    let mut last_sent: Option<Instant> = None;
+    job = job.on_progress(move |p| {
+        let now = Instant::now();
+        let since = *first.get_or_insert(now);
+        let frames = p.frames_completed;
+        let due = last_sent.is_none_or(|at| now - at >= PROGRESS_EVERY) || frames >= total;
+        if due {
+            last_sent = Some(now);
+            let seconds = (now - since).as_secs_f64();
+            let fps = if seconds > 0.0 {
+                frames.saturating_sub(1) as f64 / seconds
+            } else {
+                0.0
+            };
+            progress.send(ExportEvent::Progress { frames, total, fps });
+        }
+    });
+    let finalizing = out.clone();
+    job = job.on_finalizing(move || finalizing.send(ExportEvent::Finalizing));
+    let result = job.run(cancel);
+    if cancel.load(Ordering::Relaxed) {
+        return ExportEvent::Cancelled;
+    }
+    match result {
+        Ok(done) => ExportEvent::Done {
+            path: output,
+            frames: done.frames_processed,
+            seconds: done.elapsed.as_secs_f64(),
+        },
+        Err(e) => ExportEvent::Failed(failure_words(&e, &options.codec)),
+    }
+}
+
+/// A panic's message.
+fn panic_words(panic: &(dyn std::any::Any + Send)) -> String {
+    panic
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panic.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "an unknown error".into())
+}
+
+/// An export running on its own thread. Dropping it cancels it.
+pub struct ExportJob {
+    cancel: Arc<AtomicBool>,
+    events: Receiver<ExportEvent>,
+}
+
+impl ExportJob {
+    /// Export `left` and `right` with `calibration` (the live tuning);
+    /// `waker` runs after every event.
+    pub fn start(
+        left: InputPath,
+        right: InputPath,
+        calibration: MatchCalibration,
+        options: ExportOptions,
+        waker: Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, events) = mpsc::channel();
+        let out = Outbox { tx, waker };
+        let job = Self {
+            cancel: Arc::clone(&cancel),
+            events,
+        };
+        if is_empty_range(options.range.0, options.range.1) {
+            out.send(ExportEvent::Failed(EMPTY_RANGE.into()));
+            return job;
+        }
+        let thread_out = out.clone();
+        let spawned = std::thread::Builder::new()
+            .name("reco-export".into())
+            .spawn(move || {
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run(left, right, calibration, options, &cancel, &thread_out)
+                }));
+                let last = ran.unwrap_or_else(|panic| {
+                    ExportEvent::Failed(format!(
+                        "The export stopped unexpectedly: {}",
+                        panic_words(panic.as_ref())
+                    ))
+                });
+                thread_out.send(last);
+            });
+        if let Err(e) = spawned {
+            out.send(ExportEvent::Failed(format!(
+                "Couldn't start the export: {e}"
+            )));
+        }
+        job
+    }
+
+    /// Stop at the next frame (it then reports `Cancelled`).
+    pub fn cancel(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+
+    /// The next event, if any (never blocks).
+    pub fn try_event(&self) -> Option<ExportEvent> {
+        self.events.try_recv().ok()
+    }
+}
+
+impl Drop for ExportJob {
+    fn drop(&mut self) {
+        self.cancel();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use reco_io::ffmpeg::decoder::VideoDecoder;
+
+    use super::*;
+    use crate::preview::fixtures;
+
+    fn options(output: PathBuf, range: (f64, f64)) -> ExportOptions {
+        ExportOptions {
+            output,
+            size: (1280, 720),
+            codec: "h264".into(),
+            quality: "fast".into(),
+            range,
+            fps: 30.0,
+            blend: 0.05,
+            color_match: true,
+            replay: false,
+            events: false,
+        }
+    }
+
+    /// A calibration for jobs that never open the videos.
+    fn some_calibration() -> MatchCalibration {
+        use reco_core::calibration::{CameraParams, PlaneLayout};
+        let camera = CameraParams {
+            width: 1920,
+            height: 1080,
+            fx: 900.0,
+            fy: 900.0,
+            cx: 960.0,
+            cy: 540.0,
+            d: [0.0; 4],
+        };
+        MatchCalibration {
+            left: camera.clone(),
+            right: camera,
+            layout: PlaneLayout {
+                camera_axis_offset: 0.24,
+                intersect: 0.54,
+                x_ty: 0.0,
+                x_rz: 0.0,
+                z_rx: 0.0,
+                x_rx: 0.0,
+                z_rz: 0.0,
+            },
+            rig_tilt: 0.0,
+            rig_roll: 0.0,
+            sync_offset: 0,
+            field_roi: None,
+            lens_correction_amount: 1.0,
+            blend_width: 0.05,
+        }
+    }
+
+    fn until_done(job: &ExportJob, secs: u64, cancel_at_first_progress: bool) -> Vec<ExportEvent> {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        let mut seen = Vec::new();
+        while Instant::now() < deadline {
+            while let Some(event) = job.try_event() {
+                let last = matches!(
+                    event,
+                    ExportEvent::Done { .. } | ExportEvent::Failed(_) | ExportEvent::Cancelled
+                );
+                if cancel_at_first_progress && matches!(event, ExportEvent::Progress { .. }) {
+                    job.cancel();
+                }
+                seen.push(event);
+                if last {
+                    return seen;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        seen
+    }
+
+    #[test]
+    fn outputs_get_an_mp4_extension() {
+        assert_eq!(
+            with_mp4(Path::new("/m/match")),
+            PathBuf::from("/m/match.mp4")
+        );
+        assert_eq!(
+            with_mp4(Path::new("/m/match.mkv")),
+            PathBuf::from("/m/match.mkv")
+        );
+        assert_eq!(
+            default_output(Path::new("/m/GX010120.MP4")),
+            PathBuf::from("/m/GX010120_stitched.mp4")
+        );
+    }
+
+    #[test]
+    fn the_range_stays_inside_the_videos() {
+        assert_eq!(checked_range((0.0, 0.0), 60.0), Ok((0.0, 60.0)));
+        assert_eq!(checked_range((50.0, 70.0), 60.0), Ok((50.0, 60.0)));
+        assert!(checked_range((10.0, 10.0), 60.0).is_err());
+        assert!(checked_range((70.0, 0.0), 60.0).is_err());
+    }
+
+    #[test]
+    fn this_machine_encodes_h264() {
+        assert!(available_codecs().contains(&"h264".to_string()));
+    }
+
+    #[test]
+    fn exporting_two_seconds_writes_a_playable_file() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let output = std::env::temp_dir().join(format!("reco-app-export-{}", std::process::id()));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            options(output.clone(), (0.0, 2.0)),
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 120, false);
+        let Some(ExportEvent::Done { path, frames, .. }) = events.last() else {
+            panic!("{events:?}")
+        };
+        assert_eq!(path, &output.with_extension("mp4"));
+        assert!(
+            (55..=65).contains(frames),
+            "about two seconds at 30 fps: {frames}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, ExportEvent::Progress { total: 60, .. }))
+        );
+        let video = VideoDecoder::open(path).expect("a playable file");
+        assert_eq!((video.width(), video.height()), (1280, 720));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn cancelling_an_export_stops_it() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-cancel-{}.mp4", std::process::id()));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            options(output.clone(), (0.0, 50.0)),
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 120, true);
+        assert_eq!(events.last(), Some(&ExportEvent::Cancelled), "{events:?}");
+        let _ = std::fs::remove_file(&output);
+    }
+
+    #[test]
+    fn outputs_are_checked_before_exporting() {
+        let folder =
+            std::env::temp_dir().join(format!("reco-app-export-out-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let left = folder.join("GX010120.MP4");
+        std::fs::write(&left, b"").unwrap();
+        let inputs = [left.clone()];
+        assert_eq!(
+            checked_output(&folder.join("match").display().to_string(), &left, &inputs),
+            Ok(folder.join("match.mp4"))
+        );
+        assert_eq!(
+            checked_output("match.mkv", &left, &inputs),
+            Ok(folder.join("match.mkv")),
+            "a bare name goes beside the videos"
+        );
+        assert!(
+            checked_output("  ", &left, &inputs).is_err(),
+            "nothing typed"
+        );
+        assert!(
+            checked_output(
+                &folder.join("missing/match.mp4").display().to_string(),
+                &left,
+                &inputs
+            )
+            .is_err(),
+            "no such folder"
+        );
+        assert!(
+            checked_output(&folder.display().to_string(), &left, &inputs).is_err(),
+            "a folder"
+        );
+        assert!(
+            checked_output(&left.display().to_string(), &left, &inputs).is_err(),
+            "the left video itself"
+        );
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn an_empty_range_fails_at_once() {
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-empty-{}.mp4", std::process::id()));
+        let job = ExportJob::start(
+            InputPath::Single("left.mp4".into()),
+            InputPath::Single("right.mp4".into()),
+            some_calibration(),
+            options(output.clone(), (10.0, 10.0)),
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 5, false);
+        assert!(
+            matches!(events.as_slice(), [ExportEvent::Failed(_)]),
+            "{events:?}"
+        );
+        assert!(!output.exists(), "nothing was written");
+    }
+
+    #[test]
+    fn the_replay_and_events_files_go_beside_the_export() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-extras-{}.mp4", std::process::id()));
+        let mut options = options(output.clone(), (0.0, 0.5));
+        options.replay = true;
+        options.events = true;
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            options,
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 120, false);
+        assert!(
+            matches!(events.last(), Some(ExportEvent::Done { .. })),
+            "{events:?}"
+        );
+        let replay = output.with_extension("replay.mkv");
+        let jsonl = output.with_extension("events.jsonl");
+        assert!(
+            replay.metadata().is_ok_and(|m| m.len() > 0),
+            "the replay recording"
+        );
+        assert!(jsonl.exists(), "the pipeline events");
+        for file in [&output, &replay, &jsonl] {
+            let _ = std::fs::remove_file(file);
+        }
+    }
+}

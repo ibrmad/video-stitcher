@@ -6,6 +6,7 @@
 
 pub mod calibrate;
 pub mod durations;
+pub mod export;
 pub mod files;
 pub mod preview;
 pub mod project;
