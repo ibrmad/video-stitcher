@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use reco_control::pose_control::{PoseControl, PoseControlConfig};
 use reco_control::{ControlIntent, IntentTranslator, PoseIntent};
-use reco_core::calibration::{FieldRoi, MatchCalibration, PlaneLayout};
+use reco_core::calibration::{CameraParams, FieldRoi, MatchCalibration, PlaneLayout};
 use reco_core::detect::director::ViewportPosition;
 use reco_core::gpu::GpuContext;
 use reco_core::render::renderer::InputFormat;
@@ -19,6 +19,7 @@ use reco_io::stitch_job::InputPath;
 use super::playback::Playback;
 use super::recorder::{Recorder, Recording};
 use super::tuning::{CalibrationValues, Tuning};
+use crate::lens::Lens;
 use crate::recording::RecordingQuality;
 
 /// The pipeline's output and the ring's format (never sRGB: the shader
@@ -80,8 +81,12 @@ pub struct PreviewSession {
     inputs: (InputPath, InputPath),
     /// The layout the calibration file had (Reset goes back to it).
     loaded_layout: PlaneLayout,
+    /// The lenses the calibration file had (Reset lens goes back to them).
+    loaded_lenses: (CameraParams, CameraParams),
     sync_offset: i64,
     field_roi: Option<FieldRoi>,
+    /// The view stays inside the stitched picture ("stay inside").
+    constrained: bool,
     /// The calibration changed since it was loaded or saved.
     dirty: bool,
 }
@@ -184,6 +189,7 @@ impl PreviewSession {
         let (input_w, input_h) = playback.input_dimensions().ok_or(SessionError::NoFrame)?;
         check_first_frame(&playback, (input_w, input_h))?;
         let loaded_layout = calibration.layout.clone();
+        let loaded_lenses = (calibration.left.clone(), calibration.right.clone());
         let (sync_offset, field_roi) = (calibration.sync_offset, calibration.field_roi.clone());
         let renderer = build_renderer(gpu, calibration, (input_w, input_h), size, OUTPUT_FORMAT)?;
         let mut session = Self {
@@ -194,8 +200,10 @@ impl PreviewSession {
             recorder: None,
             inputs: (left.clone(), right.clone()),
             loaded_layout,
+            loaded_lenses,
             sync_offset,
             field_roi,
+            constrained: true,
             dirty: false,
         };
         session.clamp();
@@ -206,6 +214,30 @@ impl PreviewSession {
     pub fn pan(&mut self, dx_pt: f32, dy_pt: f32) {
         self.pose.apply_drag(dx_pt, dy_pt);
         self.clamp();
+    }
+
+    /// Aim the field of view at `degrees` (kept inside its range).
+    pub fn set_fov(&mut self, degrees: f32) {
+        self.pose.set_target_fov(degrees.clamp(FOV_MIN, FOV_MAX));
+        self.clamp();
+    }
+
+    /// The field of view the view is heading to, degrees.
+    pub fn target_fov(&self) -> f32 {
+        self.pose.target_pose().fov_degrees.unwrap_or(FOV_DEFAULT)
+    }
+
+    /// Keep the view inside the stitched picture, or let it go past the
+    /// edges ("stay inside").
+    pub fn set_constrained(&mut self, on: bool) {
+        self.constrained = on;
+        // Back inside at once, not at the next drag.
+        self.clamp();
+    }
+
+    /// Whether the view stays inside the picture.
+    pub fn constrained(&self) -> bool {
+        self.constrained
     }
 
     /// Change the FOV by `degrees` (negative zooms in).
@@ -287,6 +319,20 @@ impl PreviewSession {
             Tuning::AxisOffset(v) => self.edit_layout(|l| l.camera_axis_offset = v),
             Tuning::XTy(v) => self.edit_layout(|l| l.x_ty = v),
             Tuning::ResetLayout => self.renderer.update_layout(self.loaded_layout.clone()),
+            Tuning::LensCorrection(on) => self
+                .renderer
+                .pipeline_mut()
+                .set_lens_correction_amount(if on { 1.0 } else { 0.0 }),
+            Tuning::Lens { cameras, lens } => {
+                let calibration = self.renderer.calibration();
+                let left = cameras.left().then(|| lens.applied_to(&calibration.left));
+                let right = cameras.right().then(|| lens.applied_to(&calibration.right));
+                self.renderer.update_camera_params(left, right);
+            }
+            Tuning::ResetLens => {
+                let (left, right) = self.loaded_lenses.clone();
+                self.renderer.update_camera_params(Some(left), Some(right));
+            }
         }
         self.dirty = true;
         // A recording shows what the preview shows.
@@ -300,7 +346,8 @@ impl PreviewSession {
     /// What the Adjust panel shows.
     pub fn values(&self) -> CalibrationValues {
         let viewport = self.renderer.pipeline().viewport();
-        let layout = &self.renderer.calibration().layout;
+        let calibration = self.renderer.calibration();
+        let layout = &calibration.layout;
         CalibrationValues {
             blend: viewport.blend_width,
             color_match: viewport.color_match,
@@ -314,6 +361,12 @@ impl PreviewSession {
                 .field_roi
                 .as_ref()
                 .map_or(0, |r| r.left.len() + r.right.len()),
+            lens_correction: viewport.lens_correction_amount > 0.5,
+            left_lens: Lens::of(&calibration.left),
+            right_lens: Lens::of(&calibration.right),
+            lens_changed: Lens::of(&calibration.left) != Lens::of(&self.loaded_lenses.0)
+                || Lens::of(&calibration.right) != Lens::of(&self.loaded_lenses.1),
+            lens_size: (calibration.left.width, calibration.left.height),
             dirty: self.dirty,
             // The worker numbers its opens (`Worker::send_calibration`).
             opened: 0,
@@ -358,6 +411,7 @@ impl PreviewSession {
         out.blend_width = viewport.blend_width;
         out.rig_tilt = f64::from(viewport.rig_tilt);
         out.rig_roll = f64::from(viewport.rig_roll);
+        out.lens_correction_amount = viewport.lens_correction_amount;
         out.sync_offset = self.sync_offset;
         out.field_roi = self.field_roi.clone();
         out
@@ -441,14 +495,16 @@ impl PreviewSession {
             .map(|r| r.finish().map_err(SessionError::Record))
     }
 
-    /// Keep the pose inside the picture (constrained look, always on in
-    /// Module 1; the Adjust panel's switch arrives with Module 5).
+    /// Keep the pose inside the picture while the look is constrained
+    /// ("stay inside", on by default).
     fn clamp(&mut self) {
-        let (w, h) = self.size;
-        let aspect = w as f32 / h.max(1) as f32;
-        let rig_tilt = self.renderer.pipeline().viewport().rig_tilt;
-        self.pose
-            .clamp_via_coverage(self.renderer.coverage(), aspect, rig_tilt);
+        if self.constrained {
+            let (w, h) = self.size;
+            let aspect = w as f32 / h.max(1) as f32;
+            let rig_tilt = self.renderer.pipeline().viewport().rig_tilt;
+            self.pose
+                .clamp_via_coverage(self.renderer.coverage(), aspect, rig_tilt);
+        }
         // The coverage can narrow the FOV (at open too, before any
         // smoothing): the renderer always draws the pose's current FOV.
         if let Some(fov) = self.pose.current_pose().fov_degrees {
@@ -460,6 +516,7 @@ impl PreviewSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lens::{Cameras, Lens};
     use crate::preview::fixtures;
 
     /// One 60 Hz frame, reco-gui's smoothing step.
@@ -675,6 +732,102 @@ mod tests {
         assert!(!viewport.color_match);
         let values = session.values();
         assert!(values.dirty && values.blend == 0.3 && (values.tilt - 4.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn lens_changes_reach_the_renderer_and_reset_restores_them() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let loaded = session.values();
+        assert!(!loaded.lens_changed && loaded.left_lens.fx > 0.0);
+        let wider = Lens {
+            fx: loaded.left_lens.fx * 1.1,
+            ..loaded.left_lens
+        };
+        session.tune(Tuning::Lens {
+            cameras: Cameras::Left,
+            lens: wider,
+        });
+        let tuned = session.values();
+        assert_eq!(tuned.left_lens, wider);
+        assert_eq!(
+            tuned.right_lens, loaded.right_lens,
+            "the right camera is untouched"
+        );
+        assert!(tuned.lens_changed && tuned.dirty);
+        assert_eq!(
+            session.renderer.calibration().left.fx,
+            wider.fx,
+            "the renderer draws it"
+        );
+        session.tune(Tuning::Lens {
+            cameras: Cameras::Both,
+            lens: wider,
+        });
+        assert_eq!(session.values().right_lens, wider);
+        session.tune(Tuning::ResetLens);
+        let reset = session.values();
+        assert_eq!(
+            (reset.left_lens, reset.right_lens),
+            (loaded.left_lens, loaded.right_lens)
+        );
+        assert!(!reset.lens_changed);
+        assert_eq!(reset.lens_size, (loaded.lens_size.0, loaded.lens_size.1));
+        assert!(reset.lens_size.0 > 0);
+    }
+
+    #[test]
+    fn lens_correction_is_saved_with_the_calibration() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        assert!(session.values().lens_correction);
+        session.tune(Tuning::LensCorrection(false));
+        assert!(!session.values().lens_correction && session.values().dirty);
+        assert_eq!(session.calibration_to_save().lens_correction_amount, 0.0);
+        session.tune(Tuning::LensCorrection(true));
+        assert_eq!(session.calibration_to_save().lens_correction_amount, 1.0);
+    }
+
+    #[test]
+    fn the_field_of_view_follows_its_slider() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        // Free of the picture's edges, the slider's whole range.
+        session.set_constrained(false);
+        session.set_fov(60.0);
+        assert_eq!(session.target_fov(), 60.0);
+        session.set_fov(1.0);
+        assert_eq!(session.target_fov(), FOV_MIN, "kept inside its range");
+        session.set_fov(FOV_MAX);
+        // Staying inside narrows it to what the picture covers.
+        session.set_constrained(true);
+        assert!(session.target_fov() < FOV_MAX, "{}", session.target_fov());
+        assert!(
+            !session.values().dirty,
+            "a view change is not a calibration change"
+        );
+    }
+
+    #[test]
+    fn an_unconstrained_look_may_leave_the_picture() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        assert!(session.constrained());
+        session.pan(-5000.0, 0.0);
+        let kept = session.pose.target_pose().yaw.abs();
+        session.set_constrained(false);
+        session.pan(-5000.0, 0.0);
+        let free = session.pose.target_pose().yaw.abs();
+        assert!(free > kept + 0.1, "free {free} vs kept {kept}");
+        session.set_constrained(true);
+        assert!(
+            session.pose.target_pose().yaw.abs() <= kept + 1e-3,
+            "back inside at once"
+        );
     }
 
     #[test]

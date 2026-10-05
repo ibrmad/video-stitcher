@@ -106,6 +106,14 @@ pub enum PreviewCommand {
     },
     /// Back to the rest pose.
     ResetView,
+    /// Aim the field of view at this many degrees.
+    SetFov {
+        /// Degrees.
+        degrees: f32,
+    },
+    /// Keep the view inside the stitched picture (on by default) or let it
+    /// go past the edges.
+    StayInside(bool),
     /// Play or pause.
     TogglePlay,
     /// One frame forward or back.
@@ -206,6 +214,9 @@ pub enum PreviewEvent {
     /// The live calibration's values (after opening and after every
     /// change).
     Calibration(CalibrationValues),
+    /// The field of view the view is heading to, degrees (after a zoom, a
+    /// reset, the slider or "stay inside").
+    Fov(f32),
     /// The tuned calibration was written here.
     CalibrationSaved(PathBuf),
     /// It could not be written; why.
@@ -504,8 +515,22 @@ impl Worker {
                 }
             }
             PreviewCommand::Pan { dx, dy } => self.with_session(|s| s.pan(dx, dy)),
-            PreviewCommand::Zoom { degrees } => self.with_session(|s| s.zoom(degrees)),
-            PreviewCommand::ResetView => self.with_session(PreviewSession::reset_view),
+            PreviewCommand::Zoom { degrees } => {
+                self.with_session(|s| s.zoom(degrees));
+                self.send_fov();
+            }
+            PreviewCommand::ResetView => {
+                self.with_session(PreviewSession::reset_view);
+                self.send_fov();
+            }
+            PreviewCommand::SetFov { degrees } => {
+                self.with_session(|s| s.set_fov(degrees));
+                self.send_fov();
+            }
+            PreviewCommand::StayInside(on) => {
+                self.with_session(|s| s.set_constrained(on));
+                self.send_fov();
+            }
             PreviewCommand::TogglePlay => self.transport(|s| s.playback_mut().toggle().map(|_| ())),
             PreviewCommand::Step { forward } => self.transport(|s| {
                 let playback = s.playback_mut();
@@ -677,6 +702,13 @@ impl Worker {
                 ));
             });
         self.lanes_rx = probe.is_ok().then_some(rx);
+    }
+
+    /// Tell the UI where the field of view is heading.
+    fn send_fov(&self) {
+        if let Some(session) = self.session.as_ref() {
+            self.out.send(PreviewEvent::Fov(session.target_fov()));
+        }
     }
 
     /// Tell the UI the live calibration's values.
@@ -1528,6 +1560,35 @@ mod tests {
         assert!((calibration.blend_width - 0.2).abs() < 1e-6);
         assert_eq!(calibration.sync_offset, 12);
         assert!(!color_match);
+    }
+
+    #[test]
+    fn the_view_reports_its_field_of_view() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let fov = |worker: &PreviewWorker| match wait_for(worker, 5, |e| {
+            matches!(e, PreviewEvent::Fov(_))
+        }) {
+            Some(PreviewEvent::Fov(degrees)) => Some(degrees),
+            _ => None,
+        };
+        worker.send(PreviewCommand::StayInside(false));
+        assert!(
+            fov(&worker).is_some(),
+            "stay inside reports the field of view"
+        );
+        worker.send(PreviewCommand::SetFov { degrees: 90.0 });
+        assert_eq!(fov(&worker), Some(90.0));
+        worker.send(PreviewCommand::Zoom { degrees: -10.0 });
+        assert_eq!(fov(&worker), Some(80.0), "a zoom moves it");
+        worker.send(PreviewCommand::ResetView);
+        assert_eq!(
+            fov(&worker),
+            Some(super::super::session::FOV_DEFAULT),
+            "reset goes back"
+        );
     }
 
     #[test]

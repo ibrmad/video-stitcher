@@ -2,6 +2,8 @@
 //! one change at a time (`Tuning`), and everything the panel shows
 //! (`CalibrationValues`). Ranges are the Slint app's sliders.
 
+use crate::lens::{Cameras, Lens};
+
 /// Seam blend, as a share of the overlap.
 pub const BLEND_RANGE: (f32, f32) = (0.0, 0.3);
 /// Rig tilt in degrees.
@@ -34,6 +36,17 @@ pub enum Tuning {
     XTy(f64),
     /// Back to the layout the calibration file had.
     ResetLayout,
+    /// Lens correction on or off.
+    LensCorrection(bool),
+    /// A lens for one camera or both.
+    Lens {
+        /// Which cameras.
+        cameras: Cameras,
+        /// The lens.
+        lens: Lens,
+    },
+    /// Back to the lenses the calibration file had.
+    ResetLens,
 }
 
 impl Tuning {
@@ -48,7 +61,11 @@ impl Tuning {
                 Self::AxisOffset(v.clamp(AXIS_OFFSET_RANGE.0, AXIS_OFFSET_RANGE.1))
             }
             Self::XTy(v) => Self::XTy(v.clamp(X_TY_RANGE.0, X_TY_RANGE.1)),
-            other @ (Self::ColorMatch(_) | Self::ResetLayout) => other,
+            other @ (Self::ColorMatch(_)
+            | Self::ResetLayout
+            | Self::LensCorrection(_)
+            | Self::Lens { .. }
+            | Self::ResetLens) => other,
         }
     }
 }
@@ -75,6 +92,16 @@ pub struct CalibrationValues {
     pub sync_offset: i64,
     /// Points in the field outline, both cameras (0: none).
     pub roi_points: usize,
+    /// Lens correction.
+    pub lens_correction: bool,
+    /// The left camera's lens.
+    pub left_lens: Lens,
+    /// The right camera's lens.
+    pub right_lens: Lens,
+    /// The lenses differ from the calibration file's.
+    pub lens_changed: bool,
+    /// The size the lenses are modelled at (the fine-tune ranges).
+    pub lens_size: (u32, u32),
     /// Changed since it was loaded or saved.
     pub dirty: bool,
     /// Which open these values belong to (1 for the first): a UI takes
