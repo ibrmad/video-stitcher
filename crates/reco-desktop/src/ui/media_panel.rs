@@ -20,7 +20,7 @@ script_mod! {
         draw_icon +: {svg: crate_resource("self:resources/icons/plus.svg")}
     }
     // A camera's files, folded away under its row until asked for.
-    let CameraFold = FoldHeader{
+    let CameraFold = RecoFold{
         animator +: {active: {default: @off}}
         body: View{width: Fill height: Fit flow: Down}
     }
@@ -214,7 +214,7 @@ script_mod! {
                     }
                     // The pitch's outline in each camera, for AI tracking:
                     // drawn in the browser editor, pasted back here.
-                    field_outline := FoldHeader{
+                    field_outline := RecoFold{
                         animator +: {active: {default: @off}}
                         header: View{
                             width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}

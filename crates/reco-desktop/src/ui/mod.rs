@@ -4,6 +4,7 @@
 mod controls;
 mod export_sheet;
 pub mod file_list;
+mod fold;
 mod inspector;
 mod media_panel;
 pub mod panorama;
@@ -19,6 +20,7 @@ use makepad_widgets::*;
 /// Register every shell widget. Call after `makepad_widgets::widgets_mod`
 /// and before the app's own script module.
 pub fn script_mod(vm: &mut ScriptVm) {
+    fold::script_mod(vm);
     controls::script_mod(vm);
     file_list::script_mod(vm);
     toasts::script_mod(vm);

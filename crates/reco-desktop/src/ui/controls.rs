@@ -223,7 +223,7 @@ script_mod! {
     // A collapsible section: a full-width band with a chevron, a title and
     // an optional help mark, over rows. Open by default. Set
     // `header.title.text` and `header.help.text`.
-    mod.widgets.RecoSection = FoldHeader{
+    mod.widgets.RecoSection = RecoFold{
         header: SolidView{
             width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
             padding: Inset{left: theme.reco_pad right: theme.reco_pad}
@@ -244,13 +244,13 @@ script_mod! {
         }
     }
     // The "Advanced" tier inside a section, closed by default (Rule 9).
-    mod.widgets.RecoAdvanced = FoldHeader{
+    mod.widgets.RecoAdvanced = RecoFold{
         animator +: {active: {default: @off}}
         header: View{
             width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
             padding: Inset{left: theme.reco_pad right: theme.reco_pad}
             fold_button := mod.widgets.RecoChevron{animator +: {active: {default: @off}}}
-            mod.widgets.RecoSubdued{text: "Advanced"}
+            title := mod.widgets.RecoSubdued{text: "Advanced"}
         }
         body: View{width: Fill height: Fit flow: Down}
     }

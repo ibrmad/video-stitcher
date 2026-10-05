@@ -86,3 +86,18 @@ moving the pointer brought them back. It has not happened again in seven
 runs, cold or warm. If it returns, suspect the first draw of the modal's
 new draw list (shader or glyph work) leaving the frame without a
 follow-up redraw.
+
+## A closed fold's hidden rows take the pointer (Module 5, Makepad)
+
+Makepad's `FoldHeader` draws a closed body scrolled out of sight in a
+zero-height clip, but still hands it every event, and its hidden widgets
+win presses over the visible rows above the fold. In the Adjust panel the
+top-level sliders (Field of view, Seam blend) took no drag while the
+Advanced tier under them was closed; opening it made them work, closing it
+broke them again. Every fold since Module 0 had it; no check dragged a
+top-level slider. The app's `RecoFold` (ui/fold.rs) wraps `FoldHeader` and,
+while closed, passes pointer events only inside the fold's own area (its
+header). Hidden rows overlapping the header strip itself still get events
+there; none of them holds a control where a header has one. The ask: a
+closed fold gives its body no events (and draws none of it).
+
