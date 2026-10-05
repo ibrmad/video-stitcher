@@ -12,6 +12,7 @@ description = "Reco's app logic without a UI framework: the live preview session
 reco-core = { path = "../reco-core" }
 reco-io = { path = "../reco-io", features = ["ffmpeg", "config"] }
 reco-control = { path = "../reco-control" }
+reco-calibrate = { path = "../reco-calibrate", features = ["io"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 

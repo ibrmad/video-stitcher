@@ -37,3 +37,23 @@ pub fn other_size() -> Option<PathBuf> {
         None
     }
 }
+
+/// The 5.3K GoPro match pair and its calibration (`RECO_FIXTURE_REAL_DIR`,
+/// else `~/Downloads/match_recording`): real footage that calibrates.
+pub fn real_set() -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let base = std::env::var_os("RECO_FIXTURE_REAL_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("Downloads/match_recording"));
+    let set = (
+        base.join("left/GX010120.MP4"),
+        base.join("right/GX010092.MP4"),
+        base.join("left/GX010120_calibration.json"),
+    );
+    if set.0.exists() && set.1.exists() && set.2.exists() {
+        Some(set)
+    } else {
+        eprintln!("skipping: the real match pair was not found (set RECO_FIXTURE_REAL_DIR)");
+        None
+    }
+}
