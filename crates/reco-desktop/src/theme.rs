@@ -330,6 +330,7 @@ script_mod! {
         reco_label_width: 112.0
         reco_aspect_width: 72.0
         reco_progress_width: 400.0
+        reco_toast_width: 320.0
         reco_progress_thickness: 4.0
         reco_slider_track: 4.0
         reco_slider_knob: 5.0

@@ -19,12 +19,14 @@ mod session_view;
 mod shell_state;
 mod theme;
 mod time_ruler;
+mod toast_view;
 mod ui;
 
 use cli::{Args, LookPreview};
 use live::Live;
 use names::middle_ellipsis;
 use reco_app::settings::{self, DesktopSettings};
+use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
 use ui::panorama::RecoPanorama;
 use ui::time_panel::RecoTimeRuler;
@@ -184,6 +186,12 @@ pub struct App {
     /// What the app remembers between runs (desktop.json).
     #[rust]
     settings: DesktopSettings,
+    /// The notices on screen.
+    #[rust]
+    toasts: Toasts,
+    /// Fires when the next toast is due to leave.
+    #[rust]
+    toast_timer: Timer,
 }
 
 impl App {
@@ -498,6 +506,9 @@ impl MatchEvent for App {
         if let (Some(files), None) = (self.args.files.clone(), self.args.look_preview) {
             self.start_live(cx, files);
         }
+        if self.args.toast_demo && self.args.files.is_none() {
+            self.toast_demo(cx);
+        }
         self.apply_shell(cx);
     }
 
@@ -520,6 +531,7 @@ impl MatchEvent for App {
         }
         self.preview_actions(cx, actions);
         self.ruler_actions(cx, actions);
+        self.toast_actions(cx, actions);
     }
 }
 
@@ -556,6 +568,9 @@ impl AppMain for App {
             }
             Event::Signal => self.drain_preview(cx),
             _ => {}
+        }
+        if self.toast_timer.is_event(event).is_some() {
+            self.expire_toasts(cx);
         }
         self.match_event(cx, event);
         self.ui.handle_event(cx, event, &mut Scope::empty());

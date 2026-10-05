@@ -21,6 +21,8 @@ pub struct Args {
     /// The export range to tint on the ruler, from `--export-range START-END`
     /// in seconds (checks; Module 6's export dialog sets it).
     pub export_range: Option<(f64, f64)>,
+    /// Show sample toasts, `--toast-demo` (checks and design review).
+    pub toast_demo: bool,
 }
 
 /// Camera files and calibration to open at startup (the Slint app's
@@ -125,6 +127,8 @@ impl Args {
                 out.window_size = Some(parse_size(value.as_ref())?);
             } else if arg == "--preview-readback" {
                 out.preview_readback = true;
+            } else if arg == "--toast-demo" {
+                out.toast_demo = true;
             } else if let Some((_, value)) = flag_value(arg, &mut iter, &["--export-range"])? {
                 out.export_range = Some(parse_range(&value)?);
             } else if let Some((flag, value)) =
@@ -334,5 +338,11 @@ mod tests {
         );
         assert!(Args::parse(["--export-range=40-10"]).is_err());
         assert!(Args::parse(["--export-range=soon"]).is_err());
+    }
+
+    #[test]
+    fn toast_demo_flag() {
+        assert!(Args::parse(["--toast-demo"]).unwrap().toast_demo);
+        assert!(!Args::parse(Vec::<String>::new()).unwrap().toast_demo);
     }
 }

@@ -79,6 +79,11 @@ def seconds(clock):
         return None
 
 
+def save_shot(app, name):
+    """Save a screenshot without decoding it (decoding takes seconds)."""
+    shutil.copyfile(app.get("/g", scale=1.0)["png"], os.path.join(OUT, f"{name}.png"))
+
+
 def pick_aspect_4x3(app):
     """Choose 4:3 from the aspect dropdown with the keyboard."""
     app.click_id("aspect")
@@ -214,10 +219,49 @@ def check_ruler():
         expect(tinted[1] > plain[1] + 4, f"ruler: the export range is tinted ({tinted} vs {plain})")
 
 
+def title_rect(app, text):
+    """The rect of a toast title showing `text`, or None."""
+    for item in app.snap(text):
+        if item.get("t") == text and item.get("i") == "title":
+            return item["r"]
+    return None
+
+
+def check_toasts():
+    """At most four, newest at the bottom, inside the viewer; close and
+    expiry; the status line keeps its own text; a failed open raises one."""
+    with launch(extra=("--toast-demo",)) as app:
+        ready(app)
+        shown = [app.rect(f"toast_{i}") for i in range(4)]
+        save_shot(app, "toasts")
+        expect(all(shown), f"toasts: four show ({sum(1 for r in shown if r)})")
+        expect(title_rect(app, "Calibration saved") is None, "toasts: the oldest of five left first")
+        newest, older = title_rect(app, "Recording saved"), title_rect(app, "Couldn't open the videos")
+        expect(bool(newest and older and newest[1] > older[1]), "toasts: the newest is at the bottom")
+        x, y, w, h = app.rect("canvas")
+        inside = all(r and r[0] >= x and r[0] + r[2] <= x + w and r[1] + r[3] <= y + h for r in shown)
+        expect(inside, "toasts: inside the viewer, clear of the Adjust panel and the time panel")
+        expect(text_of(app, "status_text") == "Ready", f"toasts: the status line keeps its own text ({text_of(app, 'status_text')})")
+        close = app.rect("close")
+        if close:
+            app.get("/click", x=close[0] + close[2] / 2, y=close[1] + close[3] / 2, wait=1)
+        expect(close is not None, "toasts: a toast has a close button")
+        expect(title_rect(app, "Recording started") is None, "toasts: a close button dismisses its toast")
+        gone = wait_for(lambda: title_rect(app, "Recording saved") is None, 6)
+        expect(bool(gone), "toasts: an info toast leaves after about four seconds")
+        expect(title_rect(app, "Low calibration confidence") is not None, "toasts: a warning stays longer")
+        expect(app.errors() == [], "toasts: no errors in the app log")
+    _, right, cal = FAST
+    with launch(("/nonexistent/left.mp4", right, cal)) as app:
+        failed = wait_for(lambda: title_rect(app, "Couldn't open the videos"), 15)
+        expect(bool(failed), "toasts: a failed open raises an error toast")
+
+
 CHECKS = {
     "persist": check_persist,
     "transport": check_transport,
     "ruler": check_ruler,
+    "toasts": check_toasts,
 }
 
 

@@ -191,6 +191,10 @@ script_mod! {
                     }
                 }
             }
+
+            // Notices, bottom right: clear of the Adjust panel and the time
+            // panel (Module 2).
+            toasts := RecoToasts{}
         }
     }
 }

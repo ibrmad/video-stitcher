@@ -14,6 +14,7 @@ use reco_app::preview::view::PreviewAspect;
 use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
 };
+use reco_app::toasts::Severity;
 
 use crate::live::{self, Live};
 use crate::names::middle_ellipsis;
@@ -173,6 +174,9 @@ impl App {
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);
+        if self.args.toast_demo {
+            self.toast_demo(cx);
+        }
     }
 
     /// Opening failed: say so in the viewer, the worker's words split into
@@ -200,6 +204,7 @@ impl App {
             Step::Todo,
         );
         self.set_label(cx, ids!(status_text), &title);
+        self.toast(cx, Severity::Error, &title, &detail);
         self.ui.redraw(cx);
     }
 
@@ -207,11 +212,12 @@ impl App {
     /// picture and the panels stay, the status line says what happened.
     fn show_stopped(&mut self, cx: &mut Cx, message: &str) {
         error!("preview: {message}");
-        let (title, _) = live::failure_text(message);
+        let (title, detail) = live::failure_text(message);
         if let Some(live) = self.live.as_mut() {
             live.problem = Some(title.clone());
         }
         self.set_label(cx, ids!(status_text), &title);
+        self.toast(cx, Severity::Error, &title, &detail);
     }
 
     /// Show pause while playing, play otherwise. The SVG handle is swapped

@@ -8,6 +8,7 @@ pub mod panorama;
 pub mod preview;
 mod shell;
 pub mod time_panel;
+mod toasts;
 mod top_bar;
 mod viewer;
 
@@ -17,6 +18,7 @@ use makepad_widgets::*;
 /// and before the app's own script module.
 pub fn script_mod(vm: &mut ScriptVm) {
     controls::script_mod(vm);
+    toasts::script_mod(vm);
     panorama::script_mod(vm);
     preview::script_mod(vm);
     top_bar::script_mod(vm);
