@@ -40,6 +40,7 @@ use names::middle_ellipsis;
 use perf::DrawStats;
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
+use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
 use reco_app::roi::EditorJob;
 use reco_app::settings::{self, DesktopSettings};
@@ -236,6 +237,12 @@ pub struct App {
     /// Why the last calibration failed, until the next one or a file.
     #[rust]
     calibration_failure: Option<String>,
+    /// The last open whose values moved the Adjust panel's sliders, and
+    /// its values as loaded (Reset layout returns to them).
+    #[rust]
+    adopted_open: u64,
+    #[rust]
+    loaded_values: Option<CalibrationValues>,
     /// The field outline's browser editor, while it is being written.
     #[rust]
     outline_editor: Option<EditorJob>,

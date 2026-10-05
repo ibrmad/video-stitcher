@@ -84,13 +84,22 @@ impl App {
             values.axis_offset,
             values.x_ty,
         ];
-        for ((slider, label, _, show), value) in rows().into_iter().zip(numbers) {
-            self.ui.slider(cx, slider).set_value(cx, value);
-            self.set_label(cx, label, &show(value));
+        // The sliders lead for changes made with them: an echo still on its
+        // way would pull a knob back. They take the worker's values once per
+        // open, from the first values of a newer open.
+        if values.opened > self.adopted_open {
+            self.adopted_open = values.opened;
+            for ((slider, label, _, show), value) in rows().into_iter().zip(numbers) {
+                self.ui.slider(cx, slider).set_value(cx, value);
+                self.set_label(cx, label, &show(value));
+            }
+            self.ui.check_box(cx, ids!(match_colours)).set_active(
+                cx,
+                values.color_match,
+                Animate::No,
+            );
+            self.loaded_values = Some(values.clone());
         }
-        self.ui
-            .check_box(cx, ids!(match_colours))
-            .set_active(cx, values.color_match, Animate::No);
         let sync = self.ui.text_input(cx, ids!(sync_input));
         if !sync.key_focus(cx) {
             sync.set_text(cx, &values.sync_offset.to_string());
@@ -103,7 +112,8 @@ impl App {
     /// The Adjust panel's sliders, switch, Reset and Apply; Save.
     pub(crate) fn tune_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         for (slider, label, tuning, show) in rows() {
-            if let Some(value) = self.ui.slider(cx, slider).slided(actions) {
+            let slider = self.ui.slider(cx, slider);
+            if let Some(value) = slider.slided(actions).or(slider.end_slide(actions)) {
                 self.set_label(cx, label, &show(value));
                 self.send_preview(PreviewCommand::Tune(tuning(value)));
             }
@@ -112,6 +122,15 @@ impl App {
             self.send_preview(PreviewCommand::Tune(Tuning::ColorMatch(on)));
         }
         if self.ui.button(cx, ids!(reset_layout)).clicked(actions) {
+            // The layout sliders go back to the file's values here; the
+            // worker does the same to the picture.
+            if let Some(loaded) = self.loaded_values.clone() {
+                let layout = [loaded.intersect, loaded.axis_offset, loaded.x_ty];
+                for ((slider, label, _, show), value) in rows()[3..].iter().copied().zip(layout) {
+                    self.ui.slider(cx, slider).set_value(cx, value);
+                    self.set_label(cx, label, &show(value));
+                }
+            }
             self.send_preview(PreviewCommand::Tune(Tuning::ResetLayout));
         }
         let sync = self.ui.text_input(cx, ids!(sync_input));
