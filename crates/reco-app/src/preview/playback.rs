@@ -19,6 +19,17 @@ pub fn seek_target(current: u64, delta_frames: i64, total: u64) -> u64 {
     (current as i64 + delta_frames).clamp(0, total as i64 - 1) as u64
 }
 
+/// The frame a seek of `seconds` reaches from `from` (0-based) at `fps`,
+/// inside `total` frames when known. Seeks in a burst chain through this
+/// from the pending target, so they cost one seek.
+pub fn seek_goal(from: u64, seconds: f64, fps: f64, total: Option<u64>) -> u64 {
+    let delta = (seconds * fps).round() as i64;
+    match total {
+        Some(total) => seek_target(from, delta, total),
+        None => (from as i64 + delta).max(0) as u64,
+    }
+}
+
 /// Where playback stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayState {
@@ -134,17 +145,34 @@ impl Playback {
         self.seek_to(seek_target(current, (seconds * fps).round() as i64, total))
     }
 
+    /// Show `frame` (0-based), kept inside the videos (blocking: decodes).
+    pub fn seek_to_frame(&mut self, frame: u64) -> Result<(), SourceError> {
+        let frame = self
+            .total_frames
+            .map_or(frame, |total| frame.min(total.saturating_sub(1)));
+        self.seek_to(frame)
+    }
+
     fn seek_to(&mut self, frame: u64) -> Result<(), SourceError> {
         let Some(source) = self.source.as_mut() else {
             return Ok(());
         };
+        let before = self.frame_index;
         source.seek(frame)?;
         self.frame_index = frame;
         self.clock.reset();
         if self.state == PlayState::Finished {
             self.state = PlayState::Paused;
         }
-        self.step_forward()?;
+        if !self.step_forward()? {
+            // The engine reports a seek it could not make as the end of the
+            // stream: keep the frame on screen and say so.
+            self.frame_index = before;
+            self.state = PlayState::Paused;
+            return Err(SourceError::Read {
+                reason: format!("the videos end before frame {frame}"),
+            });
+        }
         Ok(())
     }
 
@@ -286,5 +314,49 @@ mod tests {
             "plays from the start again, not frame {}",
             playback.frame_index()
         );
+    }
+
+    #[test]
+    fn relative_seeks_accumulate() {
+        // Five presses of ] at 30 fps from the first frame: 25 s on.
+        let mut at = 0;
+        for _ in 0..5 {
+            at = seek_goal(at, 5.0, 30.0, Some(1800));
+        }
+        assert_eq!(at, 750);
+        assert_eq!(seek_goal(1790, 5.0, 30.0, Some(1800)), 1799);
+        assert_eq!(seek_goal(10, -5.0, 30.0, None), 0);
+    }
+
+    #[test]
+    fn seek_to_frame_shows_that_frame() {
+        let Some((left, right, _)) = crate::preview::fixtures::fast_set() else {
+            return;
+        };
+        let mut playback = Playback::new();
+        playback
+            .open(&InputPath::Single(left), &InputPath::Single(right), 0)
+            .unwrap();
+        playback.seek_to_frame(300).unwrap();
+        assert_eq!(playback.frame_index(), 301);
+        // Past the length: the last frame.
+        playback.seek_to_frame(99_999).unwrap();
+        assert_eq!(Some(playback.frame_index()), playback.total_frames());
+    }
+
+    #[test]
+    fn seek_past_the_end_is_an_error() {
+        let Some((left, right, _)) = crate::preview::fixtures::fast_set() else {
+            return;
+        };
+        let mut playback = Playback::new();
+        playback
+            .open(&InputPath::Single(left), &InputPath::Single(right), 0)
+            .unwrap();
+        let before = playback.frame_index();
+        // Past the real end, as a sync offset can make the engine's total.
+        assert!(playback.seek_to(99_999).is_err());
+        assert_eq!(playback.frame_index(), before, "the frame on screen stays");
+        assert_eq!(playback.state(), PlayState::Paused);
     }
 }

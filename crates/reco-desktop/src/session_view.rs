@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
+use reco_app::preview::playback::PlayState;
 use reco_app::preview::view::PreviewAspect;
 use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
@@ -67,7 +68,9 @@ impl App {
                 Some(PreviewEvent::Ready(info)) => self.show_live(cx, info),
                 Some(PreviewEvent::Failed(message)) => self.show_failed(cx, &message),
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
-                Some(PreviewEvent::Time { frame, playing }) => self.show_time(cx, frame, playing),
+                Some(PreviewEvent::Time { frame, state }) => {
+                    self.show_time(cx, frame, state == PlayState::Playing)
+                }
                 // The widget takes frames; nothing else is left.
                 Some(_) | None => {}
             }

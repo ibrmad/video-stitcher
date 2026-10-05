@@ -23,7 +23,7 @@ use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
 
 use super::metal;
-use super::playback::PlayState;
+use super::playback::{PlayState, seek_goal};
 use super::readback::read_bgra;
 use super::session::{OUTPUT_FORMAT, PreviewSession};
 use super::slots::{RING_SLOTS, SlotRing};
@@ -109,6 +109,15 @@ pub enum PreviewCommand {
         /// Seconds.
         seconds: f64,
     },
+    /// Show this frame (0-based). Seeks go by frame index, never by a
+    /// fraction of the length.
+    SeekTo {
+        /// The frame.
+        frame: u64,
+    },
+    /// Panic on the render thread (tests of the crash report).
+    #[cfg(test)]
+    Crash,
     /// Stop the worker.
     Quit,
 }
@@ -155,12 +164,12 @@ pub enum PreviewEvent {
         /// `width * height` pixels.
         data: Vec<u32>,
     },
-    /// The playhead moved or play started or stopped.
+    /// The playhead moved, or the play state changed.
     Time {
-        /// Frames taken so far.
+        /// Frames taken so far (the frame on screen is `frame - 1`).
         frame: u64,
-        /// Whether playing.
-        playing: bool,
+        /// Playing, paused or finished.
+        state: PlayState,
     },
 }
 
@@ -197,9 +206,24 @@ impl PreviewWorker {
             tx: event_tx,
             waker,
         };
+        let report = outbox.clone();
         std::thread::Builder::new()
             .name("reco-preview".into())
-            .spawn(move || Worker::new(config, outbox).run(command_rx))
+            .spawn(move || {
+                let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                    Worker::new(config, outbox).run(command_rx)
+                }));
+                if let Err(panic) = run {
+                    let reason = panic
+                        .downcast_ref::<&str>()
+                        .map(|s| s.to_string())
+                        .or_else(|| panic.downcast_ref::<String>().cloned())
+                        .unwrap_or_default();
+                    report.send(PreviewEvent::Stopped(format!(
+                        "The preview stopped unexpectedly: {reason}"
+                    )));
+                }
+            })
             .expect("spawn the preview thread");
         Self { commands, events }
     }
@@ -228,6 +252,7 @@ impl Drop for PreviewWorker {
     }
 }
 
+#[derive(Clone)]
 struct Outbox {
     tx: mpsc::Sender<PreviewEvent>,
     waker: Arc<dyn Fn() + Send + Sync>,
@@ -265,7 +290,9 @@ struct Worker {
     dirty: bool,
     /// The pose is still easing toward its target.
     easing: bool,
-    last_time: (u64, bool),
+    last_time: (u64, PlayState),
+    /// A seek waiting for the end of this batch of commands.
+    pending_seek: Option<u64>,
     /// The last failure reported since a frame was shown; not repeated.
     problem: Option<String>,
     /// When the pose last took a smoothing step.
@@ -287,7 +314,8 @@ impl Worker {
             generation: 0,
             dirty: false,
             easing: false,
-            last_time: (0, false),
+            last_time: (0, PlayState::Empty),
+            pending_seek: None,
             problem: None,
             last_step: Instant::now(),
             quit: false,
@@ -313,6 +341,9 @@ impl Worker {
             }
             while let Ok(c) = commands.try_recv() {
                 self.apply(c);
+            }
+            if let Some(frame) = self.pending_seek.take() {
+                self.transport(|s| s.playback_mut().seek_to_frame(frame));
             }
             let now = Instant::now();
             let dt = now
@@ -375,9 +406,23 @@ impl Worker {
                     playback.step_back()
                 }
             }),
+            PreviewCommand::SeekTo { frame } => self.pending_seek = Some(frame),
             PreviewCommand::SeekBy { seconds } => {
-                self.transport(|s| s.playback_mut().seek_by(seconds))
+                if let Some(s) = self.session.as_ref() {
+                    let playback = s.playback();
+                    let from = self
+                        .pending_seek
+                        .unwrap_or(playback.frame_index().saturating_sub(1));
+                    self.pending_seek = Some(seek_goal(
+                        from,
+                        seconds,
+                        playback.fps(),
+                        playback.total_frames(),
+                    ));
+                }
             }
+            #[cfg(test)]
+            PreviewCommand::Crash => panic!("a test crash"),
             PreviewCommand::Quit => self.quit = true,
         }
     }
@@ -484,15 +529,12 @@ impl Worker {
         };
         let moved = session.smooth(dt);
         self.easing = moved;
-        let time = (
-            session.playback().frame_index(),
-            session.playback().state() == PlayState::Playing,
-        );
+        let time = (session.playback().frame_index(), session.playback().state());
         if time != self.last_time {
             self.last_time = time;
             self.out.send(PreviewEvent::Time {
                 frame: time.0,
-                playing: time.1,
+                state: time.1,
             });
         }
         if advanced || moved || self.dirty {
@@ -743,7 +785,7 @@ mod tests {
         let moved = wait_for(
             &worker,
             10,
-            |e| matches!(e, PreviewEvent::Time { frame, playing: true } if *frame >= 10),
+            |e| matches!(e, PreviewEvent::Time { frame, state: PlayState::Playing } if *frame >= 10),
         );
         assert!(moved.is_some(), "playback did not reach frame 10");
     }
@@ -873,6 +915,47 @@ mod tests {
                 })
             ),
             "{second:?}"
+        );
+    }
+
+    #[test]
+    fn seek_burst_lands_on_the_sum() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let worker = readback_worker();
+        worker.send(PreviewCommand::Resize {
+            width: 320,
+            height: 180,
+        });
+        worker.send(PreviewCommand::Open {
+            left: InputPath::Single(left),
+            right: InputPath::Single(right),
+            calibration: cal,
+        });
+        assert!(wait_for(&worker, 30, |e| matches!(e, PreviewEvent::Ready(_))).is_some());
+        for _ in 0..5 {
+            worker.send(PreviewCommand::SeekBy { seconds: 5.0 });
+        }
+        let landed = wait_for(
+            &worker,
+            20,
+            |e| matches!(e, PreviewEvent::Time { frame, .. } if *frame >= 751),
+        );
+        assert!(
+            matches!(landed, Some(PreviewEvent::Time { frame: 751, .. })),
+            "{landed:?}"
+        );
+    }
+
+    #[test]
+    fn a_crash_is_reported() {
+        let worker = readback_worker();
+        worker.send(PreviewCommand::Crash);
+        let event = wait_for(&worker, 5, |e| matches!(e, PreviewEvent::Stopped(_)));
+        assert!(
+            matches!(&event, Some(PreviewEvent::Stopped(m)) if m.contains("stopped unexpectedly")),
+            "{event:?}"
         );
     }
 }
