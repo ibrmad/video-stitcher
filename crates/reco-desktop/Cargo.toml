@@ -17,3 +17,5 @@ path = "src/main.rs"
 # Pinned per DESIGN.md Rule 3. The widget families are opt-in; the core
 # has every widget Module 0 uses.
 makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c", default-features = false }
+reco-app = { path = "../reco-app" }
+reco-io = { path = "../reco-io" }

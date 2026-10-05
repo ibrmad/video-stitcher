@@ -10,6 +10,7 @@ pub use makepad_widgets;
 use makepad_widgets::*;
 
 mod cli;
+mod keys;
 mod names;
 mod shell_state;
 mod theme;

@@ -1,6 +1,10 @@
 //! Command-line options. Makepad reads its own flags (`--remote`,
 //! `--remote=PORT`, ...) from the same list, so unknown flags are ignored.
 
+use std::path::PathBuf;
+
+use reco_io::stitch_job::InputPath;
+
 /// Options this app reads from the command line.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Args {
@@ -10,6 +14,51 @@ pub struct Args {
     /// `--look-preview[=STATE]` (default `ready`). For design review until the
     /// engine drives these states (Modules 1-6).
     pub look_preview: Option<LookPreview>,
+    /// Camera files to open into the live preview.
+    pub files: Option<FileArgs>,
+    /// Read frames back instead of sharing textures (`--preview-readback`).
+    pub preview_readback: bool,
+}
+
+/// Camera files and calibration to open at startup (the Slint app's
+/// `RECO_AUTOLOAD`): `--left a.mp4[;b.mp4] --right … --calibration c.json`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileArgs {
+    /// The left camera's files, in order.
+    pub left: Vec<PathBuf>,
+    /// The right camera's files, in order.
+    pub right: Vec<PathBuf>,
+    /// The calibration JSON.
+    pub calibration: PathBuf,
+}
+
+impl FileArgs {
+    /// The left camera as one input (chained when it has several files).
+    pub fn left_input(&self) -> InputPath {
+        input(&self.left)
+    }
+
+    /// The right camera as one input.
+    pub fn right_input(&self) -> InputPath {
+        input(&self.right)
+    }
+}
+
+fn input(paths: &[PathBuf]) -> InputPath {
+    match paths {
+        [one] => InputPath::Single(one.clone()),
+        many => InputPath::Chained(many.to_vec()),
+    }
+}
+
+/// `a.mp4;b.mp4` → two paths (empty pieces dropped).
+fn split_paths(value: &str) -> Vec<PathBuf> {
+    value
+        .split(';')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 /// The app states `--look-preview` can show.
@@ -57,6 +106,7 @@ impl Args {
     {
         let mut out = Args::default();
         let mut iter = args.into_iter();
+        let (mut left, mut right, mut calibration) = (None, None, None);
         while let Some(arg) = iter.next() {
             let arg = arg.as_ref();
             if arg == "--look-preview" {
@@ -70,10 +120,71 @@ impl Args {
                     .next()
                     .ok_or("--window-size needs a value like 1280x820")?;
                 out.window_size = Some(parse_size(value.as_ref())?);
+            } else if arg == "--preview-readback" {
+                out.preview_readback = true;
+            } else if let Some((flag, value)) =
+                flag_value(arg, &mut iter, &["--left", "--right", "--calibration"])?
+            {
+                match flag {
+                    "--left" => left = Some(split_paths(&value)),
+                    "--right" => right = Some(split_paths(&value)),
+                    _ => calibration = Some(PathBuf::from(value)),
+                }
             }
         }
+        out.files = match (left, right, calibration) {
+            (None, None, None) => None,
+            (Some(left), Some(right), Some(calibration))
+                if !left.is_empty() && !right.is_empty() =>
+            {
+                Some(FileArgs {
+                    left,
+                    right,
+                    calibration,
+                })
+            }
+            (l, r, c) => {
+                let missing = [
+                    ("--left", l.is_none()),
+                    ("--right", r.is_none()),
+                    ("--calibration", c.is_none()),
+                ]
+                .into_iter()
+                .find(|(_, m)| *m)
+                .map_or("--left", |(f, _)| f);
+                return Err(format!(
+                    "{missing} is required with the other camera file flags"
+                ));
+            }
+        };
         Ok(out)
     }
+}
+
+/// If `arg` is one of `flags`, its value: from `--flag=value` or the next
+/// argument.
+fn flag_value<'a, I, S>(
+    arg: &str,
+    iter: &mut I,
+    flags: &[&'a str],
+) -> Result<Option<(&'a str, String)>, String>
+where
+    I: Iterator<Item = S>,
+    S: AsRef<str>,
+{
+    for flag in flags {
+        if let Some(value) = arg
+            .strip_prefix(flag)
+            .and_then(|rest| rest.strip_prefix('='))
+        {
+            return Ok(Some((flag, value.to_string())));
+        }
+        if arg == *flag {
+            let value = iter.next().ok_or_else(|| format!("{flag} needs a value"))?;
+            return Ok(Some((flag, value.as_ref().to_string())));
+        }
+    }
+    Ok(None)
 }
 
 /// Parse `WxH` (for example `1280x820`) into points.
@@ -137,6 +248,52 @@ mod tests {
     #[test]
     fn rejects_unknown_look_preview_state() {
         assert!(Args::parse(["--look-preview=party"]).is_err());
+    }
+
+    #[test]
+    fn parses_the_three_files() {
+        let a = Args::parse(
+            ["--left=a.mp4", "--right", "b.mp4", "--calibration=c.json"].map(String::from),
+        )
+        .unwrap();
+        let files = a.files.expect("files");
+        assert_eq!(files.left, vec![PathBuf::from("a.mp4")]);
+        assert_eq!(files.right, vec![PathBuf::from("b.mp4")]);
+        assert_eq!(files.calibration, PathBuf::from("c.json"));
+        assert!(matches!(files.left_input(), InputPath::Single(_)));
+    }
+
+    #[test]
+    fn chains_files_split_by_semicolons() {
+        let a = Args::parse(
+            [
+                "--left=a1.mp4;a2.mp4",
+                "--right=b.mp4",
+                "--calibration=c.json",
+            ]
+            .map(String::from),
+        )
+        .unwrap();
+        let files = a.files.unwrap();
+        assert_eq!(files.left.len(), 2);
+        assert!(matches!(files.left_input(), InputPath::Chained(v) if v.len() == 2));
+    }
+
+    #[test]
+    fn files_must_come_as_a_set() {
+        let err =
+            Args::parse(["--left=a.mp4", "--calibration=c.json"].map(String::from)).unwrap_err();
+        assert!(err.contains("--right"), "{err}");
+    }
+
+    #[test]
+    fn readback_flag() {
+        assert!(
+            Args::parse(["--preview-readback".to_string()])
+                .unwrap()
+                .preview_readback
+        );
+        assert!(!Args::parse(Vec::<String>::new()).unwrap().preview_readback);
     }
 
     #[test]
