@@ -68,6 +68,16 @@ fn slider_seconds(fraction: f64, length: f64) -> f64 {
     }
 }
 
+/// The time typed in a field showing `shown`: `None` when the text is
+/// still what the field showed (its whole seconds would cut a fraction off
+/// the end) or doesn't read as a time.
+fn typed_seconds(text: &str, shown: f64) -> Option<f64> {
+    if text.trim() == clock(shown) {
+        return None;
+    }
+    parse_clock(text)
+}
+
 impl App {
     /// The codecs, once probed.
     pub(crate) fn collect_codecs(&mut self, cx: &mut Cx) {
@@ -277,13 +287,12 @@ impl App {
         ] {
             let input = self.ui.text_input(cx, field);
             if input.returned(actions).is_some() || input.key_focus_lost(actions) {
-                if let (Some(seconds), Some(range)) =
-                    (parse_clock(&input.text()), self.export_range.as_mut())
-                {
-                    if start {
-                        range.set_start(seconds);
-                    } else {
-                        range.set_end(seconds);
+                if let Some(range) = self.export_range.as_mut() {
+                    let shown = if start { range.start() } else { range.end() };
+                    match typed_seconds(&input.text(), shown) {
+                        Some(seconds) if start => range.set_start(seconds),
+                        Some(seconds) => range.set_end(seconds),
+                        None => {}
                     }
                 }
                 // Also puts back a time that didn't read.
@@ -559,6 +568,14 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_field_left_unchanged_changes_nothing() {
+        assert_eq!(typed_seconds("1:00", 60.4), None, "still what it showed");
+        assert_eq!(typed_seconds(" 1:00 ", 60.4), None);
+        assert_eq!(typed_seconds("0:59", 60.4), Some(59.0));
+        assert_eq!(typed_seconds("soon", 60.4), None);
+    }
 
     #[test]
     fn range_sliders_give_whole_seconds_and_reach_the_end() {
