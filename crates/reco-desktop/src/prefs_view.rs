@@ -52,9 +52,9 @@ fn path_text(path: Option<&Path>) -> String {
 }
 
 impl App {
-    /// The codecs Preferences offers: this machine's, and the saved
-    /// `codec` even before the probe has answered (Save keeps what the
-    /// person chose).
+    /// The codecs Preferences offers: this machine's, and the `saved` ones
+    /// even before the probe has answered (Save keeps what the person
+    /// chose).
     fn prefs_codecs(&self, saved: &[&str]) -> Vec<String> {
         let mut codecs = self.codecs();
         for codec in saved {

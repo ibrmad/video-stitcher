@@ -1,5 +1,5 @@
-//! The app menu in the App: Preferences, Keyboard shortcuts, Report a bug,
-//! and this build's version.
+//! The app menu in the App (Preferences, Keyboard shortcuts, Report a bug,
+//! this build's version), the update check at start, and opening links.
 
 use std::time::Duration;
 
@@ -45,7 +45,7 @@ impl App {
             Some(id) if id == live_id!(preferences) => self.open_preferences(cx),
             Some(id) if id == live_id!(shortcuts) => self.open_shortcuts(cx),
             Some(id) if id == live_id!(report_bug) => self.open_bug_report(cx),
-            Some(id) => log!("app menu: {id} (not wired yet)"),
+            Some(id) => log!("app menu: no command for {id}"),
             None => {}
         }
         if self.ui.button(cx, ids!(shortcuts_website)).clicked(actions) {

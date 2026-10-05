@@ -670,13 +670,13 @@ impl MatchEvent for App {
             }
             self.refresh_recent(cx);
             self.project_changed(cx);
+            self.send_usage(cx, reco_app::telemetry::UsageEvent::AppOpen);
             self.check_for_update(cx);
         }
         if self.args.toast_demo && self.args.files.is_none() {
             self.toast_demo(cx);
         }
         self.apply_shell(cx);
-        self.send_usage(cx, reco_app::telemetry::UsageEvent::AppOpen);
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {

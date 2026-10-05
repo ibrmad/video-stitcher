@@ -133,6 +133,8 @@ impl App {
         let mut request = HttpRequest::new(telemetry::ENDPOINT.into(), HttpMethod::POST);
         request.set_header("Content-Type".into(), "application/json".into());
         request.set_body(body.into_bytes());
+        // The service answers with a status; nothing worth more than this.
+        request.set_max_response_body_bytes(64 << 10);
         let id = LiveId::unique();
         self.usage_requests.insert(id, event.name());
         cx.http_request(id, request);
