@@ -9,6 +9,7 @@ members = [
     "crates/reco-control",
     "crates/reco-detect",
     "crates/reco-gui",
+    "crates/reco-app",
     "crates/reco-desktop",
     "crates/reco-obs",
 ]
