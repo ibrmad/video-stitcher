@@ -9,13 +9,21 @@
 //! the live stitched preview, rendered by `reco-app`'s worker thread.
 
 pub use makepad_widgets;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 
+mod calibrate_view;
 mod cli;
+mod file_rows;
 mod keys;
 mod live;
 mod names;
 mod perf;
+mod project_view;
+mod recent_view;
 mod session_view;
 mod shell_state;
 mod theme;
@@ -23,10 +31,14 @@ mod time_ruler;
 mod toast_view;
 mod ui;
 
+use calibrate_view::Calibrating;
 use cli::{Args, LookPreview};
 use live::Live;
 use names::middle_ellipsis;
 use perf::DrawStats;
+use reco_app::calibrate::CalibrationJob;
+use reco_app::durations::DurationProbe;
+use reco_app::project::{Camera, Project, Stage};
 use reco_app::settings::{self, DesktopSettings};
 use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
@@ -130,7 +142,7 @@ fn app_menu_rows() -> Vec<MenuRow> {
 }
 
 /// Recently used camera pairs (Module 3 fills this from settings).
-fn recent_rows() -> Vec<MenuRow> {
+fn sample_recent_rows() -> Vec<MenuRow> {
     vec![
         MenuRow::new(live_id!(recent_1), "GX010120 + GX010092"),
         MenuRow::new(live_id!(recent_2), "GX010087 + GX010061"),
@@ -204,6 +216,23 @@ pub struct App {
     /// Draw times for `--perf-log`.
     #[rust]
     draw_stats: DrawStats,
+    /// Each camera's files and the calibration.
+    #[rust]
+    project: Project,
+    /// File lengths, measured off the UI thread (set at startup).
+    #[rust]
+    durations: Option<DurationProbe>,
+    /// The saved calibration last loaded by itself, so clearing it sticks.
+    #[rust]
+    offered_calibration: Option<PathBuf>,
+    /// A running calibration, and where it stands.
+    #[rust]
+    calibration_job: Option<CalibrationJob>,
+    #[rust]
+    calibrating: Option<Calibrating>,
+    /// Why the last calibration failed, until the next one or a file.
+    #[rust]
+    calibration_failure: Option<String>,
 }
 
 impl App {
@@ -227,8 +256,7 @@ impl App {
             .splitter(cx, ids!(inner_split))
             .set_collapse(cx, inspector);
         // Lanes once a camera has video, unless folded away.
-        let has_video =
-            self.preview.is_some() || self.live.as_ref().is_some_and(|l| l.info.is_some());
+        let has_video = self.preview.is_some() || self.project.stage() != Stage::NoVideos;
         self.set_visible(cx, ids!(lanes), has_video && !self.timeline_folded);
 
         let loaded = self.shell.files_loaded();
@@ -283,9 +311,11 @@ impl App {
         self.set_visible(cx, ids!(link_idle), !right);
         self.set_visible(cx, ids!(link_on), right);
         self.set_visible(cx, ids!(add_left), !left);
-        self.set_visible(cx, ids!(change_left), left);
+        self.set_visible(cx, ids!(more_left), left);
+        self.set_visible(cx, ids!(left_fold), left);
         self.set_visible(cx, ids!(add_right), !right);
-        self.set_visible(cx, ids!(change_right), right);
+        self.set_visible(cx, ids!(more_right), right);
+        self.set_visible(cx, ids!(right_fold), right);
         // An empty camera says nothing: its Add button is the message.
         let files = |has: bool, text| if has { text } else { "" };
         self.set_label(cx, ids!(left_files), files(left, "21 files · 1:45:00"));
@@ -509,20 +539,29 @@ impl MatchEvent for App {
         }
         self.settings = settings::load();
         self.apply_settings(cx);
+        self.show_calibration_defaults(cx);
         self.ui
             .menu_button(cx, ids!(app_menu))
             .set_rows(app_menu_rows());
         self.ui
             .menu_button(cx, ids!(recent_menu))
-            .set_rows(recent_rows());
+            .set_rows(sample_recent_rows());
         if let Some((w, h)) = self.args.window_size {
             self.ui
                 .window(cx, ids!(main_window))
                 .resize(cx, dvec2(w, h));
         }
-        self.show_state(cx, self.args.look_preview);
-        if let (Some(files), None) = (self.args.files.clone(), self.args.look_preview) {
-            self.start_live(cx, files);
+        if let Some(state) = self.args.look_preview {
+            self.show_state(cx, Some(state));
+        } else {
+            self.durations = Some(DurationProbe::new(Arc::new(SignalToUI::set_ui_signal)));
+            if let Some(files) = self.args.files.clone() {
+                self.project.set_files(Camera::Left, files.left);
+                self.project.set_files(Camera::Right, files.right);
+                self.project.calibration = Some(files.calibration);
+            }
+            self.refresh_recent(cx);
+            self.project_changed(cx);
         }
         if self.args.toast_demo && self.args.files.is_none() {
             self.toast_demo(cx);
@@ -551,6 +590,10 @@ impl MatchEvent for App {
         self.ruler_actions(cx, actions);
         self.toast_actions(cx, actions);
         self.record_actions(cx, actions);
+        self.project_actions(cx, actions);
+        self.calibration_actions(cx, actions);
+        self.recent_actions(cx, actions);
+        self.file_dialog_actions(cx, actions);
     }
 }
 
@@ -567,6 +610,8 @@ impl AppMain for App {
         match event {
             Event::KeyDown(_) => self.pointer_input = false,
             Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
+            Event::Drag(drag) => self.drag_files(drag),
+            Event::Drop(drop) => self.drop_files(cx, drop),
             Event::Shutdown => self.finish_recording_on_quit(),
             _ => {}
         }
@@ -586,7 +631,11 @@ impl AppMain for App {
             Event::MacosMenuCommand(item) if *item == live_id!(toggle_timeline_menu) => {
                 self.toggle_timeline(cx);
             }
-            Event::Signal => self.drain_preview(cx),
+            Event::Signal => {
+                self.drain_preview(cx);
+                self.collect_durations(cx);
+                self.drain_calibration(cx);
+            }
             _ => {}
         }
         if self.toast_timer.is_event(event).is_some() {

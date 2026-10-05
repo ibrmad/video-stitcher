@@ -2,6 +2,7 @@
 //! registers its widgets under `mod.widgets.Reco*`.
 
 mod controls;
+pub mod file_list;
 mod inspector;
 mod media_panel;
 pub mod panorama;
@@ -18,6 +19,7 @@ use makepad_widgets::*;
 /// and before the app's own script module.
 pub fn script_mod(vm: &mut ScriptVm) {
     controls::script_mod(vm);
+    file_list::script_mod(vm);
     toasts::script_mod(vm);
     panorama::script_mod(vm);
     preview::script_mod(vm);

@@ -22,11 +22,10 @@ use reco_app::recording::{
 use reco_app::toasts::Severity;
 
 use crate::live::{self, Live};
-use crate::names::middle_ellipsis;
 use crate::time_ruler;
 use crate::ui::preview::{PreviewAction, RecoPreview};
 use crate::ui::time_panel::{RecoTimeRuler, RulerAction};
-use crate::{cli, display_device, App, Step, PROJECT_NAME_CHARS};
+use crate::{cli, display_device, App, Step};
 
 impl App {
     /// Start the render worker on the files from the command line.
@@ -83,7 +82,7 @@ impl App {
     }
 
     /// "Opening the videos…" while the worker opens them.
-    fn show_opening(&mut self, cx: &mut Cx) {
+    pub(crate) fn show_opening(&mut self, cx: &mut Cx) {
         let (left, right) = self
             .live
             .as_ref()
@@ -134,48 +133,12 @@ impl App {
         );
         live.info = Some(info.clone());
         let status = live.status();
-        let (left, right) = live::names(&live.files);
-        let counts = (live.files.left.len(), live.files.right.len());
-        let calibration = live
-            .files
-            .calibration
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
         self.shell.set_files_loaded(true);
         self.set_visible(cx, ids!(empty_state), false);
         self.set_visible(cx, ids!(sample_frame), false);
         self.set_visible(cx, ids!(preview), true);
-        for (on, idle) in [
-            (ids!(left_badge_on), ids!(left_badge)),
-            (ids!(right_badge_on), ids!(right_badge)),
-            (ids!(lane_left_badge_on), ids!(lane_left_badge)),
-            (ids!(lane_right_badge_on), ids!(lane_right_badge)),
-            (ids!(link_on), ids!(link_idle)),
-            (ids!(change_left), ids!(add_left)),
-            (ids!(change_right), ids!(add_right)),
-            (ids!(recalibrate), ids!(auto_calibrate)),
-        ] {
-            self.set_visible(cx, on, true);
-            self.set_visible(cx, idle, false);
-        }
-        for (dot, on) in [
-            (ids!(cal_dot_idle), false),
-            (ids!(cal_dot_busy), false),
-            (ids!(cal_dot_ok), true),
-            (ids!(cal_dot_error), false),
-        ] {
-            self.set_visible(cx, dot, on);
-        }
-        self.set_label(cx, ids!(left_files), &live::file_count(counts.0));
-        self.set_label(cx, ids!(right_files), &live::file_count(counts.1));
-        self.set_label(cx, ids!(calibration_status), "Calibrated");
-        self.set_label(cx, ids!(calibration_detail), &calibration);
-        self.set_label(
-            cx,
-            ids!(project_name),
-            &middle_ellipsis(&format!("{left} + {right}"), PROJECT_NAME_CHARS),
-        );
+        self.show_project(cx);
+        self.remember_session(cx);
         self.set_visible(cx, ids!(time_display), true);
         self.set_label(
             cx,
@@ -194,6 +157,7 @@ impl App {
     /// a title and its detail, back at the first step.
     fn show_failed(&mut self, cx: &mut Cx, message: &str) {
         let (title, detail) = live::failure_text(message);
+        self.show_project(cx);
         self.set_visible(cx, ids!(preview), false);
         self.set_visible(cx, ids!(empty_state), true);
         self.set_visible(cx, ids!(next_actions), false);
@@ -440,6 +404,7 @@ impl App {
             0.0
         };
         let status = live.status();
+        let status = self.calibration_status().unwrap_or(status);
         let scrubbing = self
             .ui
             .widget(cx, ids!(timeline))

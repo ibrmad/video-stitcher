@@ -233,6 +233,9 @@ script_mod! {
         reco_bar: #x171717
         reco_band: #x212121
         reco_hover: #x272626
+        // A selected list row: the accent at 15% (selection is green, as
+        // Rerun's is blue).
+        reco_selection_fill: #x34d39926
         reco_widget: #x2c2b2b
         reco_stroke: #x525151
         reco_separator: #x272626
@@ -324,7 +327,13 @@ script_mod! {
         reco_glyph_inset: 1.5
         reco_icon_tiny: 10.0
         reco_chevron: 12.0
+        // The chevron's drawing inside its box, stroke included: a trailing
+        // chevron's ink lines up with the content edge by the difference.
+        reco_chevron_ink: 7.25
         reco_badge: 16.0
+        // A file row's name sits under its camera's name: the row's pad, the
+        // badge and the gap after it.
+        reco_file_indent: 36.0
         reco_badge_radius: 8.0
         reco_dot: 6.0
         reco_dot_radius: 3.0

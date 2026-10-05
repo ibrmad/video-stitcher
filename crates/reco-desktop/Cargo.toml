@@ -19,3 +19,4 @@ path = "src/main.rs"
 makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c", default-features = false }
 reco-app = { path = "../reco-app" }
 reco-io = { path = "../reco-io" }
+serde_json = "1"

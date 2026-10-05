@@ -9,16 +9,24 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    // A camera with no videos offers Add; one with videos offers Change,
-    // which picks that camera's files again.
+    // A camera with no videos offers Add; one with videos offers More,
+    // which adds videos after the ones it has.
     let AddButton = RecoButton{
         text: "Add…"
         draw_icon +: {svg: crate_resource("self:resources/icons/plus.svg")}
     }
-    let ChangeButton = RecoRowIcon{
+    let MoreButton = RecoRowIcon{
         visible: false
-        draw_icon +: {svg: crate_resource("self:resources/icons/folder.svg")}
+        draw_icon +: {svg: crate_resource("self:resources/icons/plus.svg")}
     }
+    // A camera's files, folded away under its row until asked for.
+    let CameraFold = FoldHeader{
+        animator +: {active: {default: @off}}
+        body: View{width: Fill height: Fit flow: Down}
+    }
+    // A property row's value and switch, as in the Adjust panel.
+    let Value = RecoText{width: theme.reco_value_width align: Align{x: 1.0}}
+    let Check = RecoCheckBox{margin: Inset{left: theme.reco_slider_knob}}
     // The camera's file count and length, right-aligned into a column.
     let CameraFiles = RecoMeta{align: Align{x: 1.0}}
     // The join between the two cameras, centred under the badges: lit once
@@ -52,26 +60,64 @@ script_mod! {
                     help +: {text: "Add all the GoPro files from each camera. Reco plays a camera's files in order as one video."}
                 }
                 body +: {
-                    left_row := RecoRow{
-                        left_badge := RecoBadge{label.text: "L"}
-                        left_badge_on := RecoBadgeOn{visible: false label.text: "L"}
-                        RecoText{text: "Left camera"}
-                        left_files := CameraFiles{text: "No video yet"}
-                        add_left := AddButton{}
-                        Tip{text: "Change the left camera's videos"
-                            change_left := ChangeButton{}
+                    left_camera := CameraFold{
+                        header: RecoRow{
+                            left_badge := RecoBadge{label.text: "L"}
+                            left_badge_on := RecoBadgeOn{visible: false label.text: "L"}
+                            RecoText{text: "Left camera"}
+                            left_files := CameraFiles{text: "No video yet"}
+                            add_left := AddButton{}
+                            Tip{text: "Add more videos to the left camera"
+                                more_left := MoreButton{}
+                            }
+                            Tip{text: "Show the left camera's files"
+                                left_fold := View{
+                                    visible: false width: Fit height: Fit
+                                    margin: Inset{right: (theme.reco_chevron - theme.reco_chevron_ink) * -0.5}
+                                    fold_button := RecoChevron{animator +: {active: {default: @off}}}
+                                }
+                            }
+                        }
+                        body: View{
+                            width: Fill height: Fit flow: Down
+                            left_list := RecoFileList{}
+                            View{
+                                width: Fill height: Fit
+                                // The button's label starts under the file names.
+                                padding: Inset{left: theme.reco_file_indent - theme.reco_button_pad_x right: theme.reco_pad bottom: theme.reco_gap_s}
+                                clear_left := RecoFlatButton{text: "Remove all"}
+                            }
                         }
                     }
                     link_idle := Link{draw_bg.color: theme.reco_stroke}
                     link_on := Link{visible: false draw_bg.color: theme.reco_seam}
-                    right_row := RecoRow{
-                        right_badge := RecoBadge{label.text: "R"}
-                        right_badge_on := RecoBadgeOn{visible: false label.text: "R"}
-                        RecoText{text: "Right camera"}
-                        right_files := CameraFiles{text: "No video yet"}
-                        add_right := AddButton{}
-                        Tip{text: "Change the right camera's videos"
-                            change_right := ChangeButton{}
+                    right_camera := CameraFold{
+                        header: RecoRow{
+                            right_badge := RecoBadge{label.text: "R"}
+                            right_badge_on := RecoBadgeOn{visible: false label.text: "R"}
+                            RecoText{text: "Right camera"}
+                            right_files := CameraFiles{text: "No video yet"}
+                            add_right := AddButton{}
+                            Tip{text: "Add more videos to the right camera"
+                                more_right := MoreButton{}
+                            }
+                            Tip{text: "Show the right camera's files"
+                                right_fold := View{
+                                    visible: false width: Fit height: Fit
+                                    margin: Inset{right: (theme.reco_chevron - theme.reco_chevron_ink) * -0.5}
+                                    fold_button := RecoChevron{animator +: {active: {default: @off}}}
+                                }
+                            }
+                        }
+                        body: View{
+                            width: Fill height: Fit flow: Down
+                            right_list := RecoFileList{}
+                            View{
+                                width: Fill height: Fit
+                                // The button's label starts under the file names.
+                                padding: Inset{left: theme.reco_file_indent - theme.reco_button_pad_x right: theme.reco_pad bottom: theme.reco_gap_s}
+                                clear_right := RecoFlatButton{text: "Remove all"}
+                            }
                         }
                     }
                 }
@@ -91,10 +137,18 @@ script_mod! {
                         calibration_status := RecoText{text: "Not calibrated"}
                     }
                     // The detail sits under the status words, after the dot.
+                    // With a calibration file it names the file, with a
+                    // button to remove it.
                     View{
-                        width: Fill height: Fit
+                        width: Fill height: Fit flow: Right spacing: theme.reco_gap align: Align{y: 0.5}
                         padding: Inset{left: theme.reco_pad + theme.reco_dot + theme.reco_gap right: theme.reco_pad bottom: theme.reco_gap_s}
                         calibration_detail := RecoSubdued{width: Fill text: "Add both cameras first"}
+                        Tip{text: "Remove the calibration"
+                            clear_calibration := RecoRowIcon{
+                                visible: false
+                                draw_icon +: {svg: crate_resource("self:resources/icons/close.svg")}
+                            }
+                        }
                     }
                     RecoRow{
                         spacing: theme.reco_gap_s
@@ -105,7 +159,55 @@ script_mod! {
                             text: "Auto-calibrate"
                         }
                         recalibrate := RecoButton{visible: false text: "Recalibrate"}
+                        cancel_calibration := RecoButton{visible: false text: "Cancel"}
                         load_calibration := RecoButton{text: "Load file…"}
+                    }
+                    // How auto-calibrate works; locked while it runs.
+                    calibration_advanced := RecoAdvanced{
+                        body +: {
+                            RecoRow{
+                                Tip{text: "Frame pairs to match: more is slower and steadier."
+                                    RecoLabelCell{RecoSubdued{text: "Frames"}}
+                                }
+                                cal_frames := RecoDropDown{
+                                    width: theme.reco_quality_width labels: ["2" "4" "6" "8"]
+                                }
+                            }
+                            RecoRow{
+                                Tip{text: "Start from the cameras' motion sensors (GoPro)."
+                                    RecoLabelCell{RecoSubdued{text: "IMU seeds"}}
+                                }
+                                cal_imu := Check{text: ""}
+                            }
+                            RecoRow{
+                                Tip{text: "How strong a feature must be to count: lower finds more."
+                                    RecoLabelCell{RecoSubdued{text: "AKAZE threshold"}}
+                                }
+                                cal_akaze := RecoSlider{min: 0.00005 max: 0.005 default: 0.0001}
+                                cal_akaze_value := Value{text: "0.0001"}
+                            }
+                            RecoRow{
+                                Tip{text: "Ignore features above this line (a share of the height)."
+                                    RecoLabelCell{RecoSubdued{text: "Detect from"}}
+                                }
+                                cal_y_min := RecoSlider{min: 0.0 max: 0.5 default: 0.05}
+                                cal_y_min_value := Value{text: "0.05"}
+                            }
+                            RecoRow{
+                                Tip{text: "Ignore features below this line (a share of the height)."
+                                    RecoLabelCell{RecoSubdued{text: "Detect to"}}
+                                }
+                                cal_y_max := RecoSlider{min: 0.5 max: 1.0 default: 0.95}
+                                cal_y_max_value := Value{text: "0.95"}
+                            }
+                            RecoRow{
+                                Tip{text: "Seconds to leave out at the end of the videos."
+                                    RecoLabelCell{RecoSubdued{text: "Skip end"}}
+                                }
+                                cal_skip_end := RecoSlider{min: 0.0 max: 60.0 default: 0.0}
+                                cal_skip_end_value := Value{text: "0 s"}
+                            }
+                        }
                     }
                 }
             }

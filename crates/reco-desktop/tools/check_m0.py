@@ -74,9 +74,11 @@ def shown(state):
         "calibrate_progress": state == "calibrating",
         "export_card": state == "exporting",
         "add_left": not left,
-        "change_left": left,
+        "more_left": left,
+        "left_fold": left,
         "add_right": not right,
-        "change_right": right,
+        "more_right": right,
+        "right_fold": right,
         "link_idle": not right,
         "link_on": right,
         # The time panel shows lanes once a camera has video, and the time
@@ -318,7 +320,7 @@ def check_state(size, state):
             check_icon_right(app, png, scale, app.rect("recent_menu"), right, PANEL, "Recent files icon", name)
             check_icon_right(app, png, scale, (cx, cy, cw, 24), right, BAND, "Cameras help icon", name)
             if state:
-                check_icon_right(app, png, scale, app.rect("change_left"), right, PANEL, "Change icon", name)
+                check_icon_right(app, png, scale, app.rect("left_fold"), right, PANEL, "Files chevron", name)
             sx, sy, sw, sh = app.rect("step_back")
             ink = ink_left(png, scale, (0, sy + 2, sx + sw, sy + sh - 2), PANEL)
             expect(ink is not None and PAD - 1 <= ink <= PAD + 2,

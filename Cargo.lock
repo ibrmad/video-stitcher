@@ -6089,6 +6089,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "metal 0.33.0",
+ "reco-calibrate",
  "reco-control",
  "reco-core",
  "reco-io",
@@ -6209,6 +6210,7 @@ dependencies = [
  "makepad-widgets",
  "reco-app",
  "reco-io",
+ "serde_json",
 ]
 
 [[package]]

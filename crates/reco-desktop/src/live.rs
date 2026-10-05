@@ -11,11 +11,14 @@ use reco_app::preview::worker::{PreviewInfo, PreviewWorker};
 use crate::cli::FileArgs;
 use crate::time_ruler::clock;
 
-/// One open live preview.
+/// The live preview: the render thread, and what it has open.
 pub struct Live {
-    /// The render thread.
+    /// The render thread. It stays for the app's life once started, so its
+    /// texture ring outlives any picture on screen.
     pub worker: PreviewWorker,
-    /// The files it opened.
+    /// Whether videos are open (`files`); false after `close`.
+    pub open: bool,
+    /// The files it opened last.
     pub files: FileArgs,
     /// What it plays, once open.
     pub info: Option<PreviewInfo>,
@@ -44,6 +47,7 @@ impl Live {
     pub fn new(worker: PreviewWorker, files: FileArgs) -> Self {
         Self {
             worker,
+            open: true,
             files,
             info: None,
             frame: 0,
@@ -56,6 +60,31 @@ impl Live {
             recording: None,
             last_output: None,
         }
+    }
+
+    /// New files are opening: forget the last session.
+    pub fn reopen(&mut self, files: FileArgs) {
+        self.open = true;
+        self.files = files;
+        self.forget();
+    }
+
+    /// The videos were closed.
+    pub fn close(&mut self) {
+        self.open = false;
+        self.forget();
+    }
+
+    fn forget(&mut self) {
+        self.info = None;
+        self.frame = 0;
+        self.state = PlayState::Paused;
+        self.played = false;
+        self.fps.reset();
+        self.fps_reading = None;
+        self.problem = None;
+        self.lanes = None;
+        self.recording = None;
     }
 
     /// The status line for this session.

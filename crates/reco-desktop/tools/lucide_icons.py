@@ -29,7 +29,6 @@ ICONS = {
     "chevron_down": ("chevron-down", False),
     "close": ("x", False),
     "export_video": ("square-play", False),
-    "folder": ("folder", False),
     "help": ("circle-question-mark", False),
     "history": ("history", False),
     "panel_bottom": ("panel-bottom", False),
