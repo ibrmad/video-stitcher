@@ -32,7 +32,7 @@ pub struct ExportOptions {
     pub codec: String,
     /// "fast", "balanced" or "high".
     pub quality: String,
-    /// Start and end on the stitched timeline, seconds (`checked_range`).
+    /// Start and end on the stitched timeline, seconds (an `ExportRange`).
     pub range: (f64, f64),
     /// The source frame rate, for the progress total.
     pub fps: f64,
@@ -140,19 +140,112 @@ fn is_empty_range(start: f64, end: f64) -> bool {
     start.partial_cmp(&end) != Some(std::cmp::Ordering::Less)
 }
 
-/// The range to export inside `length` seconds: an end of 0 means the end;
-/// both are kept inside the videos. An empty range is refused.
-pub fn checked_range(range: (f64, f64), length: f64) -> Result<(f64, f64), String> {
-    let end = if range.1 > 0.0 {
-        range.1.min(length)
-    } else {
-        length
-    };
-    let start = range.0.max(0.0);
-    if is_empty_range(start, end) {
-        return Err(EMPTY_RANGE.into());
+/// The part of the match an export covers, in seconds on the stitched
+/// timeline, kept inside the videos: the start never passes the end.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExportRange {
+    start: f64,
+    end: f64,
+    length: f64,
+}
+
+impl ExportRange {
+    /// All of a `length`-second match.
+    pub fn whole(length: f64) -> Self {
+        let length = if length.is_finite() {
+            length.max(0.0)
+        } else {
+            0.0
+        };
+        Self {
+            start: 0.0,
+            end: length,
+            length,
+        }
     }
-    Ok((start, end))
+
+    /// `start` to `end` inside `length`; an end of 0 means the end.
+    pub fn new(start: f64, end: f64, length: f64) -> Self {
+        let mut range = Self::whole(length);
+        if end > 0.0 {
+            range.set_end(end);
+        }
+        range.set_start(start);
+        range
+    }
+
+    /// Where it starts.
+    pub fn start(&self) -> f64 {
+        self.start
+    }
+
+    /// Where it ends.
+    pub fn end(&self) -> f64 {
+        self.end
+    }
+
+    /// The match's length.
+    pub fn length(&self) -> f64 {
+        self.length
+    }
+
+    /// Move the start, no later than the end (a non-number is ignored).
+    pub fn set_start(&mut self, seconds: f64) {
+        if seconds.is_finite() {
+            self.start = seconds.clamp(0.0, self.end);
+        }
+    }
+
+    /// Move the end, no earlier than the start and no later than the match
+    /// (a non-number is ignored).
+    pub fn set_end(&mut self, seconds: f64) {
+        if seconds.is_finite() {
+            self.end = seconds.clamp(self.start, self.length);
+        }
+    }
+
+    /// How long it is.
+    pub fn duration(&self) -> f64 {
+        self.end - self.start
+    }
+
+    /// Whether nothing lies inside it.
+    pub fn is_empty(&self) -> bool {
+        is_empty_range(self.start, self.end)
+    }
+
+    /// Whether it covers the whole match.
+    pub fn is_whole(&self) -> bool {
+        self.start == 0.0 && self.end == self.length
+    }
+
+    /// Start and end as fractions of the length (for sliders).
+    pub fn fractions(&self) -> (f64, f64) {
+        if self.length > 0.0 {
+            (self.start / self.length, self.end / self.length)
+        } else {
+            (0.0, 0.0)
+        }
+    }
+}
+
+/// The qualities, as settings and `ExportOptions` name them.
+pub const QUALITIES: [&str; 3] = ["fast", "balanced", "high"];
+
+/// The index in `RESOLUTIONS` of the size named `name` (1080p when unknown).
+pub fn size_index(name: &str) -> usize {
+    RESOLUTIONS
+        .iter()
+        .position(|(n, _, _)| *n == name)
+        .unwrap_or(0)
+}
+
+/// A codec's name on screen: "H.264", "HEVC" or "AV1".
+pub fn codec_label(code: &str) -> String {
+    match code {
+        "h264" => "H.264".into(),
+        other => other.to_uppercase(),
+    }
 }
 
 /// The codecs this machine can encode ("h264", "hevc", "av1"); h264 when
@@ -442,10 +535,58 @@ mod tests {
 
     #[test]
     fn the_range_stays_inside_the_videos() {
-        assert_eq!(checked_range((0.0, 0.0), 60.0), Ok((0.0, 60.0)));
-        assert_eq!(checked_range((50.0, 70.0), 60.0), Ok((50.0, 60.0)));
-        assert!(checked_range((10.0, 10.0), 60.0).is_err());
-        assert!(checked_range((70.0, 0.0), 60.0).is_err());
+        let whole = ExportRange::whole(60.0);
+        assert_eq!((whole.start(), whole.end()), (0.0, 60.0));
+        assert!(whole.is_whole() && !whole.is_empty());
+        let r = ExportRange::new(50.0, 70.0, 60.0);
+        assert_eq!(
+            (r.start(), r.end()),
+            (50.0, 60.0),
+            "the end stops at the match's"
+        );
+        let r = ExportRange::new(10.0, 0.0, 60.0);
+        assert_eq!((r.start(), r.end()), (10.0, 60.0), "an end of 0 is the end");
+        assert!(ExportRange::new(70.0, 0.0, 60.0).is_empty());
+    }
+
+    #[test]
+    fn the_start_never_passes_the_end() {
+        let mut r = ExportRange::whole(60.0);
+        r.set_end(20.0);
+        r.set_start(30.0);
+        assert_eq!((r.start(), r.end()), (20.0, 20.0));
+        assert!(r.is_empty() && r.duration() == 0.0);
+        r.set_start(-5.0);
+        r.set_end(90.0);
+        assert_eq!((r.start(), r.end()), (0.0, 60.0));
+        r.set_start(15.0);
+        r.set_end(5.0);
+        assert_eq!(
+            (r.start(), r.end()),
+            (15.0, 15.0),
+            "the end stops at the start"
+        );
+        r.set_end(f64::NAN);
+        r.set_start(f64::INFINITY);
+        assert_eq!(
+            (r.start(), r.end()),
+            (15.0, 15.0),
+            "non-numbers change nothing"
+        );
+        r.set_end(45.0);
+        assert_eq!(r.fractions(), (0.25, 0.75));
+        assert!(!r.is_whole());
+        assert_eq!(ExportRange::whole(0.0).fractions(), (0.0, 0.0));
+    }
+
+    #[test]
+    fn sizes_and_codecs_have_names() {
+        assert_eq!(size_index("4K"), 3);
+        assert_eq!(size_index("720p"), 1);
+        assert_eq!(size_index("8K"), 0, "unknown sizes are 1080p");
+        assert_eq!(codec_label("h264"), "H.264");
+        assert_eq!(codec_label("hevc"), "HEVC");
+        assert_eq!(codec_label("av1"), "AV1");
     }
 
     #[test]

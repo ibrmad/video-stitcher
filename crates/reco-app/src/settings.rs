@@ -25,6 +25,16 @@ pub struct DesktopSettings {
     pub recording_folder: Option<PathBuf>,
     /// Recently opened sessions, newest first.
     pub recent: Vec<RecentSession>,
+    /// The export's size: "1080p", "720p", "2K" or "4K".
+    pub export_size: String,
+    /// The export's codec: "h264", "hevc" or "av1".
+    pub export_codec: String,
+    /// The export's quality: "fast", "balanced" or "high".
+    pub export_quality: String,
+    /// Also record the replay (the stacked raw input) with an export.
+    pub export_replay: bool,
+    /// Also save the pipeline's events with an export.
+    pub export_events: bool,
 }
 
 /// Sessions the Recent menu keeps.
@@ -66,6 +76,11 @@ impl Default for DesktopSettings {
             recording_quality: RecordingQuality::Balanced.name().into(),
             recording_folder: None,
             recent: Vec::new(),
+            export_size: "1080p".into(),
+            export_codec: "h264".into(),
+            export_quality: "balanced".into(),
+            export_replay: false,
+            export_events: false,
         }
     }
 }
@@ -131,6 +146,25 @@ mod tests {
         assert_eq!(d.preview_aspect, "auto");
         assert_eq!(d.recording_quality, "balanced");
         assert_eq!(d.recording_folder, None);
+    }
+
+    #[test]
+    fn export_defaults_match_the_slint_app() {
+        let d = DesktopSettings::default();
+        assert_eq!(
+            (
+                d.export_size.as_str(),
+                d.export_codec.as_str(),
+                d.export_quality.as_str()
+            ),
+            ("1080p", "h264", "balanced")
+        );
+        assert!(!d.export_replay && !d.export_events);
+        let old: DesktopSettings = serde_json::from_str(r#"{"preview_aspect":"16:9"}"#).unwrap();
+        assert_eq!(
+            old.export_codec, "h264",
+            "a file from before exports still loads"
+        );
     }
 
     #[test]
