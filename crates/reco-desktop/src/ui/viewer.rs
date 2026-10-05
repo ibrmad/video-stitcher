@@ -200,6 +200,8 @@ script_mod! {
                     }
                     export_title := RecoStrong{text: ""}
                     export_detail := RecoSubdued{text: ""}
+                    // Whether AI tracking started, when the export asked for it.
+                    export_tracking := RecoSubdued{visible: false text: ""}
                     export_bar := RecoProgressBar{}
                     View{
                         width: Fill height: Fit flow: Right spacing: theme.reco_gap align: Align{y: 0.5}

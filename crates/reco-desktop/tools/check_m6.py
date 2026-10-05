@@ -29,6 +29,8 @@ FAST = (
     os.environ.get("RECO_FIXTURE_CAL", f"{HOME}/dev/pitchcam-data/alfheim/reco/match.json"),
 )
 
+MODEL = os.environ.get("RECO_FIXTURE_MODEL", f"{HOME}/dev/pitchcam-data/alfheim/reco/yolo26n.onnx")
+
 FAILURES = []
 
 
@@ -102,10 +104,10 @@ def linked(name):
     return folder, (names[0], names[1], cal)
 
 
-def launch(files, extra=(), config_dir=None, answers=None):
-    args = ["--window-size", "1280x820", "--left", files[0], "--right", files[1],
+def launch(files, extra=(), config_dir=None, answers=None, size="1280x820", env=None):
+    args = ["--window-size", size, "--left", files[0], "--right", files[1],
             "--calibration", files[2], *extra]
-    env = {}
+    env = dict(env or {})
     if config_dir:
         env["RECO_CONFIG_DIR"] = config_dir
     if answers is not None:
@@ -132,10 +134,14 @@ def brightest(app, box):
 
 
 def mark_gap(app, widget_id):
-    """Points between a checkbox's box and its text."""
+    """Points between a checkbox's box and its text (0 when it isn't
+    drawn)."""
+    r = app.rect(widget_id)
+    if r is None:
+        return 0
     png = app.grab(os.path.join(OUT, "probe.png"))
     scale = png.width / app.get("/s")["w"][0]["sz"][0]
-    return drive.gap_after_mark(png, app.rect(widget_id), scale)
+    return drive.gap_after_mark(png, r, scale)
 
 
 def size_face(app):
@@ -172,6 +178,62 @@ def open_sheet(app):
         return None
     time.sleep(0.5)
     return size_face(app)
+
+
+def pick_row(app, dropdown_id, index):
+    """Choose row `index` of a dropdown with the keyboard (menu rows are
+    not in the snapshot; the menu opens on the current row)."""
+    click(app, dropdown_id)
+    time.sleep(0.3)
+    for _ in range(8):
+        app.key("up")
+    for _ in range(index):
+        app.key("down")
+    app.key("return")
+    time.sleep(0.5)
+
+
+def drag(app, slider_id, by):
+    """Drag a slider by `by` of its width (Makepad's sliders move relative
+    to where the knob was; more than 1 reaches an end); whether it was
+    there."""
+    r = app.rect(slider_id)
+    if r is None:
+        return False
+    x, y, w, h = r
+    start = x + w / 2
+    app.get("/m", k="down", x=start, y=y + h / 2, wait=1)
+    for step in range(1, 7):
+        app.get("/m", k="move", x=start + w * by * step / 6, y=y + h / 2, wait=1)
+    app.get("/m", k="up", x=start + w * by, y=y + h / 2, wait=1)
+    return True
+
+
+def reveal(app, widget_id):
+    """Scroll the sheet until the widget is wholly in its visible part; its
+    rect then, or None. Rows out of sight aren't drawn (nor in the
+    snapshot), so look down first, then up."""
+    view = app.rect("export_rows")
+    if view is None:
+        return None
+    x, y = view[0] + view[2] / 2, view[1] + view[3] / 2
+    top, bottom = view[1], view[1] + view[3]
+    for direction in (40, -40):
+        for _ in range(30):
+            r = app.rect(widget_id)
+            if r is not None and r[1] >= top and r[1] + r[3] <= bottom:
+                return r
+            if r is not None:
+                direction = 40 if r[1] + r[3] > bottom else -40
+            app.scroll(x, y, direction)
+    return None
+
+
+def show_and_click(app, widget_id):
+    """Scroll a sheet control into view and click it; whether it was there."""
+    if reveal(app, widget_id) is None:
+        return False
+    return click(app, widget_id)
 
 
 def probe(path):
@@ -325,7 +387,169 @@ def check_rules():
     expect(not any(n.endswith("_stitched.mp4") for n in os.listdir(folder)), "rules: nothing was exported")
 
 
-CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules}
+def check_ai():
+    """AI tracking in the sheet: Enable waits for the machine's answer, which
+    the status line gives; off, the rows are hidden; tracking without a
+    model is refused with the reason, Sweep needs none, and Choose… fixes
+    it; a style preset sets the knobs; the lookahead shows the GPU's zones;
+    a two-second export tracks, says so on the card and in the notice, and
+    writes the detections; the choices are remembered, the model as the
+    default."""
+    if not os.path.exists(MODEL):
+        expect(False, f"ai: the fixture model is missing ({MODEL})")
+        return
+    folder, files = linked("ai")
+    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    out_dir = tempfile.mkdtemp(prefix="reco-m6-out-")
+    answered = os.path.join(out_dir, "tracked")
+    answers = {"model": [MODEL], "export": [answered]}
+    with launch(files, ["--export-range", "0-2"], config, answers) as app:
+        face = open_sheet(app)
+        expect(face is not None, "ai: Export opens the sheet")
+        ready = wait_for(lambda: (text_of(app, "ai_status") or "").startswith("Ready: runs on "), 30)
+        expect(bool(ready), f"ai: the status says where tracking runs ({text_of(app, 'ai_status')})")
+        expect(app.enabled("ai_enable") is True, "ai: Enable takes input once the machine answers")
+        expect(app.rect("ai_model") is None, "ai: off, the tracking rows are hidden")
+        gap = mark_gap(app, "ai_enable")
+        expect(gap >= 6, f"ai: Enable's text clears its box ({gap} pt)")
+        save_shot(app, "ai-off")
+        show_and_click(app, "ai_enable")
+        expect(bool(wait_for(lambda: app.rect("ai_model"), 3)), "ai: on, the rows show")
+        problem = text_of(app, "ai_model_problem_text")
+        expect(reveal(app, "ai_model_problem") is not None
+               and problem == "Choose the AI model (an .onnx file) to track.",
+               f"ai: no model says so ({problem})")
+        expect(app.enabled("sheet_export") is False, "ai: no model, no Export")
+        reveal(app, "ai_mode")
+        pick_row(app, "ai_mode", 2)
+        expect(text_of(app, "ai_mode") == "Sweep (no AI)", f"ai: Sweep is chosen ({text_of(app, 'ai_mode')})")
+        expect(app.rect("ai_model_problem") is None and app.enabled("sheet_export") is True,
+               "ai: Sweep needs no model")
+        pick_row(app, "ai_mode", 0)
+        expect(app.enabled("sheet_export") is False, "ai: following the players needs the model again")
+        show_and_click(app, "ai_model_browse")
+        expect(bool(wait_for(lambda: text_of(app, "ai_model") == MODEL, 5)),
+               f"ai: Choose… sets the model ({text_of(app, 'ai_model')})")
+        expect(app.rect("ai_model_problem") is None and app.enabled("sheet_export") is True,
+               "ai: with the model, Export is enabled")
+        # A style preset sets every knob it covers, the Advanced tier's too.
+        expect(text_of(app, "ai_preset") == "Broadcast" and text_of(app, "ai_interval") == "Every 15 frames",
+               f"ai: Broadcast, every 15 frames to start ({text_of(app, 'ai_preset')}, {text_of(app, 'ai_interval')})")
+        reveal(app, "ai_advanced")
+        open_advanced(app, "ai_advanced")
+        expect(bool(wait_for(lambda: app.rect("ai_dead_zone"), 3)), "ai: Advanced opens")
+        reveal(app, "ai_dead_zone_value")
+        expect(text_of(app, "ai_dead_zone_value") == "0.03" and text_of(app, "ai_fov_tight_value") == "22°",
+               f"ai: Broadcast's knobs ({text_of(app, 'ai_dead_zone_value')}, {text_of(app, 'ai_fov_tight_value')})")
+        reveal(app, "ai_preset")
+        pick_row(app, "ai_preset", 1)
+        expect(text_of(app, "ai_dead_zone_value") == "0.02",
+               f"ai: Action narrows the dead zone ({text_of(app, 'ai_dead_zone_value')})")
+        pick_row(app, "ai_preset", 2)
+        expect(text_of(app, "ai_framing") == "Keep everyone in frame",
+               f"ai: Frame all frames everyone ({text_of(app, 'ai_framing')})")
+        pick_row(app, "ai_preset", 0)
+        expect(text_of(app, "ai_framing") == "Follow the action" and text_of(app, "ai_dead_zone_value") == "0.03",
+               "ai: Broadcast puts its knobs back")
+        # The lookahead's zones come from the GPU's memory.
+        track = reveal(app, "ai_lookahead_zones")
+        note = text_of(app, "ai_lookahead_note")
+        expect(track is not None and note == "Fits this GPU's memory.",
+               f"ai: the lookahead fits this machine ({note})")
+        expect(text_of(app, "ai_lookahead_value") == "2.5 s",
+               f"ai: the lookahead starts at 2.5 s ({text_of(app, 'ai_lookahead_value')})")
+        if track:
+            x, y, w, h = track
+            left = pixel(app, x + 10, y + h / 2)
+            expect(left[1] > left[0] + 30 and left[1] > left[2], f"ai: the track's safe zone is green ({left})")
+        drag(app, "ai_lookahead", -0.6)
+        value = text_of(app, "ai_lookahead_value")
+        expect(value not in (None, "2.5 s"), f"ai: dragging the lookahead shows its value ({value})")
+        save_shot(app, "ai-on")
+        # Events on, so the detections can be read back.
+        show_and_click(app, "export_events")
+        show_and_click(app, "export_browse")
+        expect(bool(wait_for(lambda: text_of(app, "export_output") == answered + ".mp4", 5)),
+               f"ai: Save to… names the file ({text_of(app, 'export_output')})")
+        click(app, "sheet_export")
+        expect(bool(wait_for(lambda: logged(app, "export: AI tracking active"), 60)),
+               "ai: the export says tracking is active")
+        line = wait_for(lambda: text_of(app, "export_tracking"), 5)
+        expect(line == "AI tracking: active", f"ai: so does the card ({line})")
+        done = wait_for(lambda: logged(app, "export: done"), 120)
+        expect(bool(done), "ai: the export finishes")
+        notice = wait_for(lambda: [i.get("t") for i in app.snap("tracked with AI") if i.get("i") == "body"], 5)
+        expect(bool(notice), f"ai: the notice says it tracked ({notice})")
+        events = answered + ".events.jsonl"
+        log = open(events).read() if os.path.exists(events) else ""
+        expect("detect" in log, f"ai: the events file has the detections ({len(log)} bytes)")
+        expect(not app.errors(), f"ai: no errors in the app log {app.errors()[:3]}")
+        save_shot(app, "ai-exported")
+    saved = json.load(open(os.path.join(config, "desktop.json")))
+    remembered = {k: saved.get(k) for k in ("ai_enabled", "ai_mode", "ai_interval", "ai_preset",
+                                             "ai_framing", "ai_lock_pitch", "ai_model_path")}
+    expect(remembered == {"ai_enabled": True, "ai_mode": "field", "ai_interval": 15,
+                          "ai_preset": "broadcast", "ai_framing": "action", "ai_lock_pitch": False,
+                          "ai_model_path": MODEL},
+           f"ai: the choices are remembered, the model as the default ({remembered})")
+    expect(0.0 < saved.get("ai_lookahead", 2.5) < 2.5,
+           f"ai: and the dragged lookahead ({saved.get('ai_lookahead')})")
+    for leftover in (answered + ".mp4", answered + ".events.jsonl"):
+        if os.path.exists(leftover):
+            os.remove(leftover)
+
+
+def check_ai_short():
+    """In a short window, the sheet with AI tracking on and Advanced open
+    stays inside the window, Export included, and scrolls to its last
+    row."""
+    folder, files = linked("ai-short")
+    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"ai_enabled": True}, f)
+    with launch(files, config_dir=config, size="720x600") as app:
+        expect(open_sheet(app) is not None, "short: Export opens the sheet")
+        wait_for(lambda: app.enabled("ai_enable"), 30)
+        expect(bool(wait_for(lambda: app.rect("ai_model"), 3)), "short: remembered on, the rows show")
+        reveal(app, "ai_advanced")
+        open_advanced(app, "ai_advanced")
+        window = app.get("/s")["w"][0]["sz"]
+        export = app.rect("sheet_export")
+        expect(export is not None and export[1] + export[3] <= window[1],
+               f"short: Export stays inside the window ({export}, window {window})")
+        last = reveal(app, "ai_fov_wide")
+        expect(last is not None, "short: the sheet scrolls to its last row")
+        expect(reveal(app, "export_output") is not None, "short: and back to the top")
+        save_shot(app, "ai-short")
+        expect(not app.errors(), f"short: no errors in the app log {app.errors()[:3]}")
+
+
+def check_ai_unavailable():
+    """A machine that can't run the detector: the status says why, Enable
+    stays off and its rows hidden, and the export goes on without it."""
+    folder, files = linked("ai-off")
+    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"ai_enabled": True}, f)
+    env = {"RECO_DESKTOP_FAKE_AI": "no inference engine loads on this machine"}
+    with launch(files, config_dir=config, env=env) as app:
+        expect(open_sheet(app) is not None, "unavailable: Export opens the sheet")
+        line = text_of(app, "ai_status_error")
+        expect(line == "Not available: no inference engine loads on this machine",
+               f"unavailable: the status says why ({line})")
+        expect(app.enabled("ai_enable") is False, "unavailable: Enable is dimmed")
+        show_and_click(app, "ai_enable")
+        time.sleep(0.5)
+        checked = [i.get("c") for i in app.snap("ai_enable") if i.get("i") == "ai_enable"]
+        expect(checked == [0], f"unavailable: a click leaves it off ({checked})")
+        expect(app.rect("ai_model") is None, "unavailable: the rows stay hidden")
+        expect(app.enabled("sheet_export") is True, "unavailable: Export goes on without it")
+        save_shot(app, "ai-unavailable")
+        expect(not app.errors(), f"unavailable: no errors in the app log {app.errors()[:3]}")
+
+
+CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
+          "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable}
 
 
 def main():

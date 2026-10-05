@@ -257,6 +257,16 @@ script_mod! {
         reco_on_accent: #xffffff
         reco_record: #xef4444
         reco_error: #xef4444
+        // Text that warns without failing (a choice the export can't run).
+        reco_warning: #xfbbf24
+        // The lookahead track's zones (the GPU's memory): comfortable,
+        // tight, too long.
+        reco_zone_safe: #x34d399
+        reco_zone_tight: #xfbbf24
+        reco_zone_risk: #xef4444
+        // How strongly the zones show past the knob (the value's side is
+        // full strength).
+        reco_zone_dim: 0.35
         reco_focus_width: 1.5
         // Icon opacity on enabled and disabled controls.
         reco_icon_opacity: 1.0
@@ -349,6 +359,9 @@ script_mod! {
         reco_progress_width: 440.0
         // The export sheet, and the time fields inside it.
         reco_sheet_width: 540.0
+        // A sheet's rows scroll past this height: room for its band, its
+        // buttons and a margin above and below in a short window.
+        reco_sheet_rows_max: "calc(100vh - 160px)"
         reco_time_input: 80.0
         // The lens picker's results: ten rows, then it scrolls.
         reco_picker_list: 280.0

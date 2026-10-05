@@ -16,6 +16,7 @@ use std::sync::Arc;
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 
+mod ai_view;
 mod bug_view;
 mod calibrate_view;
 mod cli;
@@ -50,6 +51,7 @@ use export_view::{CodecProbe, Exporting};
 use live::Live;
 use names::middle_ellipsis;
 use perf::DrawStats;
+use reco_app::ai::{Availability, AvailabilityProbe, LookaheadZones};
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::export::ExportRange;
@@ -270,6 +272,14 @@ pub struct App {
     export_codecs: Vec<String>,
     #[rust]
     codec_probe: Option<CodecProbe>,
+    /// Whether this machine can run AI tracking's detector, once asked.
+    #[rust]
+    ai_probe: Option<AvailabilityProbe>,
+    #[rust]
+    ai_availability: Option<Availability>,
+    /// The lookahead's zones for the open match (set as the sheet opens).
+    #[rust]
+    ai_zones: Option<LookaheadZones>,
     /// The first left video the sheet's file name was made for.
     #[rust]
     export_named_for: Option<PathBuf>,
@@ -666,6 +676,7 @@ impl MatchEvent for App {
         } else {
             self.durations = Some(DurationProbe::new(Arc::new(SignalToUI::set_ui_signal)));
             self.codec_probe = Some(CodecProbe::start());
+            self.start_ai_probe();
             if let Some(files) = self.args.files.clone() {
                 self.project.set_files(Camera::Left, files.left);
                 self.project.set_files(Camera::Right, files.right);
@@ -711,6 +722,7 @@ impl MatchEvent for App {
         self.lens_actions(cx, actions);
         self.lens_picker_actions(cx, actions);
         self.export_actions(cx, actions);
+        self.ai_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
 }
@@ -763,6 +775,7 @@ impl AppMain for App {
                 self.drain_calibration(cx);
                 self.drain_outline_editor(cx);
                 self.collect_codecs(cx);
+                self.collect_ai_availability(cx);
                 self.collect_lenses(cx);
                 self.collect_profiles(cx);
                 self.drain_export(cx);

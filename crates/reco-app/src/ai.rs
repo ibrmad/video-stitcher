@@ -103,14 +103,21 @@ pub struct Tracking {
 }
 
 impl Tracking {
-    /// Why the tracking can't run as chosen, if it can't.
+    /// Why the tracking can't run as chosen, if it can't. The model is an
+    /// .onnx file that exists, as Preferences takes it.
     pub fn problem(&self) -> Option<String> {
         if self.mode == "sweep" {
             return None;
         }
+        let onnx = |model: &PathBuf| {
+            model
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("onnx"))
+        };
         match &self.model {
             None => Some("Choose the AI model (an .onnx file) to track.".into()),
-            Some(model) if !model.exists() => Some(format!(
+            Some(model) if !onnx(model) => Some("The AI model must be an .onnx file.".into()),
+            Some(model) if !model.is_file() => Some(format!(
                 "The AI model isn't there any more: {}",
                 model.display()
             )),
@@ -223,6 +230,14 @@ pub fn availability_line(availability: &Availability) -> String {
     match availability {
         Availability::Ready(engines) => format!("Ready: runs on {engines}"),
         Availability::Unavailable(why) => format!("Not available: {why}"),
+    }
+}
+
+/// The export card's line for whether the tracking started.
+pub fn tracking_line(status: &Result<(), String>) -> String {
+    match status {
+        Ok(()) => "AI tracking: active".into(),
+        Err(why) => format!("AI tracking didn't start: {why}"),
     }
 }
 
@@ -381,6 +396,24 @@ mod tests {
         let model = temp_file("yolo.onnx");
         assert_eq!(tracking(Some(model.clone()), "field").problem(), None);
         let _ = std::fs::remove_file(model);
+        // As Preferences has it: an .onnx file, whatever else exists there.
+        let notes = temp_file("notes.txt");
+        assert_eq!(
+            tracking(Some(notes.clone()), "field").problem().as_deref(),
+            Some("The AI model must be an .onnx file.")
+        );
+        let _ = std::fs::remove_file(notes);
+    }
+
+    #[test]
+    fn the_card_says_whether_tracking_started() {
+        assert_eq!(tracking_line(&Ok(())), "AI tracking: active");
+        assert_eq!(
+            tracking_line(&Err(
+                "no detector this export can use on this machine".into()
+            )),
+            "AI tracking didn't start: no detector this export can use on this machine"
+        );
     }
 
     #[cfg(feature = "ai")]

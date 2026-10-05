@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
+use reco_app::ai::{self, Tracking};
 use reco_app::export::{
     self, ExportEvent, ExportJob, ExportOptions, ExportRange, MatchCalibration, QUALITIES,
     RESOLUTIONS,
@@ -19,7 +20,7 @@ use reco_app::preview::worker::PreviewCommand;
 use reco_app::telemetry::UsageEvent;
 use reco_app::toasts::Severity;
 
-use crate::export_text::{grouped, percent, progress_detail, size_label, time_left};
+use crate::export_text::{grouped, percent, progress_detail, size_label, time_left, tracking_note};
 use crate::project_view::Pick;
 use crate::time_ruler::{clock, parse_clock};
 use crate::ui::preview::RecoPreview;
@@ -31,6 +32,8 @@ pub(crate) struct Exporting {
     options: ExportOptions,
     /// The job, once the worker sent the tuned calibration.
     job: Option<ExportJob>,
+    /// Whether AI tracking started, once the job says.
+    tracking: Option<Result<(), String>>,
 }
 
 /// The encoders, probed once off the UI thread.
@@ -195,6 +198,7 @@ impl App {
             .check_box(cx, ids!(export_events))
             .set_active(cx, events, Animate::No);
         self.show_export_error(cx, None);
+        self.show_ai_sheet(cx);
         self.show_export_range(cx);
         self.ui.modal(cx, ids!(export_sheet)).open(cx);
     }
@@ -222,8 +226,9 @@ impl App {
         self.update_ruler(cx);
     }
 
-    /// Export needs a file named and something to export.
-    fn show_export_enabled(&mut self, cx: &mut Cx) {
+    /// Export needs a file named, something to export, and AI tracking
+    /// that can run as chosen.
+    pub(crate) fn show_export_enabled(&mut self, cx: &mut Cx) {
         let named = !self
             .ui
             .text_input(cx, ids!(export_output))
@@ -231,7 +236,8 @@ impl App {
             .trim()
             .is_empty();
         let something = self.export_range.is_some_and(|r| !r.is_empty());
-        self.set_button_enabled(cx, ids!(sheet_export), named && something);
+        let tracks = !self.ai_blocks_export(cx);
+        self.set_button_enabled(cx, ids!(sheet_export), named && something && tracks);
     }
 
     fn show_export_error(&mut self, cx: &mut Cx, error: Option<&str>) {
@@ -350,6 +356,10 @@ impl App {
             .min(QUALITIES.len() - 1)];
         let replay = self.ui.check_box(cx, ids!(export_replay)).active(cx);
         let events = self.ui.check_box(cx, ids!(export_events)).active(cx);
+        let tracking = self.sheet_tracking(cx);
+        if let Some(problem) = tracking.as_ref().and_then(Tracking::problem) {
+            return self.show_export_error(cx, Some(&problem));
+        }
         // The choices are the next export's.
         let (name, width, height) = RESOLUTIONS[size];
         self.settings.export_size = name.into();
@@ -357,6 +367,7 @@ impl App {
         self.settings.export_quality = quality.into();
         self.settings.export_replay = replay;
         self.settings.export_events = events;
+        self.remember_ai(tracking.as_ref());
         self.save_settings();
         self.ui.modal(cx, ids!(export_sheet)).close(cx);
 
@@ -388,13 +399,16 @@ impl App {
                 color_match: true,
                 replay,
                 events,
-                tracking: None,
+                tracking: tracking.clone(),
             },
             job: None,
+            tracking: None,
         });
         self.send_preview(PreviewCommand::Snapshot);
         self.set_button_enabled(cx, ids!(export_cancel), true);
         self.show_export_card(cx, "Starting…", 0.0, "");
+        let starting = tracking.is_some().then_some("AI tracking: starting…");
+        self.show_tracking_line(cx, starting);
         self.lock_transport(cx, true);
         self.apply_shell(cx);
     }
@@ -449,6 +463,11 @@ impl App {
                 .as_ref()
                 .map(|e| (e.options.codec.clone(), e.options.fps))
                 .unwrap_or_default();
+            let (asked, tracked) = self
+                .export
+                .as_ref()
+                .map(|e| (e.options.tracking.is_some(), e.tracking.clone()))
+                .unwrap_or_default();
             match event {
                 ExportEvent::Progress { frames, total, fps } => {
                     let fraction = if total > 0 {
@@ -486,10 +505,11 @@ impl App {
                     }
                     self.set_visible(cx, ids!(show_in_folder), true);
                     let body = format!(
-                        "{} · {} frames in {}",
+                        "{} · {} frames in {}{}",
                         file_name(&path),
                         grouped(frames),
-                        clock(seconds)
+                        clock(seconds),
+                        tracking_note(asked, tracked.as_ref())
                     );
                     self.toast_for(
                         cx,
@@ -511,10 +531,16 @@ impl App {
                     );
                     self.toast(cx, Severity::Error, "Export failed", &why);
                 }
-                ExportEvent::Tracking(status) => match status {
-                    Ok(()) => log!("export: AI tracking active"),
-                    Err(why) => log!("export: AI tracking not active: {why}"),
-                },
+                ExportEvent::Tracking(status) => {
+                    match &status {
+                        Ok(()) => log!("export: AI tracking active"),
+                        Err(why) => log!("export: AI tracking not active: {why}"),
+                    }
+                    self.show_tracking_line(cx, Some(&ai::tracking_line(&status)));
+                    if let Some(export) = self.export.as_mut() {
+                        export.tracking = Some(status);
+                    }
+                }
                 ExportEvent::Cancelled => {
                     log!("export: cancelled");
                     self.end_export(cx);
@@ -568,6 +594,12 @@ impl App {
             .progress_bar(cx, ids!(export_bar))
             .set_value(cx, fraction);
         self.set_label(cx, ids!(export_eta), eta);
+    }
+
+    /// The card's AI tracking line (hidden without tracking).
+    fn show_tracking_line(&mut self, cx: &mut Cx, line: Option<&str>) {
+        self.set_label(cx, ids!(export_tracking), line.unwrap_or(""));
+        self.set_visible(cx, ids!(export_tracking), line.is_some());
     }
 
     /// The export is over: the card goes and the preview's controls come

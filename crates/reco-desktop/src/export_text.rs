@@ -56,9 +56,34 @@ pub fn percent(frames: u64, total: u64) -> u64 {
     }
 }
 
+/// What the final notice adds about AI tracking: nothing when the export
+/// didn't ask for it.
+pub fn tracking_note(asked: bool, started: Option<&Result<(), String>>) -> &'static str {
+    match (asked, started) {
+        (false, _) => "",
+        (true, Some(Ok(()))) => " · tracked with AI",
+        (true, _) => " · without AI tracking",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_notice_says_whether_the_export_tracked() {
+        assert_eq!(tracking_note(false, None), "");
+        assert_eq!(tracking_note(true, Some(&Ok(()))), " · tracked with AI");
+        assert_eq!(
+            tracking_note(true, Some(&Err("no detector".into()))),
+            " · without AI tracking"
+        );
+        assert_eq!(
+            tracking_note(true, None),
+            " · without AI tracking",
+            "asked, never started"
+        );
+    }
 
     #[test]
     fn numbers_are_grouped_by_thousands() {

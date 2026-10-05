@@ -33,8 +33,8 @@ script_mod! {
         text_overflow: TextOverflow.Ellipsis
     }
 
-    // Rows. Everything in a panel sits in 24 pt rows that start on the
-    // panel's content edge (12 pt in), as Rerun's list items do.
+    // Rows. Everything in a panel sits in 28 pt rows that start on the
+    // panel's content edge (14 pt in), as Rerun's list items do.
     mod.widgets.RecoRow = View{
         width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap align: Align{y: 0.5}
         padding: Inset{left: theme.reco_pad right: theme.reco_pad}
@@ -324,6 +324,15 @@ script_mod! {
                 sdf.stroke(mix(vec4(0.0, 0.0, 0.0, 0.0), self.focus_color, self.focus), 1.5)
                 return sdf.result
             }
+        }
+    }
+    // A slider over a track drawn under it (the lookahead's zones): only
+    // the knob shows.
+    mod.widgets.RecoKnobSlider = mod.widgets.RecoSlider{
+        draw_bg +: {
+            track_color: uniform(theme.reco_transparent)
+            val_color: uniform(theme.reco_transparent)
+            val_color_disabled: uniform(theme.reco_transparent)
         }
     }
     mod.widgets.RecoProgressBar = ProgressBar{

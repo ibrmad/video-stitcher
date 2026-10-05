@@ -21,6 +21,7 @@ pub mod time_panel;
 mod toasts;
 mod top_bar;
 mod viewer;
+pub mod zones;
 
 use makepad_widgets::*;
 
@@ -38,6 +39,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
     media_panel::script_mod(vm);
     viewer::script_mod(vm);
     inspector::script_mod(vm);
+    zones::script_mod(vm);
     export_sheet::script_mod(vm);
     pick_list::script_mod(vm);
     lens_picker::script_mod(vm);
