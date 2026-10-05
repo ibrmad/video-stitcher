@@ -5,6 +5,10 @@ Run after `cargo build --profile desktop -p reco-desktop`. Walks every
 --look-preview state, saves screenshots to target/desktop-checks/m0/ and
 exits non-zero if any check failed. Every failure is listed, not just the
 first.
+
+The look follows the Rerun viewer: neutral grey panels, 24 pt rows that
+start on a 12 pt content edge, section bands, a black viewport and a time
+panel with camera lanes.
 """
 import os
 import sys
@@ -16,18 +20,29 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
 OUT = os.path.join(ROOT, "target", "desktop-checks", "m0")
 
-APP_BG = "#0f1115"
-PANEL = "#14171c"
-SURFACE = "#1a1d23"
-VIEWER = "#08090b"
+PANEL = "#0d0d0d"
+BAND = "#212121"
+VIEWPORT = "#000000"
 ACCENT = "#34d399"
-# A card's content edge sits this far inside the card (theme.reco_space_xl).
-CARD_PAD = 12
-# A status line's words start after its dot: theme.reco_dot + reco_space_s.
-DOT_INDENT = 8 + 6
+ACCENT_FILL = "#007541"
+LANE = "#0f4a30"
+LANE_EMPTY = "#171717"
+PLAYHEAD = "#ffffff"
+# Rows start this far inside a panel (theme.reco_pad), and a status line's
+# words after its dot (theme.reco_dot + reco_gap).
+PAD = 12
+DOT_INDENT = 6 + 8
+# Adjust rows: label cell, then a gap, then the control (theme.reco_label_width,
+# reco_gap).
+LABEL_WIDTH = 112
+GAP = 8
+# The sample match: 1:45:00 with the playhead at 12:34; the ruler's height
+# and a lane's (theme.reco_ruler_height, reco_row).
+LENGTH, PLAYHEAD_AT = 6300.0, 754.0
+RULER, LANE_HEIGHT = 20, 24
 
 # Every --look-preview state in job order; None is a fresh start.
-STATES = (None, "one-camera", "cameras", "calibrating", "ready", "exporting")
+STATES = (None, "one-camera", "cameras", "calibrating", "calibration-failed", "ready", "exporting")
 STITCHED = ("ready", "exporting")
 
 FAILURES = []
@@ -55,7 +70,7 @@ def shown(state):
     return {
         "empty_state": not stitched,
         "sample_frame": stitched,
-        "next_actions": state in (None, "one-camera", "cameras"),
+        "next_actions": state in (None, "one-camera", "cameras", "calibration-failed"),
         "calibrate_progress": state == "calibrating",
         "export_card": state == "exporting",
         "add_left": not left,
@@ -64,8 +79,13 @@ def shown(state):
         "change_right": right,
         "link_idle": not right,
         "link_on": right,
+        "lane_left_badge_on": left,
+        "lane_right_badge_on": right,
         "auto_calibrate": not stitched,
         "recalibrate": stitched,
+        "cal_dot_busy": state == "calibrating",
+        "cal_dot_error": state == "calibration-failed",
+        "cal_dot_ok": stitched,
     }
 
 
@@ -83,7 +103,7 @@ def takes_input(state):
         "record_button": state == "ready",
     }
     if not stitched:
-        gates["auto_calibrate"] = state == "cameras"
+        gates["auto_calibrate"] = state in ("cameras", "calibration-failed")
     return gates
 
 
@@ -98,6 +118,17 @@ def ink_left(png, scale, box, bg, threshold=40):
     x0, y0, x1, y1 = box
     bg_lum = lum(drive.hex_rgb(bg))
     for px in range(int(x0 * scale), int(x1 * scale)):
+        for py in range(int(y0 * scale), int(y1 * scale)):
+            if abs(lum(png.pixel(px, py)) - bg_lum) > threshold:
+                return px / scale
+    return None
+
+
+def ink_right(png, scale, box, bg, threshold=40):
+    """Rightmost x (points) in box holding ink, as ink_left from the right."""
+    x0, y0, x1, y1 = box
+    bg_lum = lum(drive.hex_rgb(bg))
+    for px in range(int(x1 * scale) - 1, int(x0 * scale), -1):
         for py in range(int(y0 * scale), int(y1 * scale)):
             if abs(lum(png.pixel(px, py)) - bg_lum) > threshold:
                 return px / scale
@@ -131,8 +162,7 @@ def launch(size, state):
 
 
 def check_text_edge(app, png, scale, widget_id, edge, bg, name):
-    """A label's ink starts on the content edge (a glyph's side bearing is
-    under 2 pt)."""
+    """A label's ink starts on the edge (a glyph's side bearing is under 2 pt)."""
     rect = app.rect(widget_id)
     if rect is None:
         expect(False, f"{name}: `{widget_id}` is on screen")
@@ -140,13 +170,22 @@ def check_text_edge(app, png, scale, widget_id, edge, bg, name):
     x, y, w, h = rect
     ink = ink_left(png, scale, (edge - 6, y, x + w + 6, y + h), bg)
     expect(ink is not None and edge - 0.5 <= ink <= edge + 2,
-           f"{name}: `{widget_id}` text starts on the content edge {edge} (ink at {ink})")
+           f"{name}: `{widget_id}` text starts on the edge {edge} (ink at {ink})")
 
 
 def check_box_edge(app, widget_id, edge, name):
     rect = app.rect(widget_id)
     expect(rect is not None and abs(rect[0] - edge) <= 0.5,
-           f"{name}: `{widget_id}` starts on the content edge {edge} ({rect and rect[0]})")
+           f"{name}: `{widget_id}` starts on the edge {edge} ({rect and rect[0]})")
+
+
+def check_icon_right(app, png, scale, rect, edge, bg, label, name):
+    """A trailing icon's ink ends on the content edge (an icon's drawing stops
+    up to 2 pt inside its box)."""
+    x, y, w, h = rect
+    ink = ink_right(png, scale, (x, y + 2, edge + 6, y + h - 2), bg)
+    expect(ink is not None and edge - 2.5 <= ink <= edge + 0.5,
+           f"{name}: {label} ends on the content edge {edge} (ink at {ink})")
 
 
 def check_state(size, state):
@@ -158,8 +197,8 @@ def check_state(size, state):
         expect(info["t"].startswith("Reco"), f"{name}: window title is Reco ({info['t']!r})")
         expect(abs(info["sz"][0] - size[0]) <= 2 and abs(info["sz"][1] - size[1]) <= 2,
                f"{name}: window size {info['sz']} matches {size}")
-        for wid in ("toggle_media", "export_button", "toggle_inspector", "status_text",
-                    "version_text", "report_bug", "play_pause", "timeline"):
+        for wid in ("app_menu", "export_button", "toggle_media", "toggle_timeline", "toggle_inspector",
+                    "view_bar", "play_pause", "time_current", "timeline", "lanes"):
             expect(visible(app, wid), f"{name}: `{wid}` is on screen")
         expect(visible(app, "media_panel"), f"{name}: Setup panel open")
         for wid, want in shown(state).items():
@@ -175,12 +214,22 @@ def check_state(size, state):
 
         ex, ey, ew, eh = app.rect("export_button")
         png, scale = settled(app, os.path.join(OUT, f"{name}.png"), width_pt, (ex + 6, ey + eh / 2))
-        corner = png.pixel(png.width - 3, png.height - 3)
-        expect(drive.close_to(corner, APP_BG, tol=4), f"{name}: status bar background {corner[:3]} is {APP_BG}")
+
+        # Rerun's surfaces: neutral grey panels and bands, a black viewport.
+        mx, my, mw, mh = app.rect("media_panel")
+        panel = pixel_at(png, scale, mx + mw / 2, my + mh - 8)
+        expect(drive.close_to(panel, PANEL, tol=2), f"{name}: Setup panel is {PANEL} ({panel[:3]})")
+        cx, cy, cw, ch = app.rect("cameras")
+        band = pixel_at(png, scale, cx + cw / 2, cy + 3)
+        expect(drive.close_to(band, BAND, tol=2), f"{name}: section band is {BAND} ({band[:3]})")
+        vx, vy, vw, vh = app.rect("canvas")
+        corner = pixel_at(png, scale, vx + 3, vy + 3)
+        expect(drive.close_to(corner, VIEWPORT, tol=2), f"{name}: viewport is {VIEWPORT} ({corner[:3]})")
+
         face = pixel_at(png, scale, ex + 6, ey + eh / 2)
         export_on = state == "ready"
-        expect(drive.close_to(face, ACCENT, tol=40) == export_on,
-               f"{name}: Export face is {'accent' if export_on else 'not accent'} ({face[:3]})")
+        expect(drive.close_to(face, ACCENT_FILL, tol=12) == export_on,
+               f"{name}: Export face is {'green' if export_on else 'grey'} ({face[:3]})")
         if not export_on:
             # A disabled button greys its icon too: no green ink anywhere on it.
             tinted = [p[:3] for p in (pixel_at(png, scale, ex + dx, ey + dy)
@@ -197,82 +246,99 @@ def check_state(size, state):
 
         # The camera pair's link lights up once both cameras have video.
         if shown(state)["link_on"]:
+            # Snapshot rects are whole points; the hairline may sit on a half.
             lx, ly, lw, lh = app.rect("link_on")
-            link = pixel_at(png, scale, lx + lw / 2, ly + lh / 2)
-            expect(drive.close_to(link, ACCENT, tol=40), f"{name}: camera link is lit ({link[:3]})")
+            near = [pixel_at(png, scale, lx + dx / scale, ly + lh / 2)
+                    for dx in range(int(-1.5 * scale), int((lw + 1.5) * scale) + 1)]
+            lit = [p[:3] for p in near if drive.close_to(p, ACCENT, tol=40)]
+            expect(bool(lit), f"{name}: camera link is lit ({[p[:3] for p in near]})")
 
         # One primary per screen: the Setup panel's Auto-calibrate is a
         # secondary button, so the viewer's call to action stands alone.
         if state == "cameras":
             ax, ay, aw, ah = app.rect("auto_calibrate")
             face = pixel_at(png, scale, ax + 4, ay + ah / 2)
-            expect(not drive.close_to(face, ACCENT, tol=40),
+            expect(not drive.close_to(face, ACCENT_FILL, tol=12),
                    f"{name}: Setup panel's Auto-calibrate is secondary ({face[:3]})")
 
-        # The transport is one row: every control centred on the same line,
-        # the timeline's visible track included (not just its box).
+        # The time panel: each camera's files in its lane, the playhead only
+        # over a stitched preview, the controls on one line.
+        rx, ry, rw, rh = app.rect("timeline")
+        for lane, has in ((0, state is not None), (1, state not in (None, "one-camera"))):
+            y = ry + RULER + lane * LANE_HEIGHT + LANE_HEIGHT / 2
+            fill = pixel_at(png, scale, rx + rw * 0.73, y)
+            want = LANE if has else LANE_EMPTY
+            expect(drive.close_to(fill, want, tol=3),
+                   f"{name}: lane {lane + 1} shows {'files' if has else 'no video'} ({fill[:3]})")
+        head_x = rx + rw * PLAYHEAD_AT / LENGTH
+        head = pixel_at(png, scale, head_x, ry + RULER + LANE_HEIGHT / 2)
+        expect(drive.close_to(head, PLAYHEAD, tol=40) == stitched,
+               f"{name}: playhead {'shown' if stitched else 'hidden'} ({head[:3]})")
         px, py, pw, ph = app.rect("play_pause")
         centre = py + ph / 2
-        for wid in ("step_back", "timeline", "record_button", "aspect"):
-            x, y, w, h = app.rect(wid)
-            expect(abs(y + h / 2 - centre) <= 1,
-                   f"{name}: `{wid}` centred on the transport row ({y + h / 2:.1f} vs {centre:.1f})")
-        x, y, w, h = app.rect("timeline")
-        panel = lum(drive.hex_rgb(PANEL))
-        rows = [py_ / scale for py_ in range(int(y * scale), int((y + h) * scale))
-                if abs(lum(pixel_at(png, scale, x + w * 0.75, py_ / scale)) - panel) > 15]
-        track = (rows[0] + rows[-1]) / 2 if rows else None
-        expect(track is not None and abs(track - centre) <= 1,
-               f"{name}: timeline track centred on the transport row ({track} vs {centre:.1f})")
+        for wid in ("step_back", "step_forward", "time_current", "status_text"):
+            rect = app.rect(wid)
+            if rect:
+                x, y, w, h = rect
+                expect(abs(y + h / 2 - centre) <= 2,
+                       f"{name}: `{wid}` centred on the control row ({y + h / 2:.1f} vs {centre:.1f})")
 
-        # Every item in a Setup card starts on the card's content edge, and
-        # the panel header lines up with it.
+        # One content edge per panel: titles, rows and buttons start 12 pt
+        # in; trailing icons end 12 pt from the right; the time panel's
+        # first icon and lane badges share the same edge.
         if size[0] >= 1280:
-            cx, cy, cw, ch = app.rect("calibration")
-            edge = cx + CARD_PAD
-            for wid in ("calibration_title", "calibration_hint"):
-                check_text_edge(app, png, scale, wid, edge, SURFACE, name)
-            # The status words and their detail share one edge, after the dot.
-            words = edge + DOT_INDENT
-            for wid in ("calibration_status", "calibration_detail"):
-                check_text_edge(app, png, scale, wid, words, SURFACE, name)
-            dots = [d for d in ("cal_dot_idle", "cal_dot_busy", "cal_dot_ok") if visible(app, d)]
-            expect(len(dots) == 1, f"{name}: one calibration dot shown ({dots})")
-            if dots:
-                check_box_edge(app, dots[0], edge, name)
+            edge, right = mx + PAD, mx + mw - PAD
+            check_text_edge(app, png, scale, "setup_header", edge, PANEL, name)
+            check_box_edge(app, "left_badge_on" if state else "left_badge", edge, name)
             check_box_edge(app, "recalibrate" if stitched else "auto_calibrate", edge, name)
-            mx, my, mw, mh = app.rect("cameras")
-            check_text_edge(app, png, scale, "cameras_title", mx + CARD_PAD, SURFACE, name)
-            check_box_edge(app, "left_badge_on" if state else "left_badge", mx + CARD_PAD, name)
-            check_text_edge(app, png, scale, "setup_header", mx + CARD_PAD, PANEL, name)
+            for wid in ("calibration_status", "calibration_detail"):
+                check_text_edge(app, png, scale, wid, edge + DOT_INDENT, PANEL, name)
+            check_icon_right(app, png, scale, app.rect("recent_menu"), right, PANEL, "Recent files icon", name)
+            check_icon_right(app, png, scale, (cx, cy, cw, 24), right, BAND, "Cameras help icon", name)
+            if state:
+                check_icon_right(app, png, scale, app.rect("change_left"), right, PANEL, "Change icon", name)
+            sx, sy, sw, sh = app.rect("step_back")
+            ink = ink_left(png, scale, (0, sy + 2, sx + sw, sy + sh - 2), PANEL)
+            expect(ink is not None and PAD - 1 <= ink <= PAD + 2,
+                   f"{name}: time panel's first icon starts on the edge {PAD} (ink at {ink})")
+            check_box_edge(app, "lane_left_badge_on" if state else "lane_left_badge", PAD, name)
 
         # The next step fits the viewer: no text runs into its right edge.
         if not stitched:
-            vx, vy, vw, vh = app.rect("canvas")
             sx, sy, sw, sh = app.rect("empty_state")
-            ink = ink_left(png, scale, (vx + vw - 12, sy, vx + vw - 1, sy + sh), VIEWER)
+            ink = ink_left(png, scale, (vx + vw - 12, sy, vx + vw - 1, sy + sh), VIEWPORT)
             expect(ink is None, f"{name}: next step clear of the viewer's right edge (ink at {ink})")
         if state == "calibrating":
             bx, by, bw, bh = app.rect("step2_current")
             badge = pixel_at(png, scale, bx + bw / 2, by + 3)
-            expect(drive.close_to(badge, ACCENT, tol=40),
+            expect(drive.close_to(badge, ACCENT_FILL, tol=12),
                    f"{name}: stepper not covered while calibrating ({badge[:3]})")
 
         expect(app.errors() == [], f"{name}: no errors in the app log")
 
 
 def check_adjust_edges():
-    """Every item in an Adjust card starts on the card's content edge."""
+    """Adjust rows: labels on the content edge, controls in one column after
+    the label cell, values ending on the right content edge."""
     name = "adjust-1280x820"
     with launch((1280, 820), "ready") as app:
         png = app.grab(os.path.join(OUT, f"{name}.png"))
         scale = png.width / app.get("/s")["w"][0]["sz"][0]
-        edge = app.rect("view_fold")[0]
-        for wid in ("fov_hint", "seam_hint"):
-            check_text_edge(app, png, scale, wid, edge, SURFACE, name)
-        for wid in ("fov_slider", "seam_blend", "reset_view"):
-            check_box_edge(app, wid, edge, name)
+        ix, iy, iw, ih = app.rect("inspector")
+        edge, right = ix + PAD, ix + iw - PAD
         check_text_edge(app, png, scale, "adjust_header", edge, PANEL, name)
+        for wid in ("fov_label", "match_label", "seam_label"):
+            check_box_edge(app, wid, edge, name)
+        for wid in ("fov_slider", "seam_blend"):
+            check_box_edge(app, wid, edge + LABEL_WIDTH + GAP, name)
+        for wid in ("fov_value", "seam_value"):
+            x, y, w, h = app.rect(wid)
+            ink = ink_right(png, scale, (right - 60, y, right + 6, y + h), PANEL)
+            expect(ink is not None and right - 2 <= ink <= right + 0.5,
+                   f"{name}: `{wid}` ends on the content edge {right} (ink at {ink})")
+        vx, vy, vw, vh = app.rect("view_section")
+        check_icon_right(app, png, scale, (vx, vy, vw, 24), right, BAND, "View band icons", name)
+        expect(app.errors() == [], f"{name}: no errors in the app log")
 
 
 def drag(app, x, y, to_x):
@@ -281,6 +347,12 @@ def drag(app, x, y, to_x):
     app.get("/m", k="move", x=(x + to_x) / 2, y=y)
     app.get("/m", k="move", x=to_x, y=y)
     app.get("/m", k="up", x=to_x, y=y, wait=1)
+
+
+def click(app, rect):
+    x, y, w, h = rect
+    app.get("/m", k="down", x=x + w / 2, y=y + h / 2)
+    app.get("/m", k="up", x=x + w / 2, y=y + h / 2, wait=1)
 
 
 def check_toggles():
@@ -294,6 +366,12 @@ def check_toggles():
         expect(not visible(app, "inspector"), "toggle: Adjust panel folds")
         app.click_id("toggle_inspector")
         expect(visible(app, "inspector"), "toggle: Adjust panel reopens")
+        app.click_id("toggle_timeline")
+        expect(not visible(app, "lanes") and visible(app, "play_pause"),
+               "toggle: time panel folds to its control row")
+        app.grab(os.path.join(OUT, "ready-time-folded.png"))
+        app.click_id("toggle_timeline")
+        expect(visible(app, "lanes"), "toggle: time panel reopens")
         mx, my, mw, mh = app.rect("media_panel")
         bar_x, bar_y = mx + mw + 3, my + mh / 2
         app.get("/m", k="down", x=bar_x, y=bar_y)
@@ -305,8 +383,8 @@ def check_toggles():
         mx, my, mw, mh = app.rect("media_panel")
         drag(app, mx + mw + 3, bar_y, 10)
         media = app.rect("media_panel")
-        expect(media is not None and media[2] >= 175,
-               f"resize: Setup stops at its 180 pt minimum ({media and media[2]})")
+        expect(media is not None and media[2] >= 195,
+               f"resize: Setup stops at its 200 pt minimum ({media and media[2]})")
         ix, iy, iw, ih = app.rect("inspector")
         drag(app, ix - 3, bar_y, 1270)
         inspector = app.rect("inspector")
@@ -316,6 +394,17 @@ def check_toggles():
     with launch((1280, 820), None) as app:
         app.click_id("toggle_inspector")
         expect(not visible(app, "inspector"), "toggle: Adjust panel stays closed before a stitch")
+    # The app menu and the recent-files menu open as menus.
+    with launch((1280, 820), "ready") as app:
+        for menu in ("app_menu", "recent_menu"):
+            click(app, app.rect(menu))
+            time.sleep(0.3)
+            opened = app.rect("menus")
+            expect(opened is not None, f"menu: `{menu}` opens a menu ({opened})")
+            app.grab(os.path.join(OUT, f"ready-{menu}.png"))
+            app.key("Escape")
+            time.sleep(0.3)
+        expect(app.errors() == [], "menu: no errors in the app log")
 
 
 def main():

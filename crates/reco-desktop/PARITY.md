@@ -9,58 +9,67 @@ wrong (see the issues list in [DESIGN.md](DESIGN.md)).
 
 ## Module 0: shell and look (§1, §4)
 
-Evidence for this module: `tools/check_m0.py` (658 checks over every
-`--look-preview` state: start, one camera, both cameras, calibrating, ready,
-exporting), the unit tests (`cargo test -p reco-desktop`), and screenshots
-in `target/desktop-checks/m0/`.
+The look follows the Rerun viewer (DESIGN.md, Look). Evidence for this
+module: `tools/check_m0.py` (860 checks over every `--look-preview` state:
+start, one camera, both cameras, calibrating, calibration failed, ready,
+exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
+(`cargo test -p reco-desktop`), and screenshots in
+`target/desktop-checks/m0/`.
 
 - [x] Window: title "Reco", default 1280×820. It stays usable down to
       720×600 by folding panels, because Makepad has no minimum-size API.
       Evidence: "window title is Reco", "window size … matches",
-      "loaded-720x600: Inspector folded"; `loaded-720x600.png`.
-- [x] Top bar: Media panel toggle, title, Help (shortcuts), Preferences,
-      Export (primary; disabled until files are loaded), Inspector toggle.
-      Evidence: "`toggle_media` / `export_button` / `toggle_inspector` is
-      on screen", "Export is disabled" / "Export is enabled (accent)".
-      Every icon file exists: `every_self_resource_exists`.
-- [x] Media sidebar on the left: default width 260, minimum 180, resizable,
-      opens at startup when nothing is loaded. Evidence: "Media panel open",
-      "dragging the bar widens Media", "Media stops at its 180 pt minimum";
-      `loaded-media-widened.png`.
-- [x] Viewer with empty state: title, the three steps, status text.
-      Evidence: "empty state shown"; `empty-1280x820.png`.
-- [x] Inspector on the right: default width 280, minimum 200, resizable.
-      Evidence: "Inspector open", "Inspector stops at its 200 pt minimum",
-      "Inspector closed before load".
-- [x] Transport bar placeholder, disabled until files are loaded.
-      Evidence: "`step_back` / `play_pause` / `step_forward` /
-      `record_button` / `timeline` / `aspect` disabled" (the `/snap` input
-      flag, in every state), and `empty-1280x820.png` (dimmed).
-- [x] Status bar: status text, version, Report bug link. Evidence:
-      "`status_text` / `version_text` / `report_bug` is on screen".
+      "ready-720x600: Adjust panel closed", "fold hint shown".
+- [x] Title bar: the "Reco" app menu (keyboard shortcuts, preferences,
+      Report a bug, the version), the project, Export (primary; disabled
+      until there is a stitched preview), and the Setup, time panel and
+      Adjust toggles. Evidence: "`app_menu` … is on screen", "menu:
+      `app_menu` opens a menu", "Export face is green / grey", "disabled
+      Export has no green ink"; `ready-app_menu.png`. Every icon file
+      exists: `every_self_resource_exists`.
+- [x] Setup panel on the left: default width 260, minimum 200, resizable,
+      open at startup. Cameras (the linked pair: Add, then Change; file
+      count and length) and Calibration (status, detail, Auto-calibrate or
+      Recalibrate, Load file) in section bands; recent files in a menu.
+      Evidence: "Setup panel open", "`<id>` shown / hidden" per state,
+      "camera link is lit", "dragging the bar widens Setup", "Setup stops
+      at its 200 pt minimum", "menu: `recent_menu` opens a menu".
+- [x] Viewer: a view bar (Preview, aspect, Record) over a black canvas; the
+      next step with the panorama frame and stepper until a stitch exists;
+      calibration progress in that column; the export card with Cancel; a
+      calibration-failed state with Try again. Evidence: "viewport is
+      #000000", "empty state shown", "stepper not covered while
+      calibrating", "`export_card` shown", "`cal_dot_error` shown".
+- [x] Adjust panel on the right: default width 280, minimum 200,
+      resizable. View and Stitch sections of property rows with tooltips,
+      Advanced tiers closed. Evidence: "Adjust panel open / closed",
+      "Adjust stops at its 200 pt minimum", "Adjust panel stays closed
+      before a stitch", `adjust-1280x820.png`.
+- [x] Time panel across the bottom: step, play, the time and a status line;
+      a ruler and a lane per camera with its files; the playhead over a
+      stitched preview; folds to its control row. Controls take no input
+      before a stitch. Evidence: "lane 1 / 2 shows files / no video",
+      "playhead shown / hidden", "`step_back` / `play_pause` /
+      `step_forward` / `timeline` / `aspect` / `record_button` takes /
+      ignores input" (the `/snap` input flag, in every state), "time panel
+      folds to its control row"; `ready-time-folded.png`.
 - [x] All colours, spacing, radii and type sizes come from `src/theme.rs`.
       Dark only; light tokens arrive with the dark-mode preference
       (Module 7). Evidence: the `screens_use_theme_values_only` unit test
       (no raw colours, sizes, spacing or type sizes in `src/ui/`),
-      `tools/check_theme.py`, and the background pixel checks.
-- [x] Looks right at 720×600, 1280×820 and 1920×1200. Evidence: all 12
-      screenshots reviewed. Fixes from that review: the Media panel
-      scrolls, disabled icons fade, the timeline value is hidden, and the
-      settings icon is clearer.
-- [x] Critique pass (contrast, type, information architecture, copy,
-      states, match character): Setup and Adjust panels, the next-step
-      viewer with the panorama frame and stepper, calibration progress in
-      the viewer column, the export card, one primary per screen.
-      Evidence: "`<id>` shown / hidden" and "takes / ignores input" for
-      every state, "Setup panel's Auto-calibrate is secondary", "camera
-      link is lit", "disabled Export has no green ink", "stepper not
-      covered while calibrating", "next step clear of the viewer's right
-      edge" (720×600).
-- [x] One edge per card, one line per row (DESIGN.md Rule 11). Evidence:
-      "`<id>` text starts on the content edge" for card titles, hints,
-      status words and details, panel headers and Adjust controls;
-      "`<id>` centred on the transport row" and "timeline track centred on
-      the transport row".
+      `tools/check_theme.py`, and "Setup panel is #0d0d0d", "section band
+      is #212121".
+- [x] One content edge per panel, trailing icons on the right edge, one line
+      per control row (DESIGN.md Rule 11). Evidence: "`<id>` text starts on
+      the edge", "`<id>` starts on the edge", "… ends on the content edge"
+      (Recent files, help, Change and band icons, Adjust values), "time
+      panel's first icon starts on the edge 12", "`<id>` centred on the
+      control row".
+- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state.
+      Evidence: the screenshots, reviewed in two batched rounds after the
+      Rerun restyle (fixes: the app menu button's border, empty camera
+      rows, trailing icon alignment, the checkbox column, the time panel's
+      edge, dark menus).
 - [ ] Owner approved the look.
 
 ## Module 1: preview (§2.3, §6)

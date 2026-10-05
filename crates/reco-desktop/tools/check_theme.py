@@ -1,4 +1,4 @@
-"""Theme smoke check: the window background is the Reco app colour (#0f1115)
+"""Theme smoke check: the window background is the Reco panel colour (#0d0d0d)
 and the app log is clean. Run from the repo root after
 `cargo build --profile desktop -p reco-desktop`."""
 import sys
@@ -12,6 +12,6 @@ try:
 finally:
     app.quit()
 print("corner", corner[:3], "errors", errors)
-assert drive.close_to(corner, "#0f1115", tol=3), f"background {corner[:3]} is not #0f1115"
+assert drive.close_to(corner, "#0d0d0d", tol=3), f"background {corner[:3]} is not #0d0d0d"
 assert not errors, errors
 print("theme check passed")

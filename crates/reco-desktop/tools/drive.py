@@ -184,9 +184,10 @@ class App:
         return self.get("/snap", q=q)["s"]
 
     def rect(self, widget_id):
-        """(x, y, w, h) of the widget with exactly this id, or None if not drawn."""
+        """(x, y, w, h) of the widget with exactly this id, or None if not drawn
+        (a hairline one point wide counts as drawn)."""
         for item in self.snap(widget_id):
-            if item.get("i") == widget_id and item["r"][2] > 1 and item["r"][3] > 1:
+            if item.get("i") == widget_id and item["r"][2] >= 1 and item["r"][3] >= 1:
                 return tuple(item["r"])
         return None
 
