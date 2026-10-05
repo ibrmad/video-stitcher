@@ -22,6 +22,7 @@ use reco_core::gpu::GpuContext;
 use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
 
+use super::lanes::{self, Lanes};
 use super::metal;
 use super::playback::{PlayState, seek_goal};
 use super::readback::read_bgra;
@@ -38,6 +39,9 @@ const ANIMATION_TICK: Duration = Duration::from_millis(8);
 /// The longest easing step: after a pause in input the first step counts as
 /// one 30 Hz frame, not the whole idle time.
 const MAX_EASE_STEP: Duration = Duration::from_millis(33);
+/// How often the worker looks for the file probe's answer.
+const PROBE_POLL: Duration = Duration::from_millis(50);
+
 /// The shortest sleep while playing: a frame that is due but not decoded
 /// yet is polled again after this long (reco-gui's 2 ms timer).
 const POLL_FLOOR: Duration = Duration::from_millis(2);
@@ -164,6 +168,9 @@ pub enum PreviewEvent {
         /// `width * height` pixels.
         data: Vec<u32>,
     },
+    /// Each camera's files on the timeline and the playable length (once
+    /// per open, after the files were measured).
+    Lanes(Lanes),
     /// The playhead moved, or the play state changed.
     Time {
         /// Frames taken so far (the frame on screen is `frame - 1`).
@@ -293,6 +300,8 @@ struct Worker {
     last_time: (u64, PlayState),
     /// A seek waiting for the end of this batch of commands.
     pending_seek: Option<u64>,
+    /// The file probe's answer, while it is being measured.
+    lanes_rx: Option<Receiver<Lanes>>,
     /// The last failure reported since a frame was shown; not repeated.
     problem: Option<String>,
     /// When the pose last took a smoothing step.
@@ -316,6 +325,7 @@ impl Worker {
             easing: false,
             last_time: (0, PlayState::Empty),
             pending_seek: None,
+            lanes_rx: None,
             problem: None,
             last_step: Instant::now(),
             quit: false,
@@ -345,6 +355,7 @@ impl Worker {
             if let Some(frame) = self.pending_seek.take() {
                 self.transport(|s| s.playback_mut().seek_to_frame(frame));
             }
+            self.collect_lanes();
             let now = Instant::now();
             let dt = now
                 .saturating_duration_since(self.last_step)
@@ -362,10 +373,38 @@ impl Worker {
             .playback()
             .until_next_frame()
             .map(|d| d.max(POLL_FLOOR));
+        let sooner =
+            |wait: Option<Duration>, other: Duration| Some(wait.map_or(other, |w| w.min(other)));
+        let mut wait = next_frame;
         if self.dirty || self.easing {
-            return Some(next_frame.map_or(ANIMATION_TICK, |d| d.min(ANIMATION_TICK)));
+            wait = sooner(wait, ANIMATION_TICK);
         }
-        next_frame
+        if self.lanes_rx.is_some() {
+            wait = sooner(wait, PROBE_POLL);
+        }
+        wait
+    }
+
+    /// Take the probe's answer when it has come: the exact length goes to
+    /// playback, the lanes to the UI.
+    fn collect_lanes(&mut self) {
+        let Some(rx) = self.lanes_rx.as_ref() else {
+            return;
+        };
+        match rx.try_recv() {
+            Ok(lanes) => {
+                self.lanes_rx = None;
+                if let Some(s) = self.session.as_mut() {
+                    let frames = (lanes.length * s.playback().fps()).floor() as u64;
+                    if frames > 0 {
+                        s.playback_mut().set_total_frames(frames);
+                    }
+                }
+                self.out.send(PreviewEvent::Lanes(lanes));
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => self.lanes_rx = None,
+        }
     }
 
     fn apply(&mut self, command: PreviewCommand) {
@@ -502,6 +541,21 @@ impl Worker {
                     },
                     gpu.gpu_name()
                 );
+                let (tx, rx) = mpsc::channel();
+                let (left, right) = (left.clone(), right.clone());
+                let (sync_offset, fps) = (session.sync_offset(), session.playback().fps());
+                let probe =
+                    std::thread::Builder::new()
+                        .name("reco-probe".into())
+                        .spawn(move || {
+                            let _ = tx.send(lanes::lanes(
+                                &lanes::probe(&left),
+                                &lanes::probe(&right),
+                                sync_offset,
+                                fps,
+                            ));
+                        });
+                self.lanes_rx = probe.is_ok().then_some(rx);
                 self.session = Some(session);
                 self.ring = None;
                 self.problem = None;
@@ -957,5 +1011,30 @@ mod tests {
             matches!(&event, Some(PreviewEvent::Stopped(m)) if m.contains("stopped unexpectedly")),
             "{event:?}"
         );
+    }
+
+    #[test]
+    fn lanes_arrive_after_open() {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let worker = readback_worker();
+        worker.send(PreviewCommand::Resize {
+            width: 320,
+            height: 180,
+        });
+        worker.send(PreviewCommand::Open {
+            left: InputPath::Single(left),
+            right: InputPath::Single(right),
+            calibration: cal,
+        });
+        let event = wait_for(&worker, 30, |e| {
+            matches!(e, PreviewEvent::Lanes(_) | PreviewEvent::Failed(_))
+        });
+        let Some(PreviewEvent::Lanes(lanes)) = event else {
+            panic!("{event:?}")
+        };
+        assert_eq!((lanes.left.len(), lanes.right.len()), (1, 1));
+        assert!((lanes.length - 60.0).abs() < 0.5, "{lanes:?}");
     }
 }

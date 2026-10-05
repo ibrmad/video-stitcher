@@ -4,6 +4,7 @@
 pub mod clock;
 #[cfg(test)]
 pub(crate) mod fixtures;
+pub mod lanes;
 pub mod metal;
 pub mod playback;
 pub mod readback;

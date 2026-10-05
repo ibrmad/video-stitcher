@@ -145,6 +145,12 @@ impl Playback {
         self.seek_to(seek_target(current, (seconds * fps).round() as i64, total))
     }
 
+    /// Replace the engine's length estimate (it ignores the sync offset)
+    /// with the probed one.
+    pub fn set_total_frames(&mut self, frames: u64) {
+        self.total_frames = Some(frames);
+    }
+
     /// Show `frame` (0-based), kept inside the videos (blocking: decodes).
     pub fn seek_to_frame(&mut self, frame: u64) -> Result<(), SourceError> {
         let frame = self

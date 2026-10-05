@@ -225,6 +225,12 @@ impl PreviewSession {
         self.size
     }
 
+    /// The calibration's sync offset in frames (positive: the right camera
+    /// started first).
+    pub fn sync_offset(&self) -> i64 {
+        self.renderer.calibration().sync_offset
+    }
+
     /// Playback, for the worker's tick and transport commands.
     pub fn playback(&self) -> &Playback {
         &self.playback
