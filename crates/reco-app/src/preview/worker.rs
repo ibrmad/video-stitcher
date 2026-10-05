@@ -26,9 +26,11 @@ use super::lanes::{self, Lanes};
 use super::metal;
 use super::playback::{PlayState, seek_goal};
 use super::readback::read_bgra;
+use super::recorder::Recording;
 use super::session::{OUTPUT_FORMAT, PreviewSession};
 use super::slots::{RING_SLOTS, SlotRing};
 use super::view::should_resize;
+use crate::recording::RecordingQuality;
 
 /// Commands queued before the UI's sends start failing.
 const COMMAND_QUEUE: usize = 256;
@@ -119,6 +121,17 @@ pub enum PreviewCommand {
         /// The frame.
         frame: u64,
     },
+    /// Start recording the preview to `path` at `size`.
+    StartRecording {
+        /// The file to write.
+        path: PathBuf,
+        /// The frame size.
+        size: (u32, u32),
+        /// The encoder quality.
+        quality: RecordingQuality,
+    },
+    /// Stop recording and close the file.
+    StopRecording,
     /// Panic on the render thread (tests of the crash report).
     #[cfg(test)]
     Crash,
@@ -168,6 +181,20 @@ pub enum PreviewEvent {
         /// `width * height` pixels.
         data: Vec<u32>,
     },
+    /// A recording started.
+    RecordingStarted {
+        /// The file being written.
+        path: PathBuf,
+    },
+    /// Frames recorded so far (one event per recorded frame).
+    Recorded {
+        /// The count so far.
+        frames: u64,
+    },
+    /// A recording was finished and its file closed.
+    RecordingSaved(Recording),
+    /// A recording could not start or stopped on an error.
+    RecordingFailed(String),
     /// Each camera's files on the timeline and the playable length (once
     /// per open, after the files were measured).
     Lanes(Lanes),
@@ -302,6 +329,10 @@ struct Worker {
     pending_seek: Option<u64>,
     /// The file probe's answer, while it is being measured.
     lanes_rx: Option<Receiver<Lanes>>,
+    /// The frame last recorded (`frame_index`), so each is recorded once.
+    recorded_at: Option<u64>,
+    /// Frames recorded so far.
+    recorded: u64,
     /// The last failure reported since a frame was shown; not repeated.
     problem: Option<String>,
     /// When the pose last took a smoothing step.
@@ -326,6 +357,8 @@ impl Worker {
             last_time: (0, PlayState::Empty),
             pending_seek: None,
             lanes_rx: None,
+            recorded_at: None,
+            recorded: 0,
             problem: None,
             last_step: Instant::now(),
             quit: false,
@@ -363,6 +396,7 @@ impl Worker {
             self.last_step = now;
             self.step(dt);
         }
+        self.finish_recording();
     }
 
     /// `None`: nothing moves, so block until a command (about 0% CPU while
@@ -462,7 +496,78 @@ impl Worker {
             }
             #[cfg(test)]
             PreviewCommand::Crash => panic!("a test crash"),
+            PreviewCommand::StartRecording {
+                path,
+                size,
+                quality,
+            } => self.start_recording(&path, size, quality),
+            PreviewCommand::StopRecording => self.finish_recording(),
             PreviewCommand::Quit => self.quit = true,
+        }
+    }
+
+    fn start_recording(
+        &mut self,
+        path: &std::path::Path,
+        size: (u32, u32),
+        quality: RecordingQuality,
+    ) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        if session.is_recording() {
+            return;
+        }
+        match session.start_recording(path, size, quality) {
+            Ok(()) => {
+                self.recorded_at = None;
+                self.recorded = 0;
+                self.dirty = true;
+                self.out.send(PreviewEvent::RecordingStarted {
+                    path: path.to_path_buf(),
+                });
+            }
+            Err(e) => self.out.send(PreviewEvent::RecordingFailed(e.to_string())),
+        }
+    }
+
+    /// Record the frame on screen when it is new since the last one recorded
+    /// (playing, stepping or seeking); a pan alone records nothing.
+    fn record_new_frame(&mut self) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        let frame = session.playback().frame_index();
+        if !session.is_recording() || self.recorded_at == Some(frame) {
+            return;
+        }
+        match session.record_frame() {
+            Ok(()) => {
+                self.recorded_at = Some(frame);
+                self.recorded += 1;
+                self.out.send(PreviewEvent::Recorded {
+                    frames: self.recorded,
+                });
+            }
+            Err(e) => {
+                let _ = session.stop_recording();
+                self.out.send(PreviewEvent::RecordingFailed(e.to_string()));
+            }
+        }
+    }
+
+    /// Finish a running recording and say how it went.
+    fn finish_recording(&mut self) {
+        let Some(result) = self
+            .session
+            .as_mut()
+            .and_then(PreviewSession::stop_recording)
+        else {
+            return;
+        };
+        match result {
+            Ok(recording) => self.out.send(PreviewEvent::RecordingSaved(recording)),
+            Err(e) => self.out.send(PreviewEvent::RecordingFailed(e.to_string())),
         }
     }
 
@@ -591,6 +696,7 @@ impl Worker {
                 state: time.1,
             });
         }
+        self.record_new_frame();
         if advanced || moved || self.dirty {
             self.dirty = !self.present();
         }
@@ -1036,5 +1142,146 @@ mod tests {
         };
         assert_eq!((lanes.left.len(), lanes.right.len()), (1, 1));
         assert!((lanes.length - 60.0).abs() < 0.5, "{lanes:?}");
+    }
+
+    fn temp_video(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("reco-app-worker-{name}-{}.mp4", std::process::id()))
+    }
+
+    fn open_fast(worker: &PreviewWorker) -> bool {
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return false;
+        };
+        worker.send(PreviewCommand::Resize {
+            width: 320,
+            height: 180,
+        });
+        worker.send(PreviewCommand::Open {
+            left: InputPath::Single(left),
+            right: InputPath::Single(right),
+            calibration: cal,
+        });
+        wait_for(worker, 30, |e| matches!(e, PreviewEvent::Ready(_))).is_some()
+    }
+
+    fn start_recording(worker: &PreviewWorker, path: &std::path::Path) {
+        worker.send(PreviewCommand::StartRecording {
+            path: path.to_path_buf(),
+            size: (640, 360),
+            quality: RecordingQuality::Fast,
+        });
+        let started = wait_for(worker, 10, |e| {
+            matches!(
+                e,
+                PreviewEvent::RecordingStarted { .. } | PreviewEvent::RecordingFailed(_)
+            )
+        });
+        assert!(
+            matches!(started, Some(PreviewEvent::RecordingStarted { .. })),
+            "{started:?}"
+        );
+    }
+
+    /// The highest `Recorded` count seen within `secs`.
+    fn recorded_within(worker: &PreviewWorker, secs: f64) -> u64 {
+        let deadline = Instant::now() + Duration::from_secs_f64(secs);
+        let mut frames = 0;
+        while Instant::now() < deadline {
+            while let Some(e) = worker.try_event() {
+                if let PreviewEvent::Recorded { frames: n } = e {
+                    frames = frames.max(n);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        frames
+    }
+
+    fn saved(worker: &PreviewWorker) -> Recording {
+        worker.send(PreviewCommand::StopRecording);
+        let event = wait_for(worker, 20, |e| {
+            matches!(
+                e,
+                PreviewEvent::RecordingSaved(_) | PreviewEvent::RecordingFailed(_)
+            )
+        });
+        match event {
+            Some(PreviewEvent::RecordingSaved(recording)) => recording,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn records_while_playing() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let path = temp_video("plays");
+        start_recording(&worker, &path);
+        worker.send(PreviewCommand::TogglePlay);
+        std::thread::sleep(Duration::from_millis(1000));
+        let recording = saved(&worker);
+        assert!(
+            (20..=40).contains(&recording.frames),
+            "about a second at 30 fps: {}",
+            recording.frames
+        );
+        let secs = reco_io::ffmpeg::decoder::VideoDecoder::open(&path)
+            .expect("playable")
+            .duration_secs()
+            .unwrap_or(0.0);
+        assert!(
+            (secs - recording.frames as f64 / 30.0).abs() < 0.1,
+            "{secs}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn pausing_adds_no_frames() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let path = temp_video("paused");
+        start_recording(&worker, &path);
+        worker.send(PreviewCommand::TogglePlay);
+        std::thread::sleep(Duration::from_millis(600));
+        worker.send(PreviewCommand::TogglePlay);
+        let at_pause = recorded_within(&worker, 0.4);
+        // Panning while paused moves the view, not the video: no new frames.
+        worker.send(PreviewCommand::Pan { dx: 80.0, dy: 0.0 });
+        assert_eq!(recorded_within(&worker, 0.5), 0, "no frames while paused");
+        assert_eq!(saved(&worker).frames, at_pause);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn quitting_while_recording_finishes_the_file() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let path = temp_video("quit");
+        start_recording(&worker, &path);
+        worker.send(PreviewCommand::TogglePlay);
+        std::thread::sleep(Duration::from_millis(500));
+        drop(worker);
+        // The worker closes the file on its own thread after Quit.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut playable = false;
+        while Instant::now() < deadline && !playable {
+            playable = reco_io::ffmpeg::decoder::VideoDecoder::open(&path)
+                .ok()
+                .and_then(|v| v.duration_secs())
+                .is_some_and(|s| s > 0.0);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(
+            playable,
+            "the recording was finished after the worker was dropped"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }
