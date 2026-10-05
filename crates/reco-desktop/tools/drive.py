@@ -142,6 +142,19 @@ def read_png(path):
     return Png(width, height, bytes(out))
 
 
+def launch_env(base, env, hidden):
+    """The environment for a launched app: hidden windows if asked, and a
+    fresh settings folder (RECO_CONFIG_DIR) unless one is given, so checks
+    never read or write the owner's settings."""
+    out = dict(base)
+    out.update(env or {})
+    if hidden:
+        out["MAKEPAD_HIDE_WINDOWS"] = "1"
+    if "RECO_CONFIG_DIR" not in (env or {}):
+        out["RECO_CONFIG_DIR"] = tempfile.mkdtemp(prefix="reco-desktop-config-")
+    return out
+
+
 class App:
     """One running instance launched with --remote. Close it with quit()."""
 
@@ -149,11 +162,9 @@ class App:
         self.proc, self.port, self.log_path = proc, port, log_path
 
     @classmethod
-    def launch(cls, binary, args=(), hidden=True, timeout=60.0):
+    def launch(cls, binary, args=(), hidden=True, timeout=60.0, env=None):
         """Start binary with --remote and wait for its control port."""
-        env = dict(os.environ)
-        if hidden:
-            env["MAKEPAD_HIDE_WINDOWS"] = "1"
+        env = launch_env(os.environ, env, hidden)
         log_fd, log_path = tempfile.mkstemp(prefix="reco-desktop-", suffix=".log")
         log = os.fdopen(log_fd, "w")
         proc = subprocess.Popen([binary, "--remote", *args], stdout=log, stderr=subprocess.STDOUT, env=env)

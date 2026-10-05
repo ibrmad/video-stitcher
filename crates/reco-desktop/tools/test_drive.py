@@ -78,6 +78,20 @@ class ParseCputime(unittest.TestCase):
 
 
 
+class LaunchEnv(unittest.TestCase):
+    def test_each_launch_gets_its_own_settings_folder(self):
+        a = drive.launch_env({"PATH": "/bin"}, None, hidden=True)
+        b = drive.launch_env({"PATH": "/bin"}, None, hidden=True)
+        self.assertEqual(a["MAKEPAD_HIDE_WINDOWS"], "1")
+        self.assertTrue(os.path.isdir(a["RECO_CONFIG_DIR"]))
+        self.assertNotEqual(a["RECO_CONFIG_DIR"], b["RECO_CONFIG_DIR"])
+
+    def test_a_given_folder_wins(self):
+        env = drive.launch_env({}, {"RECO_CONFIG_DIR": "/tmp/x"}, hidden=False)
+        self.assertEqual(env["RECO_CONFIG_DIR"], "/tmp/x")
+        self.assertNotIn("MAKEPAD_HIDE_WINDOWS", env)
+
+
 class ConflictWait(unittest.TestCase):
     def test_waits_out_the_quiet_window(self):
         answer = {"err": "user_interacting", "applied": False, "activity": {"idle_ms": 669, "quiet_ms": 2000}}
