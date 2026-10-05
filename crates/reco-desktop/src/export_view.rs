@@ -16,6 +16,7 @@ use reco_app::export::{
 };
 use reco_app::preview::playback::PlayState;
 use reco_app::preview::worker::PreviewCommand;
+use reco_app::telemetry::UsageEvent;
 use reco_app::toasts::Severity;
 
 use crate::export_text::{grouped, percent, progress_detail, size_label, time_left};
@@ -442,6 +443,11 @@ impl App {
                 .as_ref()
                 .map(|e| export::with_mp4(&e.options.output))
                 .unwrap_or_default();
+            let (codec, fps) = self
+                .export
+                .as_ref()
+                .map(|e| (e.options.codec.clone(), e.options.fps))
+                .unwrap_or_default();
             match event {
                 ExportEvent::Progress { frames, total, fps } => {
                     let fraction = if total > 0 {
@@ -464,6 +470,15 @@ impl App {
                 } => {
                     log!("export: done, {frames} frames to {}", path.display());
                     self.end_export(cx);
+                    let duration_secs = if fps > 0.0 { frames as f64 / fps } else { 0.0 };
+                    self.send_usage(
+                        cx,
+                        UsageEvent::ExportComplete {
+                            frames,
+                            duration_secs,
+                            codec,
+                        },
+                    );
                     // Show in folder reveals it, as after a recording.
                     if let Some(live) = self.live.as_mut() {
                         live.last_output = Some(path.clone());
@@ -486,6 +501,13 @@ impl App {
                 ExportEvent::Failed(why) => {
                     log!("export: failed: {why}");
                     self.end_export(cx);
+                    self.send_usage(
+                        cx,
+                        UsageEvent::ExportError {
+                            error: why.clone(),
+                            codec,
+                        },
+                    );
                     self.toast(cx, Severity::Error, "Export failed", &why);
                 }
                 ExportEvent::Cancelled => {

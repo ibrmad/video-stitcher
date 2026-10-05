@@ -166,8 +166,8 @@ def answers_file(answers):
     return path
 
 
-def launch(config, files=None, answers=None, env=None):
-    args = ["--window-size", "1280x820"]
+def launch(config, files=None, answers=None, env=None, extra=()):
+    args = ["--window-size", "1280x820", *extra]
     if files:
         args += ["--left", files[0], "--right", files[1]]
         if len(files) > 2:
@@ -441,7 +441,68 @@ def title_rect(app, text):
     return None
 
 
-CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug}
+def events(folder, name):
+    """The props of each `name` event kept in `folder`."""
+    return [json.loads(b)["events"][0]["props"] for b in kept(folder, name)]
+
+
+def check_usage():
+    """Usage data goes out only when opted in: with it on, an opened match
+    sends its source info, an export its outcome, and a failed calibration
+    its error (no network in checks); with it off, nothing at all."""
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"telemetry_enabled": True}, f)
+    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
+    out = os.path.join(tempfile.mkdtemp(prefix="reco-m7-export-"), "short")
+    with launch(config, FAST, answers={"export": [out]}, env={"RECO_DESKTOP_NO_NETWORK": sent},
+                extra=["--export-range", "0-1"]) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "usage: the preview opens")
+        source = wait_for(lambda: events(sent, "source_info"), 10) or [{}]
+        expect((source[0].get("width"), source[0].get("height"), source[0].get("decoder")) == (1280, 960, "zero-copy")
+               and abs(source[0].get("fps", 0) - 30) < 1 and isinstance(source[0].get("sync_offset"), int),
+               f"usage: an opened match sends its source info ({source[0]})")
+        wait_for(lambda: app.enabled("export_button"), 10)
+        click(app, "export_button")
+        wait_for(lambda: app.rect("sheet_export"), 5)
+        time.sleep(0.5)
+        click(app, "export_browse")
+        wait_for(lambda: text_of(app, "export_output") == out + ".mp4", 5)
+        click(app, "sheet_export")
+        expect(wait_for(lambda: logged(app, "export: done"), 90) is not None, "usage: a one-second export finishes")
+        done = wait_for(lambda: events(sent, "export_complete"), 5) or [{}]
+        expect(25 <= done[0].get("frames", 0) <= 35 and done[0].get("codec") == "h264"
+               and abs(done[0].get("duration_sec", 0) - done[0].get("frames", 0) / 30) < 0.1,
+               f"usage: and its outcome ({done[0]})")
+        expect(len(events(sent, "source_info")) == 1, "usage: source info once per open")
+        expect(not app.errors(), f"usage: no errors in the app log {app.errors()[:3]}")
+
+    quiet = tempfile.mkdtemp(prefix="reco-m7-quiet-")
+    with launch(tempfile.mkdtemp(prefix="reco-m7-config-"), FAST, env={"RECO_DESKTOP_NO_NETWORK": quiet}) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "usage: off, the preview opens")
+        time.sleep(2)
+        expect(os.listdir(quiet) == [] and not logged(app, "network: would send"),
+               f"usage: with it off, nothing is sent ({os.listdir(quiet)})")
+
+    folder = tempfile.mkdtemp(prefix="reco-m7-calibrate-")
+    files = []
+    for source_file, name in zip(FAST[:2], ("cam0.mp4", "cam1.mp4")):
+        os.symlink(source_file, os.path.join(folder, name))
+        files.append(os.path.join(folder, name))
+    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
+    with launch(config, answers={"left": [files[0]], "right": [files[1]]}, env={"RECO_DESKTOP_NO_NETWORK": sent}) as app:
+        wait_for(lambda: app.rect("add_left"), 15)
+        app.click_id("add_left")
+        app.click_id("add_right")
+        wait_for(lambda: app.enabled("auto_calibrate"), 15)
+        app.click_id("auto_calibrate")
+        failed = wait_for(lambda: events(sent, "calibration_error"), 180) or [{}]
+        expect("no usable frame pairs" in failed[0].get("error_message", ""),
+               f"usage: a failed calibration sends its error ({failed[0]})")
+
+
+CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug,
+          "usage": check_usage}
 
 
 def main():

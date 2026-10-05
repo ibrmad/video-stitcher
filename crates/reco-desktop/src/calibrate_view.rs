@@ -13,6 +13,7 @@ use reco_app::calibrate::{
     LOW_CONFIDENCE,
 };
 use reco_app::project::Camera;
+use reco_app::telemetry::UsageEvent;
 use reco_app::toasts::Severity;
 
 use crate::App;
@@ -195,6 +196,12 @@ impl App {
                 CalibrationEvent::Failed(reason) => {
                     self.end_calibration();
                     log!("calibration failed: {reason}");
+                    self.send_usage(
+                        cx,
+                        UsageEvent::CalibrationError {
+                            error: reason.clone(),
+                        },
+                    );
                     self.toast(
                         cx,
                         Severity::Error,
@@ -221,6 +228,13 @@ impl App {
     /// opens (or reopens with it), and the toasts say how it went.
     fn calibrated(&mut self, cx: &mut Cx, done: CalibrationDone) {
         self.end_calibration();
+        self.send_usage(
+            cx,
+            UsageEvent::CalibrationComplete {
+                confidence: done.confidence,
+                matches: done.matches,
+            },
+        );
         log!(
             "calibrated: {} matches, confidence {:.2}, saved to {}",
             done.matches,

@@ -75,6 +75,31 @@ impl App {
         );
     }
 
+    /// What a newly opened match is (sent with its first values, when the
+    /// sync offset is known).
+    pub(crate) fn send_source_info(&mut self, cx: &mut Cx, sync_offset: i64) {
+        let Some(info) = self.live.as_ref().and_then(|l| l.info.clone()) else {
+            return;
+        };
+        // How frames reach the picture (the preview doesn't say which
+        // decoder it got).
+        let decoder = if info.zero_copy {
+            "zero-copy"
+        } else {
+            "readback"
+        };
+        self.send_usage(
+            cx,
+            UsageEvent::SourceInfo {
+                width: info.width,
+                height: info.height,
+                fps: info.fps,
+                decoder: decoder.into(),
+                sync_offset,
+            },
+        );
+    }
+
     /// Post `event` to the usage service (whatever the opt-in says: the
     /// caller decides).
     pub(crate) fn post_usage(&mut self, cx: &mut Cx, event: UsageEvent) {

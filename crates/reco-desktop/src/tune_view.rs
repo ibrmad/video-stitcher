@@ -90,6 +90,7 @@ impl App {
         let adopt = values.opened > self.adopted_open;
         if adopt {
             self.adopted_open = values.opened;
+            self.send_source_info(cx, values.sync_offset);
             for ((slider, label, _, show), value) in rows().into_iter().zip(numbers) {
                 self.ui.slider(cx, slider).set_value(cx, value);
                 self.set_label(cx, label, &show(value));
