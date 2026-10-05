@@ -66,6 +66,9 @@ pub struct RecoPreview {
     source: ScriptObjectRef,
     #[walk]
     walk: Walk,
+    /// The drawn frame, letterboxed: what the remote snapshot reports (no
+    /// rect until a frame is shown).
+    #[area]
     #[live]
     draw_frame: DrawPreview,
     #[visible]
@@ -73,9 +76,8 @@ pub struct RecoPreview {
     visible: bool,
     /// The whole widget: what redraws (the frame quad has no area until
     /// its first draw, so redrawing it alone would never show a first
-    /// frame), input hits, and what the remote snapshot reports.
+    /// frame) and where input hits.
     #[redraw]
-    #[area]
     #[rust]
     area: Area,
     #[rust]

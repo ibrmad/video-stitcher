@@ -75,6 +75,20 @@ pub fn length_secs(info: &PreviewInfo) -> f64 {
     }
 }
 
+/// A worker failure ("Couldn't open the videos: file not found") as a
+/// title and a detail with its first letter raised.
+pub fn failure_text(message: &str) -> (String, String) {
+    let Some((title, detail)) = message.split_once(": ") else {
+        return (message.to_string(), String::new());
+    };
+    let mut chars = detail.chars();
+    let detail = chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default();
+    (title.to_string(), detail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +135,21 @@ mod tests {
             0.0
         );
         assert_eq!(length_secs(&PreviewInfo { fps: 0.0, ..info }), 0.0);
+    }
+
+    #[test]
+    fn failures_split_into_title_and_detail() {
+        assert_eq!(
+            failure_text("Couldn't open the videos: invalid input path (/x/l.mp4): file not found"),
+            (
+                "Couldn't open the videos".to_string(),
+                "Invalid input path (/x/l.mp4): file not found".to_string()
+            )
+        );
+        assert_eq!(
+            failure_text("No frame decoded yet"),
+            ("No frame decoded yet".to_string(), String::new())
+        );
     }
 
     #[test]

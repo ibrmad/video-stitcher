@@ -588,14 +588,31 @@ impl App {
         self.apply_shell(cx);
     }
 
-    /// Opening failed: say so in the viewer.
+    /// Opening failed: say so in the viewer, the worker's words split into
+    /// a title and its detail, back at the first step.
     fn show_failed(&mut self, cx: &mut Cx, message: &str) {
+        let (title, detail) = live::failure_text(message);
         self.set_visible(cx, ids!(preview), false);
         self.set_visible(cx, ids!(empty_state), true);
         self.set_visible(cx, ids!(next_actions), false);
-        self.set_label(cx, ids!(next_title), "Couldn't open the videos");
-        self.set_label(cx, ids!(next_body), message);
-        self.set_label(cx, ids!(status_text), "Couldn't open the videos");
+        self.set_label(cx, ids!(next_title), &title);
+        self.set_label(cx, ids!(next_body), &detail);
+        self.set_step(
+            cx,
+            [ids!(step1_todo), ids!(step1_current), ids!(step1_done)],
+            Step::Current,
+        );
+        self.set_step(
+            cx,
+            [ids!(step2_todo), ids!(step2_current), ids!(step2_done)],
+            Step::Todo,
+        );
+        self.set_step(
+            cx,
+            [ids!(step3_todo), ids!(step3_current), ids!(step3_done)],
+            Step::Todo,
+        );
+        self.set_label(cx, ids!(status_text), &title);
         self.ui.redraw(cx);
     }
 
