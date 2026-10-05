@@ -166,8 +166,8 @@ def answers_file(answers):
     return path
 
 
-def launch(config, files=None, answers=None, env=None, extra=()):
-    args = ["--window-size", "1280x820", *extra]
+def launch(config, files=None, answers=None, env=None, extra=(), size="1280x820"):
+    args = (["--window-size", size] if size else []) + list(extra)
     if files:
         args += ["--left", files[0], "--right", files[1]]
         if len(files) > 2:
@@ -529,8 +529,59 @@ def check_update():
                "update: offline, GitHub isn't asked")
 
 
+def drag_edge(app, x, y, by):
+    """Drag a panel edge at (x, y) by `by` points across."""
+    app.get("/m", k="down", x=x, y=y, wait=1)
+    for step in range(1, 7):
+        app.get("/m", k="move", x=x + by * step / 6, y=y, wait=1)
+    app.get("/m", k="up", x=x + by, y=y, wait=1)
+
+
+def window_size(app):
+    return tuple(app.get("/s")["w"][0]["sz"][:2])
+
+
+def check_persist():
+    """The window's size and the side panels' widths come back after a
+    restart (saved a quiet second after a change); --window-size still
+    wins."""
+    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    with launch(config, FAST, size="1440x900") as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "persist: the preview opens")
+        # A stitched match opens the Adjust panel by itself.
+        wait_for(lambda: app.rect("inspector"), 5)
+        setup, adjust = app.rect("media_panel"), app.rect("inspector")
+        expect(setup is not None and adjust is not None, "persist: both side panels show")
+        mid = setup[1] + setup[3] / 2
+        drag_edge(app, setup[0] + setup[2] + 3, mid, 60)
+        drag_edge(app, adjust[0] - 3, mid, -40)
+        time.sleep(0.5)
+        widths = (app.rect("media_panel")[2], app.rect("inspector")[2])
+        expect(abs(widths[0] - setup[2] - 60) <= 2 and abs(widths[1] - adjust[2] - 40) <= 2,
+               f"persist: dragging the edges widens both panels ({setup[2]}→{widths[0]}, {adjust[2]}→{widths[1]})")
+        expect(wait_for(lambda: logged(app, "layout: saved"), 3) is not None, "persist: saved a quiet second later")
+        save_shot(app, "persist-before")
+    kept_layout = saved(config)
+    expect(kept_layout.get("window_size") == [1440.0, 900.0] and not kept_layout.get("window_maximized"),
+           f"persist: the window is remembered ({kept_layout.get('window_size')})")
+    with launch(config, FAST, size=None) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "persist: it opens again")
+        time.sleep(0.5)
+        expect(window_size(app) == (1440, 900), f"persist: at its size ({window_size(app)})")
+        wait_for(lambda: app.rect("inspector"), 5)
+        again = (app.rect("media_panel")[2], (app.rect("inspector") or [0, 0, 0])[2])
+        expect(all(abs(a - b) <= 1 for a, b in zip(again, widths)),
+               f"persist: with the panels' widths ({widths} → {again})")
+        save_shot(app, "persist-after")
+    with launch(config) as app:
+        time.sleep(1.0)
+        expect(window_size(app) == (1280, 820), f"persist: --window-size wins ({window_size(app)})")
+    # Full screen at start is not run here: even a hidden window would take
+    # over the display. remember_window's test and a one-off probe cover it.
+
+
 CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug,
-          "usage": check_usage, "update": check_update}
+          "usage": check_usage, "update": check_update, "persist": check_persist}
 
 
 def main():

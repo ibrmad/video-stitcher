@@ -24,6 +24,7 @@ mod export_view;
 mod file_rows;
 mod help_view;
 mod keys;
+mod layout_view;
 mod lens_picker_view;
 mod lens_view;
 mod live;
@@ -318,6 +319,9 @@ pub struct App {
     /// The links notices offer, by toast.
     #[rust]
     toast_links: HashMap<u64, String>,
+    /// Fires a quiet second after the window or a panel changed.
+    #[rust]
+    layout_timer: Timer,
 }
 
 impl App {
@@ -653,6 +657,7 @@ impl MatchEvent for App {
                 .window(cx, ids!(main_window))
                 .resize(cx, dvec2(w, h));
         }
+        self.restore_layout(cx);
         if let Some(state) = self.args.look_preview {
             self.show_state(cx, Some(state));
         } else {
@@ -687,6 +692,7 @@ impl MatchEvent for App {
             self.toggle_timeline(cx);
         }
         self.app_menu_actions(cx, actions);
+        self.layout_actions(cx, actions);
         self.prefs_actions(cx, actions);
         self.bug_actions(cx, actions);
         self.preview_actions(cx, actions);
@@ -721,7 +727,11 @@ impl AppMain for App {
             Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
             Event::Drag(drag) => self.drag_files(drag),
             Event::Drop(drop) => self.drop_files(cx, drop),
-            Event::Shutdown => self.finish_recording_on_quit(),
+            Event::Shutdown => {
+                self.finish_recording_on_quit();
+                self.save_layout(cx);
+            }
+            Event::WindowGeomChange(ge) => self.window_changed(cx, &ge.new_geom),
             _ => {}
         }
         match event {
@@ -758,6 +768,9 @@ impl AppMain for App {
         }
         if self.toast_timer.is_event(event).is_some() {
             self.expire_toasts(cx);
+        }
+        if self.layout_timer.is_event(event).is_some() {
+            self.save_layout(cx);
         }
         self.match_event(cx, event);
         let draw = matches!(event, Event::Draw(_));

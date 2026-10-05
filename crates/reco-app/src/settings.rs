@@ -172,6 +172,18 @@ impl DesktopSettings {
         self.default_blend.clamp(0.0, MAX_BLEND)
     }
 
+    /// Remember the window after a change: its size while windowed, and
+    /// whether it is maximized (full screen on macOS, where its size is the
+    /// screen's). Whether anything changed.
+    pub fn remember_window(&mut self, size: (f64, f64), maximized: bool) -> bool {
+        let before = (self.window_size, self.window_maximized);
+        if !maximized {
+            self.window_size = Some(size);
+        }
+        self.window_maximized = maximized;
+        before != (self.window_size, self.window_maximized)
+    }
+
     /// The window size to open at: the saved one, at least [`MIN_WINDOW`]
     /// (`None` when nothing sensible was saved).
     pub fn restored_window_size(&self) -> Option<(f64, f64)> {
@@ -273,6 +285,22 @@ mod tests {
         assert_eq!(s.restored_window_size(), Some((720.0, 600.0)));
         s.window_size = Some((f64::NAN, 900.0));
         assert_eq!(s.restored_window_size(), None, "nonsense is ignored");
+    }
+
+    #[test]
+    fn the_window_is_remembered_windowed_and_full_screen() {
+        let mut s = DesktopSettings::default();
+        assert!(s.remember_window((1440.0, 900.0), false), "a change");
+        assert_eq!((s.window_size, s.window_maximized), (Some((1440.0, 900.0)), false));
+        assert!(!s.remember_window((1440.0, 900.0), false), "the same: nothing to save");
+        assert!(s.remember_window((2560.0, 1600.0), true));
+        assert_eq!(
+            (s.window_size, s.window_maximized),
+            (Some((1440.0, 900.0)), true),
+            "full screen keeps the windowed size"
+        );
+        assert!(s.remember_window((1440.0, 900.0), false));
+        assert!(!s.window_maximized);
     }
 
     #[test]
