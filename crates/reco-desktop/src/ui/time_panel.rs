@@ -225,8 +225,12 @@ pub struct RecoTimeRuler {
     /// Per lane, each file's (start, end) in seconds; empty for no video.
     #[rust]
     lanes: Vec<Vec<(f64, f64)>>,
+    /// No video: nothing to seek, no playhead.
     #[rust]
     disabled: bool,
+    /// Seeking is locked (an export runs); the playhead still shows.
+    #[rust]
+    locked: bool,
     /// The whole ruler: what redraws, and what the remote snapshot reports.
     #[redraw]
     #[rust]
@@ -261,6 +265,15 @@ impl RecoTimeRuler {
         self.dragging
     }
 
+    /// Lock or unlock seeking; the playhead stays where it is.
+    pub fn set_locked(&mut self, cx: &mut Cx, locked: bool) {
+        if locked != self.locked {
+            self.locked = locked;
+            self.dragging = false;
+            self.area.redraw(cx);
+        }
+    }
+
     /// Tint the export range (`None`: no range).
     pub fn set_export_range(&mut self, cx: &mut Cx, range: Option<(f64, f64)>) {
         self.export_range = range;
@@ -280,7 +293,7 @@ impl RecoTimeRuler {
 
 impl Widget for RecoTimeRuler {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
-        if self.disabled || self.duration <= 0.0 {
+        if self.disabled || self.locked || self.duration <= 0.0 {
             return;
         }
         let uid = self.widget_uid();
@@ -314,7 +327,7 @@ impl Widget for RecoTimeRuler {
     }
 
     fn disabled(&self, _cx: &Cx) -> bool {
-        self.disabled
+        self.disabled || self.locked
     }
 
     fn draw_walk(&mut self, cx: &mut Cx2d, _scope: &mut Scope, walk: Walk) -> DrawStep {

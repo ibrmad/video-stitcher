@@ -145,6 +145,14 @@ def sheet_shows(app, face):
     return now is not None and all(abs(a - b) <= 6 for a, b in zip(now, face))
 
 
+def open_advanced(app, fold_id):
+    """Open an Advanced tier by its chevron."""
+    r = app.rect(fold_id)
+    if r:
+        app.get("/click", x=r[0] + 18, y=r[1] + 12, wait=1)
+        time.sleep(0.5)
+
+
 def open_sheet(app):
     """Wait for the preview and click Export; the Size field's face colour
     once the sheet shows (for `sheet_shows`), or None."""
@@ -199,9 +207,12 @@ def check_export():
         click(app, "export_browse")
         expect(wait_for(lambda: text_of(app, "export_output") == answered + ".mp4", 5),
                f"export: Save to… sets the file, with .mp4 added ({text_of(app, 'export_output')})")
+        # A time typed but not entered counts: Export takes no focus.
+        type_into(app, "range_end_text", "0:03")
         click(app, "sheet_export")
         expect(bool(wait_for(lambda: app.rect("export_card"), 5)), "export: the card shows over the picture")
-        expect(app.enabled("play_pause") is False, "export: playback is locked while exporting")
+        expect(app.enabled("play_pause") is False and app.enabled("timeline") is False,
+               "export: playback and the ruler are locked while exporting")
         progress = wait_for(lambda: (text_of(app, "export_detail") or "").startswith("Frame"), 30)
         if progress:
             save_shot(app, "exporting")
@@ -210,13 +221,14 @@ def check_export():
         expect(bool(wait_for(lambda: title_rect(app, "Export complete"), 5)), "export: a notice says so")
         expect(not sheet_shows(app, face), "export: the sheet closed")
         expect(app.rect("export_card") is None, "export: the card goes")
-        expect(wait_for(lambda: app.enabled("play_pause"), 5) is True, "export: playback comes back")
+        expect(wait_for(lambda: app.enabled("play_pause") and app.enabled("timeline"), 5) is True,
+               "export: playback and the ruler come back")
         expect(text_of(app, "time_current") == before,
                f"export: the preview stays where it was ({before} → {text_of(app, 'time_current')})")
         expect(app.rect("show_in_folder") is not None, "export: Show in folder offers the file")
         width, height, frames = probe(answered + ".mp4")
         expect((width, height) == (1920, 1080), f"export: 1080p by default ({width}x{height})")
-        expect(55 <= frames <= 65, f"export: about two seconds at 30 fps ({frames} frames)")
+        expect(85 <= frames <= 95, f"export: the typed end counts, about three seconds at 30 fps ({frames} frames)")
         expect(not os.path.exists(default), "export: nothing written at the default file")
         expect(not app.errors(), f"export: no errors in the app log {app.errors()[:3]}")
         save_shot(app, "exported")
@@ -270,17 +282,32 @@ def check_rules():
         expect(wait_for(lambda: app.enabled("sheet_export") is False, 5), "rules: no file, no Export")
         expect(app.rect("export_error") is None, "rules: editing the file clears the reason")
         type_into(app, "export_output", "match")
-        type_into(app, "range_end_text", "0:10")
-        app.key("return")
         type_into(app, "range_start_text", "0:20")
+        type_into(app, "range_end_text", "0:40")
         app.key("return")
-        expect(text_of(app, "range_start_text") == "0:10",
+        expect(text_of(app, "range_length") == "0:20 of 1:00",
+               f"rules: both times apply together ({text_of(app, 'range_length')})")
+        # A new sync offset shortens the match; the range keeps its place.
+        app.key("escape")
+        wait_for(lambda: not sheet_shows(app, face), 5)
+        open_advanced(app, "stitch_advanced")
+        type_into(app, "sync_input", "30")
+        click(app, "sync_apply")
+        expect(bool(wait_for(lambda: text_of(app, "time_total") == "0:59", 20)),
+               f"rules: a sync offset shortens the match ({text_of(app, 'time_total')})")
+        click(app, "export_button")
+        expect(bool(wait_for(lambda: sheet_shows(app, face), 5)), "rules: the sheet opens again")
+        expect(text_of(app, "range_length") == "0:20 of 0:59",
+               f"rules: the range keeps its place ({text_of(app, 'range_length')})")
+        type_into(app, "range_start_text", "0:50")
+        app.key("return")
+        expect(text_of(app, "range_start_text") == "0:40",
                f"rules: the start stops at the end ({text_of(app, 'range_start_text')})")
         expect(app.rect("range_empty") is not None, "rules: an empty range says so")
         expect(app.enabled("sheet_export") is False, "rules: an empty range can't be exported")
         type_into(app, "range_start_text", "soon")
         app.key("return")
-        expect(text_of(app, "range_start_text") == "0:10", "rules: a time that doesn't read is put back")
+        expect(text_of(app, "range_start_text") == "0:40", "rules: a time that doesn't read is put back")
         save_shot(app, "rules")
         app.key("escape")
         expect(wait_for(lambda: not sheet_shows(app, face), 5), "rules: Escape closes the sheet")

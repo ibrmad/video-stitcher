@@ -96,20 +96,21 @@ def shown(state):
 
 
 def takes_input(state):
-    """Which gated controls take input (Makepad's own enabled flag)."""
+    """Which gated controls take input (Makepad's own enabled flag). An
+    export locks playback (Module 6): the transport and the ruler wait."""
     stitched = state in STITCHED
     gates = {
         "export_button": state == "ready",
         "toggle_inspector": stitched,
-        "step_back": stitched,
-        "play_pause": stitched,
-        "step_forward": stitched,
+        "step_back": state == "ready",
+        "play_pause": state == "ready",
+        "step_forward": state == "ready",
         "aspect": stitched,
         "record_button": state == "ready",
     }
     # The timeline is drawn (and so gated) once the lanes show.
     if state is not None:
-        gates["timeline"] = stitched
+        gates["timeline"] = state == "ready"
     if not stitched:
         gates["auto_calibrate"] = state in ("cameras", "calibration-failed")
     return gates

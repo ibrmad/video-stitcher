@@ -16,7 +16,6 @@ use reco_app::export::{
 };
 use reco_app::preview::playback::PlayState;
 use reco_app::preview::worker::PreviewCommand;
-use reco_app::project::Camera;
 use reco_app::toasts::Severity;
 
 use crate::export_text::{grouped, percent, progress_detail, size_label, time_left};
@@ -103,16 +102,33 @@ impl App {
         self.export.is_some()
     }
 
-    /// The range for a match of `length` seconds: kept while the length
-    /// stays, the command line's (`--export-range`) for a new match.
+    /// The range for the open match, `length` seconds long: the same match
+    /// keeps its range (a new sync offset changes the length); a new one
+    /// starts with all of it, or the command line's `--export-range`.
     pub(crate) fn fit_export_range(&mut self, length: f64) {
-        if self.export_range.is_some_and(|r| r.length() == length) {
-            return;
+        let first_left = self
+            .live
+            .as_ref()
+            .and_then(|l| l.files.left.first().cloned());
+        let range = match self.export_range {
+            Some(range) if self.export_range_for == first_left => range.refit(length),
+            _ => match self.args.export_range {
+                Some((start, end)) => ExportRange::new(start, end, length),
+                None => ExportRange::whole(length),
+            },
+        };
+        self.export_range = Some(range);
+        self.export_range_for = first_left;
+    }
+
+    /// The open match's length: the lanes' (exact, after the sync offset)
+    /// once measured, else the first open's.
+    fn match_length(&self) -> Option<f64> {
+        let live = self.live.as_ref()?;
+        match live.lanes.as_ref() {
+            Some(lanes) => Some(lanes.length),
+            None => live.info.as_ref().map(live::length_secs),
         }
-        self.export_range = Some(match self.args.export_range {
-            Some((start, end)) => ExportRange::new(start, end, length),
-            None => ExportRange::whole(length),
-        });
     }
 
     /// The range to tint on the ruler: only part of the match.
@@ -124,15 +140,14 @@ impl App {
 
     /// Open the sheet, filled from the settings and the open match.
     fn open_export_sheet(&mut self, cx: &mut Cx) {
-        let Some(length) = self
-            .live
-            .as_ref()
-            .and_then(|l| l.info.as_ref())
-            .map(live::length_secs)
-        else {
+        let Some(length) = self.match_length() else {
             return;
         };
-        let Some(first_left) = self.project.files(Camera::Left).first().cloned() else {
+        let Some(first_left) = self
+            .live
+            .as_ref()
+            .and_then(|l| l.files.left.first().cloned())
+        else {
             return;
         };
         self.fit_export_range(length);
@@ -254,6 +269,8 @@ impl App {
                 self.show_export_range(cx);
             }
         }
+        // A time applies on Return or when the field loses the keyboard (a
+        // click anywhere else, Export included, takes it).
         for (field, start) in [
             (ids!(range_start_text), true),
             (ids!(range_end_text), false),

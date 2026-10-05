@@ -254,9 +254,12 @@ pub struct App {
     /// The export, from the click on Export to its end.
     #[rust]
     export: Option<Exporting>,
-    /// The part of the match to export.
+    /// The part of the match to export, and the first left video it is
+    /// for.
     #[rust]
     export_range: Option<ExportRange>,
+    #[rust]
+    export_range_for: Option<PathBuf>,
     /// The codecs this machine encodes, once probed.
     #[rust]
     export_codecs: Vec<String>,
@@ -300,9 +303,14 @@ impl App {
             self.set_button_enabled(cx, id, loaded && !exporting);
         }
         self.set_button_enabled(cx, ids!(record_button), loaded && !exporting);
-        self.ui
+        self.ui.widget(cx, ids!(timeline)).set_disabled(cx, !loaded);
+        if let Some(mut ruler) = self
+            .ui
             .widget(cx, ids!(timeline))
-            .set_disabled(cx, !loaded || exporting);
+            .borrow_mut::<RecoTimeRuler>()
+        {
+            ruler.set_locked(cx, exporting);
+        }
         self.ui.widget(cx, ids!(aspect)).set_disabled(cx, !loaded);
         self.ui
             .widget(cx, ids!(record_quality))

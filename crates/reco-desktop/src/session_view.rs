@@ -478,10 +478,14 @@ impl App {
 
     /// The files' lanes and the exact length arrived.
     fn show_lanes(&mut self, cx: &mut Cx, lanes: Lanes) {
-        self.set_label(cx, ids!(time_total), &time_ruler::clock(lanes.length));
+        let length = lanes.length;
+        self.set_label(cx, ids!(time_total), &time_ruler::clock(length));
         if let Some(live) = self.live.as_mut() {
             live.lanes = Some(lanes);
         }
+        // The exact length (a new sync offset changes it): the export range
+        // follows.
+        self.fit_export_range(length);
         self.update_ruler(cx);
     }
 
