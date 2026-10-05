@@ -268,6 +268,10 @@ script_mod! {
                 color: theme.reco_transparent color_hover: theme.reco_transparent
                 color_focus: theme.reco_transparent
                 color_down: theme.reco_transparent color_disabled: theme.reco_transparent
+                // The placeholder colours too: a slider made inside a sheet
+                // starts in the field's empty state.
+                color_empty: theme.reco_transparent color_empty_hover: theme.reco_transparent
+                color_empty_focus: theme.reco_transparent
             }
             draw_cursor +: {color: theme.reco_transparent}
         }
