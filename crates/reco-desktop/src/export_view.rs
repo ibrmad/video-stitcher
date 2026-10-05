@@ -91,7 +91,7 @@ impl App {
     }
 
     /// The codecs to offer: the probed ones (H.264 until they are known).
-    fn codecs(&self) -> Vec<String> {
+    pub(crate) fn codecs(&self) -> Vec<String> {
         if self.export_codecs.is_empty() {
             vec!["h264".into()]
         } else {

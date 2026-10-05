@@ -160,6 +160,11 @@ pub fn batch_json(
     .to_string()
 }
 
+/// A new batch's id.
+pub fn batch_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
 /// `at` in UTC, as "2025-10-05T16:00:00.000Z".
 pub fn iso_time(at: SystemTime) -> String {
     let secs = at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();

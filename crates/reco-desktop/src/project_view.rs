@@ -38,6 +38,10 @@ pub(crate) enum Pick {
     Export,
     /// A lens profile file.
     LensFile,
+    /// Where recordings go (a folder; Preferences).
+    RecordingFolder,
+    /// The AI tracking's model (Preferences).
+    Model,
 }
 
 impl Pick {
@@ -48,6 +52,8 @@ impl Pick {
             Pick::Calibration => live_id!(pick_calibration),
             Pick::Export => live_id!(pick_export),
             Pick::LensFile => live_id!(pick_lens),
+            Pick::RecordingFolder => live_id!(pick_recording_folder),
+            Pick::Model => live_id!(pick_model),
         }
     }
 
@@ -58,6 +64,8 @@ impl Pick {
             Pick::Calibration,
             Pick::Export,
             Pick::LensFile,
+            Pick::RecordingFolder,
+            Pick::Model,
         ]
         .into_iter()
         .find(|p| p.id() == id)
@@ -71,6 +79,8 @@ impl Pick {
             Pick::Calibration => "calibration",
             Pick::Export => "export",
             Pick::LensFile => "lens",
+            Pick::RecordingFolder => "recording_folder",
+            Pick::Model => "model",
         }
     }
 }
@@ -129,6 +139,10 @@ impl App {
             Pick::LensFile => FileDialog::new()
                 .set_title("Load a lens profile".into())
                 .add_filter("Lens profile".into(), vec!["json".into()]),
+            Pick::RecordingFolder => return self.pick_recording_folder(cx),
+            Pick::Model => FileDialog::new()
+                .set_title("Choose the AI tracking's model".into())
+                .add_filter("ONNX model".into(), vec!["onnx".into()]),
         };
         // Start beside the videos already chosen.
         let near = self
@@ -176,6 +190,12 @@ impl App {
                 }
                 return;
             }
+            Pick::RecordingFolder | Pick::Model => {
+                if let Some(path) = paths.first() {
+                    self.prefs_path_picked(cx, pick, path);
+                }
+                return;
+            }
         }
         self.project_changed(cx);
     }
@@ -198,6 +218,18 @@ impl App {
         cx.open_save_file_dialog(dialog);
     }
 
+    /// The system's folder dialog, at the folder Preferences names (Makepad
+    /// answers a folder dialog without an id: this is the app's only one).
+    fn pick_recording_folder(&mut self, cx: &mut Cx) {
+        let typed = self.ui.text_input(cx, ids!(prefs_folder)).text();
+        let mut dialog = FileDialog::new().set_title("Record to".into());
+        let current = PathBuf::from(typed.trim());
+        if current.is_dir() {
+            dialog = dialog.set_location(current);
+        }
+        cx.open_select_folder_dialog(dialog);
+    }
+
     /// File dialog answers.
     pub(crate) fn file_dialog_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         for action in actions {
@@ -211,6 +243,9 @@ impl App {
                     if let Some(pick) = Pick::from_id(*id) {
                         self.picked(cx, pick, vec![path.clone()]);
                     }
+                }
+                Some(FileDialogAction::FolderSelected(path)) => {
+                    self.picked(cx, Pick::RecordingFolder, vec![path.clone()]);
                 }
                 _ => {}
             }

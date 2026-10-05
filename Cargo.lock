@@ -6085,7 +6085,7 @@ dependencies = [
 
 [[package]]
 name = "reco-app"
-version = "0.1.0"
+version = "0.5.4"
 dependencies = [
  "base64",
  "image",
@@ -6208,7 +6208,7 @@ dependencies = [
 
 [[package]]
 name = "reco-desktop"
-version = "0.1.0"
+version = "0.5.4"
 dependencies = [
  "makepad-widgets",
  "reco-app",

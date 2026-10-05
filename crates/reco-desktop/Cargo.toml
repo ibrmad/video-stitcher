@@ -1,7 +1,7 @@
 [package]
 publish = false
 name = "reco-desktop"
-version = "0.1.0"
+version = "0.5.4"
 # Makepad's macros (app_main!, script_mod!) are written for edition 2021.
 edition = "2021"
 rust-version.workspace = true

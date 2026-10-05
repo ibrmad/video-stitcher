@@ -9,6 +9,7 @@
 //! the live stitched preview, rendered by `reco-app`'s worker thread.
 
 pub use makepad_widgets;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -20,12 +21,15 @@ mod cli;
 mod export_text;
 mod export_view;
 mod file_rows;
+mod help_view;
 mod keys;
 mod lens_picker_view;
 mod lens_view;
 mod live;
 mod names;
+mod network;
 mod perf;
+mod prefs_view;
 mod project_view;
 mod recent_view;
 mod roi_view;
@@ -90,7 +94,8 @@ script_mod! {
                 }
                 window_menu +: {
                     main := MenuItem.Main{items: [@app_menu_item, @view_menu]}
-                    app_menu_item := MenuItem.Sub{name: "Reco" items: [@quit]}
+                    app_menu_item := MenuItem.Sub{name: "Reco" items: [@preferences_menu, @quit]}
+                    preferences_menu := MenuItem.Item{name: "Preferences…" key: KeyCode.Comma enabled: true}
                     quit := MenuItem.Item{name: "Quit Reco" key: KeyCode.KeyQ enabled: true}
                     view_menu := MenuItem.Sub{name: "View" items: [@toggle_media_menu, @toggle_inspector_menu, @toggle_timeline_menu]}
                     toggle_media_menu := MenuItem.Item{name: "Setup Panel" key: KeyCode.Key1 enabled: true}
@@ -102,6 +107,7 @@ script_mod! {
                     shell := RecoShell{}
                     export_sheet := RecoExportSheet{}
                     lens_picker := RecoLensPicker{}
+                    prefs_sheet := RecoPrefsSheet{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.
@@ -141,18 +147,6 @@ enum Step {
     Todo,
     Current,
     Done,
-}
-
-/// The app menu: what Rerun keeps under its logo.
-fn app_menu_rows() -> Vec<MenuRow> {
-    vec![
-        MenuRow::new(live_id!(shortcuts), "Keyboard shortcuts"),
-        MenuRow::new(live_id!(preferences), "Preferences…"),
-        MenuRow::separator(),
-        MenuRow::new(live_id!(report_bug), "Report a bug…"),
-        MenuRow::separator(),
-        MenuRow::section(concat!("Reco ", env!("CARGO_PKG_VERSION"))),
-    ]
 }
 
 /// Recently used camera pairs (Module 3 fills this from settings).
@@ -299,6 +293,18 @@ pub struct App {
     profile_search: ProfileSearch,
     #[rust]
     profiles: Vec<LensProfileSummary>,
+    /// The codecs Preferences' dropdowns list, in order.
+    #[rust]
+    prefs_codec_list: Vec<String>,
+    /// The preview's GPU, once named, and whether usage data has had the
+    /// system's context this run.
+    #[rust]
+    gpu_name: Option<String>,
+    #[rust]
+    context_sent: bool,
+    /// Usage events on their way, by request.
+    #[rust]
+    usage_requests: HashMap<LiveId, &'static str>,
 }
 
 impl App {
@@ -625,7 +631,7 @@ impl MatchEvent for App {
         self.show_calibration_defaults(cx);
         self.ui
             .menu_button(cx, ids!(app_menu))
-            .set_rows(app_menu_rows());
+            .set_rows(help_view::app_menu_rows());
         self.ui
             .menu_button(cx, ids!(recent_menu))
             .set_rows(sample_recent_rows());
@@ -651,6 +657,7 @@ impl MatchEvent for App {
             self.toast_demo(cx);
         }
         self.apply_shell(cx);
+        self.send_usage(cx, reco_app::telemetry::UsageEvent::AppOpen);
     }
 
     fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
@@ -665,11 +672,8 @@ impl MatchEvent for App {
         if self.ui.button(cx, ids!(toggle_timeline)).clicked(actions) {
             self.toggle_timeline(cx);
         }
-        // The menus' commands arrive with Modules 3 and 7.
-        let app_menu = self.ui.menu_button(cx, ids!(app_menu)).menu_owner();
-        if let Some(picked) = menu_picked(actions, app_menu) {
-            log!("app menu: {picked} (not wired in Module 0)");
-        }
+        self.app_menu_actions(cx, actions);
+        self.prefs_actions(cx, actions);
         self.preview_actions(cx, actions);
         self.ruler_actions(cx, actions);
         self.toast_actions(cx, actions);
@@ -721,6 +725,10 @@ impl AppMain for App {
             Event::MacosMenuCommand(item) if *item == live_id!(toggle_timeline_menu) => {
                 self.toggle_timeline(cx);
             }
+            Event::MacosMenuCommand(item) if *item == live_id!(preferences_menu) => {
+                self.open_preferences(cx);
+            }
+            Event::NetworkResponses(responses) => self.network_responses(cx, responses),
             Event::Signal => {
                 self.drain_preview(cx);
                 self.collect_durations(cx);

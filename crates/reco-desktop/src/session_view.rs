@@ -168,6 +168,8 @@ impl App {
         self.fit_export_range(live::length_secs(&info));
         self.detect_lenses(cx, &info);
         self.show_gpu(cx, &info.gpu);
+        self.gpu_name = Some(info.gpu.clone());
+        self.send_context(cx);
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);
