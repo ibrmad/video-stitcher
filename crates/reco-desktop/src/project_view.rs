@@ -34,6 +34,8 @@ pub(crate) enum Pick {
     Videos(Camera),
     /// A calibration file.
     Calibration,
+    /// The file to export to (a Save dialog).
+    Export,
 }
 
 impl Pick {
@@ -42,6 +44,7 @@ impl Pick {
             Pick::Videos(Camera::Left) => live_id!(pick_left),
             Pick::Videos(Camera::Right) => live_id!(pick_right),
             Pick::Calibration => live_id!(pick_calibration),
+            Pick::Export => live_id!(pick_export),
         }
     }
 
@@ -50,6 +53,7 @@ impl Pick {
             Pick::Videos(Camera::Left),
             Pick::Videos(Camera::Right),
             Pick::Calibration,
+            Pick::Export,
         ]
         .into_iter()
         .find(|p| p.id() == id)
@@ -61,6 +65,7 @@ impl Pick {
             Pick::Videos(Camera::Left) => "left",
             Pick::Videos(Camera::Right) => "right",
             Pick::Calibration => "calibration",
+            Pick::Export => "export",
         }
     }
 }
@@ -115,6 +120,7 @@ impl App {
             Pick::Calibration => FileDialog::new()
                 .set_title("Load a calibration".into())
                 .add_filter("Calibration".into(), vec!["json".into()]),
+            Pick::Export => return self.pick_export_file(cx),
         };
         // Start beside the videos already chosen.
         let near = self
@@ -150,19 +156,49 @@ impl App {
                     self.calibration_failure = None;
                 }
             }
+            Pick::Export => {
+                if let Some(path) = paths.into_iter().next() {
+                    self.export_file_picked(cx, path);
+                }
+                return;
+            }
         }
         self.project_changed(cx);
+    }
+
+    /// The system's Save dialog, at the file the export sheet names.
+    fn pick_export_file(&mut self, cx: &mut Cx) {
+        let typed = self.ui.text_input(cx, ids!(export_output)).text();
+        let current = PathBuf::from(typed.trim());
+        let mut dialog = FileDialog::new().set_title("Export to".into()).add_filter(
+            "Video".into(),
+            vec!["mp4".into(), "mov".into(), "mkv".into()],
+        );
+        if let Some(name) = current.file_name() {
+            dialog = dialog.set_filename(name.to_string_lossy().into_owned());
+        }
+        if let Some(folder) = current.parent().filter(|f| f.is_dir()) {
+            dialog = dialog.set_location(folder.to_path_buf());
+        }
+        dialog.id = Pick::Export.id();
+        cx.open_save_file_dialog(dialog);
     }
 
     /// File dialog answers.
     pub(crate) fn file_dialog_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         for action in actions {
-            if let Some(FileDialogAction::FileSelected { id, paths }) =
-                action.downcast_ref::<FileDialogAction>()
-            {
-                if let Some(pick) = Pick::from_id(*id) {
-                    self.picked(cx, pick, paths.clone());
+            match action.downcast_ref::<FileDialogAction>() {
+                Some(FileDialogAction::FileSelected { id, paths }) => {
+                    if let Some(pick) = Pick::from_id(*id) {
+                        self.picked(cx, pick, paths.clone());
+                    }
                 }
+                Some(FileDialogAction::SaveFileSelected { id, path }) => {
+                    if let Some(pick) = Pick::from_id(*id) {
+                        self.picked(cx, pick, vec![path.clone()]);
+                    }
+                }
+                _ => {}
             }
         }
     }

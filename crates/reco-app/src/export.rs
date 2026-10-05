@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use reco_core::calibration::MatchCalibration;
+pub use reco_core::calibration::MatchCalibration;
 use reco_io::ffmpeg::encoder::{VideoCodec, available_encoders};
 use reco_io::output::{Codec, Format, Quality};
 use reco_io::stitch_job::{InputPath, StitchError, StitchJob};

@@ -65,7 +65,10 @@ impl App {
             match rest {
                 Some(PreviewEvent::Opening) => self.show_opening(cx),
                 Some(PreviewEvent::Ready(info)) => self.show_live(cx, info),
-                Some(PreviewEvent::Failed(message)) => self.show_failed(cx, &message),
+                Some(PreviewEvent::Failed(message)) => {
+                    self.export_lost_preview(cx);
+                    self.show_failed(cx, &message)
+                }
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
                 Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
                 Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
@@ -80,6 +83,10 @@ impl App {
                 Some(PreviewEvent::CalibrationSaveFailed(why)) => {
                     self.toast(cx, Severity::Error, "Couldn't save the calibration", &why)
                 }
+                Some(PreviewEvent::Snapshot {
+                    calibration,
+                    color_match,
+                }) => self.export_snapshot(*calibration, color_match),
                 Some(PreviewEvent::RecordingStarted { path }) => self.recording_started(cx, path),
                 Some(PreviewEvent::Recorded { frames }) => self.recorded(cx, frames),
                 Some(PreviewEvent::RecordingSaved(recording)) => {
@@ -156,6 +163,7 @@ impl App {
             ids!(time_total),
             &time_ruler::clock(live::length_secs(&info)),
         );
+        self.fit_export_range(live::length_secs(&info));
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);
@@ -335,7 +343,7 @@ impl App {
         self.refresh_status(cx);
     }
 
-    fn refresh_status(&mut self, cx: &mut Cx) {
+    pub(crate) fn refresh_status(&mut self, cx: &mut Cx) {
         if let Some(status) = self.live.as_ref().map(Live::status) {
             self.set_label(cx, ids!(status_text), &status);
         }
@@ -431,8 +439,8 @@ impl App {
 
     /// Each camera's files (one block each until they are probed), the
     /// playhead, and the export range.
-    fn update_ruler(&mut self, cx: &mut Cx) {
-        let range = self.args.export_range;
+    pub(crate) fn update_ruler(&mut self, cx: &mut Cx) {
+        let range = self.ruler_export_range();
         let Some((length, playhead, lanes)) = self.live.as_ref().and_then(|l| {
             let info = l.info.as_ref()?;
             let playhead = if info.fps > 0.0 {
@@ -485,6 +493,7 @@ impl App {
                 RulerAction::Scrub(secs) => {
                     self.set_label(cx, ids!(time_current), &time_ruler::clock(secs))
                 }
+                RulerAction::Seek(_) if self.exporting() => {}
                 RulerAction::Seek(secs) => {
                     if let Some(live) = self.live.as_ref() {
                         let fps = live.info.as_ref().map_or(0.0, |i| i.fps);

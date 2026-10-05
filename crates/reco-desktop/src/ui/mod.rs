@@ -2,6 +2,7 @@
 //! registers its widgets under `mod.widgets.Reco*`.
 
 mod controls;
+mod export_sheet;
 pub mod file_list;
 mod inspector;
 mod media_panel;
@@ -27,6 +28,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
     media_panel::script_mod(vm);
     viewer::script_mod(vm);
     inspector::script_mod(vm);
+    export_sheet::script_mod(vm);
     time_panel::script_mod(vm);
     shell::script_mod(vm);
 }

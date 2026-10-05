@@ -17,6 +17,8 @@ use makepad_widgets::*;
 
 mod calibrate_view;
 mod cli;
+mod export_text;
+mod export_view;
 mod file_rows;
 mod keys;
 mod live;
@@ -35,11 +37,13 @@ mod ui;
 
 use calibrate_view::Calibrating;
 use cli::{Args, LookPreview};
+use export_view::{CodecProbe, Exporting};
 use live::Live;
 use names::middle_ellipsis;
 use perf::DrawStats;
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
+use reco_app::export::ExportRange;
 use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
 use reco_app::roi::EditorJob;
@@ -92,6 +96,7 @@ script_mod! {
                 body +: {
                     flow: Overlay
                     shell := RecoShell{}
+                    export_sheet := RecoExportSheet{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.
@@ -246,6 +251,20 @@ pub struct App {
     /// The field outline's browser editor, while it is being written.
     #[rust]
     outline_editor: Option<EditorJob>,
+    /// The export, from the click on Export to its end.
+    #[rust]
+    export: Option<Exporting>,
+    /// The part of the match to export.
+    #[rust]
+    export_range: Option<ExportRange>,
+    /// The codecs this machine encodes, once probed.
+    #[rust]
+    export_codecs: Vec<String>,
+    #[rust]
+    codec_probe: Option<CodecProbe>,
+    /// The first left video the sheet's file name was made for.
+    #[rust]
+    export_named_for: Option<PathBuf>,
 }
 
 impl App {
@@ -273,15 +292,17 @@ impl App {
         self.set_visible(cx, ids!(lanes), has_video && !self.timeline_folded);
 
         let loaded = self.shell.files_loaded();
-        let exporting = self.preview == Some(LookPreview::Exporting);
+        let exporting = self.preview == Some(LookPreview::Exporting) || self.exporting();
         self.set_button_enabled(cx, ids!(export_button), loaded && !exporting);
         let inspector_toggle = self.shell.can_toggle(Panel::Inspector);
         self.set_button_enabled(cx, ids!(toggle_inspector), inspector_toggle);
         for id in [ids!(step_back), ids!(play_pause), ids!(step_forward)] {
-            self.set_button_enabled(cx, id, loaded);
+            self.set_button_enabled(cx, id, loaded && !exporting);
         }
         self.set_button_enabled(cx, ids!(record_button), loaded && !exporting);
-        self.ui.widget(cx, ids!(timeline)).set_disabled(cx, !loaded);
+        self.ui
+            .widget(cx, ids!(timeline))
+            .set_disabled(cx, !loaded || exporting);
         self.ui.widget(cx, ids!(aspect)).set_disabled(cx, !loaded);
         self.ui
             .widget(cx, ids!(record_quality))
@@ -578,6 +599,7 @@ impl MatchEvent for App {
             self.show_state(cx, Some(state));
         } else {
             self.durations = Some(DurationProbe::new(Arc::new(SignalToUI::set_ui_signal)));
+            self.codec_probe = Some(CodecProbe::start());
             if let Some(files) = self.args.files.clone() {
                 self.project.set_files(Camera::Left, files.left);
                 self.project.set_files(Camera::Right, files.right);
@@ -618,6 +640,7 @@ impl MatchEvent for App {
         self.recent_actions(cx, actions);
         self.tune_actions(cx, actions);
         self.outline_actions(cx, actions);
+        self.export_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
 }
@@ -661,6 +684,8 @@ impl AppMain for App {
                 self.collect_durations(cx);
                 self.drain_calibration(cx);
                 self.drain_outline_editor(cx);
+                self.collect_codecs(cx);
+                self.drain_export(cx);
             }
             _ => {}
         }

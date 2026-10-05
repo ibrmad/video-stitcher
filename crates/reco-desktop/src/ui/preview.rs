@@ -134,9 +134,17 @@ pub struct RecoPreview {
     drag_from: Option<DVec2>,
     #[rust]
     beat: NextFrame,
+    /// Playback keys do nothing (while exporting).
+    #[rust]
+    transport_locked: bool,
 }
 
 impl RecoPreview {
+    /// Lock or unlock the playback keys (Space, the arrows' seeks).
+    pub fn lock_transport(&mut self, locked: bool) {
+        self.transport_locked = locked;
+    }
+
     /// Start sending commands to a worker.
     pub fn attach(&mut self, cx: &mut Cx, commands: SyncSender<PreviewCommand>) {
         self.commands = Some(commands);
@@ -263,6 +271,7 @@ impl RecoPreview {
             }
             KeyCommand::Zoom { degrees } => self.zoom += degrees as f64,
             KeyCommand::ResetView => self.queue(PreviewCommand::ResetView),
+            KeyCommand::TogglePlay | KeyCommand::SeekBy { .. } if self.transport_locked => {}
             KeyCommand::TogglePlay => self.queue(PreviewCommand::TogglePlay),
             KeyCommand::SeekBy { seconds } => self.queue(PreviewCommand::SeekBy { seconds }),
             KeyCommand::Fullscreen => {

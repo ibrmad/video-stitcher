@@ -17,6 +17,29 @@ pub fn clock(seconds: f64) -> String {
     }
 }
 
+/// Seconds from a typed time: "90", "1:30", "1:02:03" or "75.5". Minutes
+/// and seconds after the first part stay under 60; nothing typed, a
+/// negative time or anything else is `None`.
+pub fn parse_clock(text: &str) -> Option<f64> {
+    let parts: Vec<&str> = text.trim().split(':').collect();
+    if parts.len() > 3 {
+        return None;
+    }
+    let mut seconds = 0.0;
+    for (i, part) in parts.iter().enumerate() {
+        // Digits and at most one point: no signs, "inf" or "NaN".
+        if part.is_empty() || !part.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            return None;
+        }
+        let value: f64 = part.parse().ok()?;
+        if i > 0 && value >= 60.0 {
+            return None;
+        }
+        seconds = seconds * 60.0 + value;
+    }
+    Some(seconds)
+}
+
 /// Steps a ruler may use, in seconds; past the last, whole days.
 const LADDER: [f64; 18] = [
     1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0,
@@ -103,6 +126,24 @@ mod tests {
     fn clock_treats_negative_and_invalid_times_as_zero() {
         assert_eq!(clock(-3.0), "0:00");
         assert_eq!(clock(f64::NAN), "0:00");
+    }
+
+    #[test]
+    fn typed_times_read_as_seconds() {
+        assert_eq!(parse_clock("90"), Some(90.0));
+        assert_eq!(parse_clock(" 1:30 "), Some(90.0));
+        assert_eq!(parse_clock("1:02:03"), Some(3723.0));
+        assert_eq!(parse_clock("0:07.5"), Some(7.5));
+        assert_eq!(
+            parse_clock(&clock(4321.0)),
+            Some(4321.0),
+            "what clock shows reads back"
+        );
+        for bad in [
+            "", "  ", "-5", "1:75", "a:10", "1::2", "1:2:3:4", "inf", "NaN",
+        ] {
+            assert_eq!(parse_clock(bad), None, "{bad:?}");
+        }
     }
 
     #[test]
