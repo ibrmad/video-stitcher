@@ -207,6 +207,12 @@ impl PreviewWorker {
     pub fn try_event(&self) -> Option<PreviewEvent> {
         self.events.try_recv().ok()
     }
+
+    /// A sender for UI parts that queue commands themselves (non-blocking
+    /// `try_send` only).
+    pub fn sender(&self) -> SyncSender<PreviewCommand> {
+        self.commands.clone()
+    }
 }
 
 impl Drop for PreviewWorker {

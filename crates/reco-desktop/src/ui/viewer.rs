@@ -104,6 +104,9 @@ script_mod! {
                 }
             }
 
+            // The live stitched preview (Module 1).
+            preview := RecoPreview{visible: false}
+
             // The next step of the job. Text wraps and centres inside the
             // viewer; long tasks show their progress in the same column.
             empty_state := View{

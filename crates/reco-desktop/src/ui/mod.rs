@@ -5,6 +5,7 @@ mod controls;
 mod inspector;
 mod media_panel;
 pub mod panorama;
+pub mod preview;
 mod shell;
 pub mod time_panel;
 mod top_bar;
@@ -17,6 +18,7 @@ use makepad_widgets::*;
 pub fn script_mod(vm: &mut ScriptVm) {
     controls::script_mod(vm);
     panorama::script_mod(vm);
+    preview::script_mod(vm);
     top_bar::script_mod(vm);
     media_panel::script_mod(vm);
     viewer::script_mod(vm);
