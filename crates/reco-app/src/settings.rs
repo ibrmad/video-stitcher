@@ -86,11 +86,14 @@ impl DesktopSettings {
         RecordingQuality::from_name(&self.recording_quality)
     }
 
-    /// Put `session` first in the Recent menu: a session with the same files
-    /// is replaced, and only the newest [`MAX_RECENT`] are kept.
+    /// Put `session` first in the Recent menu: an earlier session of the
+    /// same pair (the same first file for each camera, so adding or
+    /// reordering files keeps one entry) is replaced, and only the newest
+    /// [`MAX_RECENT`] are kept.
     pub fn push_recent(&mut self, session: RecentSession) {
-        self.recent
-            .retain(|r| (&r.left, &r.right) != (&session.left, &session.right));
+        let key = |r: &RecentSession| (r.left.first().cloned(), r.right.first().cloned());
+        let pair = key(&session);
+        self.recent.retain(|r| key(r) != pair);
         self.recent.insert(0, session);
         self.recent.truncate(MAX_RECENT);
     }
@@ -169,6 +172,12 @@ mod tests {
         assert_eq!(s.recent.len(), MAX_RECENT);
         assert_eq!(s.recent[0], again);
         assert_eq!(s.recent.iter().filter(|r| r.label() == "L5 + R").count(), 1);
+        // Adding a file to a camera, or reordering, keeps one session.
+        let mut grown = session("L5", "R");
+        grown.left.push(PathBuf::from("/m/L5b.MP4"));
+        s.push_recent(grown.clone());
+        assert_eq!(s.recent.iter().filter(|r| r.label() == "L5 + R").count(), 1);
+        assert_eq!(s.recent[0], grown);
         s.clear_recent();
         assert!(s.recent.is_empty());
     }

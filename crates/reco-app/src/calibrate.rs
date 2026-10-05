@@ -10,7 +10,7 @@ use std::sync::mpsc::{self, Receiver};
 
 use reco_calibrate::video::{CalibrateVideosError, CalibrateVideosOptions, calibrate_videos};
 use reco_calibrate::{CalibrationConfig, CalibrationStep, ProfileSource};
-use reco_core::calibration::CameraParams;
+use reco_core::calibration::{CameraParams, MatchCalibration};
 
 /// Below this confidence a warning says the stitch may be poor (the Slint
 /// app's threshold).
@@ -140,13 +140,14 @@ pub struct CalibrationJob {
 
 impl CalibrationJob {
     /// Calibrate `left` against `right` (each camera's first file) and save
-    /// the result to `save_to`. `lens` keeps the current cameras' lens when
-    /// recalibrating. `waker` runs after every event.
+    /// the result to `save_to`. A recalibration keeps the lens of the
+    /// calibration in `keep_lens_of` (read on the job's thread). `waker` runs
+    /// after every event.
     pub fn start(
         left: PathBuf,
         right: PathBuf,
         save_to: PathBuf,
-        lens: Option<(CameraParams, CameraParams)>,
+        keep_lens_of: Option<PathBuf>,
         options: CalibrationOptions,
         waker: Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
@@ -164,6 +165,9 @@ impl CalibrationJob {
                     }
                 };
                 let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let lens = keep_lens_of
+                        .and_then(|path| MatchCalibration::from_file(&path).ok())
+                        .map(|c| (c.left, c.right));
                     calibrate(&left, &right, &save_to, lens, &options, &flag, &send)
                 }));
                 send(run.unwrap_or_else(|panic| {
@@ -266,8 +270,6 @@ fn save_atomically(path: &Path, json: &str) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, Instant};
-
-    use reco_core::calibration::MatchCalibration;
 
     use super::*;
     use crate::preview::fixtures;
@@ -411,16 +413,17 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[ignore = "slow: calibrates the 5.3K pair (about 4 min); run with --ignored"]
+    #[ignore = "slow: calibrates the 5.3K pair (about 4 min in a debug build); run with --ignored"]
     fn calibrating_saves_beside_the_left_file() {
         let Some((left, right, save_to)) = linked_pair("save", fixtures::real_set()) else {
             return;
         };
+        let real_cal = fixtures::real_set().map(|s| s.2).unwrap();
         let job = CalibrationJob::start(
             left,
             right,
             save_to.clone(),
-            None,
+            Some(real_cal),
             CalibrationOptions::default(),
             Arc::new(|| {}),
         );
