@@ -70,5 +70,23 @@ class ColourClose(unittest.TestCase):
         self.assertFalse(drive.close_to((40, 17, 21, 255), "#0f1115", tol=2))
 
 
+
+class ParseCputime(unittest.TestCase):
+    def test_parse_cputime(self):
+        self.assertAlmostEqual(drive.parse_cputime("0:01.25"), 1.25)
+        self.assertAlmostEqual(drive.parse_cputime("1:02:03.50"), 3723.5)
+
+
+
+class ConflictWait(unittest.TestCase):
+    def test_waits_out_the_quiet_window(self):
+        answer = {"err": "user_interacting", "applied": False, "activity": {"idle_ms": 669, "quiet_ms": 2000}}
+        self.assertAlmostEqual(drive.conflict_wait(answer), 1.581)
+
+    def test_other_answers_do_not_retry(self):
+        self.assertIsNone(drive.conflict_wait({"err": "no widget `x`"}))
+        self.assertIsNone(drive.conflict_wait({"err": "user_interacting", "applied": True, "activity": {}}))
+
+
 if __name__ == "__main__":
     unittest.main()

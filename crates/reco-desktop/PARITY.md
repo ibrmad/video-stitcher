@@ -78,18 +78,50 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
 
 ## Module 1: preview (§2.3, §6)
 
-- [ ] Stitched preview in the viewer, fitted with `contain`.
-- [ ] Preview aspect: auto, 16:9, 4:3, 21:9.
-- [ ] Drag pans the view (X inverted, as in Slint); the wheel zooms
-      (FOV change = -dy/40 degrees).
-- [ ] Keys: arrows pan 20 px; `+`/`=` zoom in 5°; `-`/`_` zoom out 5°; R
+Evidence for this module: `tools/check_m1.py`, which opens the alfheim pair
+zero-copy and again with `--preview-readback`, opens a missing file, and
+plays the 5.3K match pair; the unit tests (`cargo test -p reco-app -p
+reco-desktop`); and screenshots in `target/desktop-checks/m1/`. Each check
+line below is quoted from the zero-copy run; the readback run has the same
+lines.
+
+- [x] Stitched preview in the viewer, fitted with `contain`. Evidence: "the
+      preview appears", "the empty state is gone", "a real picture";
+      `ready-zero-copy.png`, `real-5k.png`. A missing file says so instead:
+      "bad file: the viewer says it couldn't open the videos", "no preview
+      is drawn"; `bad-file.png`.
+- [x] Preview aspect: auto, 16:9, 4:3, 21:9. Evidence: "the preview
+      letterboxes to 4:3 (734x550)", `aspect-4x3-zero-copy.png`;
+      `aspects_follow_the_dropdown_order`, `fit_letterboxes_and_pillarboxes`.
+- [x] Drag pans the view (X inverted, as in Slint); the wheel zooms
+      (FOV change = -dy/40 degrees). Evidence: "dragging pans", "the wheel
+      zooms"; scrolling away zooms in (Makepad's `scroll.y` is the negated
+      macOS delta, DESIGN.md).
+- [x] Keys: arrows pan 20 px; `+`/`=` zoom in 5°; `-`/`_` zoom out 5°; R
       resets the view; F/F11 toggle fullscreen; Space plays or pauses;
-      `[`/`]` seek ∓5 s.
-- [ ] Playback advances on vsync through the zero-copy bridge.
-- [ ] Render target follows the viewer size in physical pixels (New: DPI-aware).
-- [ ] The portable readback path compiles and renders when forced.
-- [ ] Autoload for checks: left, right and calibration paths from the
+      `[`/`]` seek ∓5 s. Evidence: "Space plays", "arrow keys pan", "= zooms
+      in", "R resets the view", "F toggles fullscreen", "] seeks 5 s", and
+      "Space on a focused button leaves the preview alone"; the mapping of
+      every key, with ⌘/Ctrl/Option ignored: `maps_the_slint_shortcuts`,
+      `shift_still_counts`, `modified_keys_are_ignored`.
+- [x] Playback advances on vsync through the zero-copy bridge. Evidence:
+      "renders zero-copy" (the log line `preview: 1280x960 input, zero-copy
+      on Apple M1 Pro`), "the picture moves while playing", "paused frames
+      stay still", "about 0% CPU while paused"; the 5.3K pair plays at
+      30.0 fps (source 29.97). The ring's hand-over is unit-tested:
+      `ring_waits_for_adoption`, `a_replaced_slot_retires_after_its_beats`.
+- [x] Render target follows the viewer size in physical pixels (New:
+      DPI-aware). Evidence: `render_size_counts_physical_pixels`,
+      `render_size_caps_at_4k_keeping_the_aspect`; the 4:3 run re-renders
+      at the letterboxed size.
+- [x] The portable readback path compiles and renders when forced.
+      Evidence: every check above passes again with `--preview-readback`
+      ("renders readback"); `readback_renders_and_plays`.
+- [x] Autoload for checks: left, right and calibration paths from the
       command line (replaces the Slint `automation` feature's RECO_AUTOLOAD).
+      Evidence: the whole check launches through `--left/--right/
+      --calibration`; `parses_the_three_files`,
+      `chains_files_split_by_semicolons`, `files_must_come_as_a_set`.
 
 ## Module 2: transport and status (§2.5, §2.6, §2.13)
 

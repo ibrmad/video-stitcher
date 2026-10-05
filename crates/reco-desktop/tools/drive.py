@@ -47,6 +47,30 @@ def close_to(rgba, hex_colour, tol=3):
     return all(abs(a - b) <= tol for a, b in zip(rgba[:3], hex_rgb(hex_colour)))
 
 
+# Retries of input the app refused while a person was using the machine.
+CONFLICT_RETRIES = 30
+
+
+def conflict_wait(answer):
+    """Seconds to wait before retrying input the app refused because a person
+    was using the machine (HTTP 409 `user_interacting`, not applied: Makepad
+    takes injected input only after 2 s without native input); None for any
+    other answer."""
+    if not isinstance(answer, dict) or answer.get("err") != "user_interacting" or answer.get("applied"):
+        return None
+    activity = answer.get("activity") or {}
+    return max(activity.get("quiet_ms", 2000) - activity.get("idle_ms", 0), 0) / 1000.0 + 0.25
+
+
+def parse_cputime(text):
+    """ps cputime ('0:01.25', '1:02:03.50') to seconds."""
+    parts = text.strip().split(":")
+    seconds = 0.0
+    for part in parts:
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
 class Png:
     """A decoded 8-bit RGBA image."""
 
@@ -170,11 +194,22 @@ class App:
         """GET a route and return its JSON answer; raises on {"err": ...}."""
         query = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         url = f"http://127.0.0.1:{self.port}{route}" + (f"?{query}" if query else "")
-        try:
-            with urllib.request.urlopen(url, timeout=timeout) as r:
-                answer = json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            raise DriveError(f"{route}: HTTP {e.code} {e.read().decode()[:300]}") from e
+        for attempt in range(CONFLICT_RETRIES + 1):
+            try:
+                with urllib.request.urlopen(url, timeout=timeout) as r:
+                    answer = json.loads(r.read().decode())
+                break
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                try:
+                    wait = conflict_wait(json.loads(body)) if e.code == 409 else None
+                except ValueError:
+                    wait = None
+                if wait is None or attempt == CONFLICT_RETRIES:
+                    raise DriveError(f"{route}: HTTP {e.code} {body[:300]}") from e
+                if attempt == 0:
+                    print(f"waiting: someone is using this machine ({route} not applied)")
+                time.sleep(wait)
         if isinstance(answer, dict) and "err" in answer:
             raise DriveError(f"{route}: {answer['err']}")
         return answer
@@ -216,6 +251,20 @@ class App:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(answer["png"], dest)
         return read_png(dest)
+
+    def log_lines(self, n=2000):
+        """The app's log ring, oldest first."""
+        return self.get("/log", n=n)["l"]
+
+    def scroll(self, x, y, dy):
+        """A wheel event at (x, y), dy points (negative scrolls up/away)."""
+        self.get("/m", k="scroll", x=x, y=y, dy=dy, wait=1)
+
+    def cpu_seconds(self):
+        """CPU time the app has used so far (ps cputime), in seconds."""
+        out = subprocess.run(["ps", "-o", "cputime=", "-p", str(self.proc.pid)],
+                             capture_output=True, text=True).stdout.strip()
+        return parse_cputime(out)
 
     def errors(self):
         """Error lines ([E] or [!]) from the app's own log ring."""

@@ -46,16 +46,29 @@ Data flow:
    `try_recv` on each frame (or on a `SignalToUI`).
 4. The UI refreshes the widgets whose state changed.
 
-Preview bridge (`reco-desktop/src/preview/`, Module 1):
+Preview bridge (Module 1). The render thread lives in `reco-app`
+(`src/preview/worker.rs`); the `RecoPreview` widget
+(`reco-desktop/src/ui/preview.rs`) shows its frames.
 
-- A wgpu 28 device on the Metal backend. At startup the app checks that its
-  `MTLDevice` is Makepad's (`cx.metal_device()`); if not, it uses the
-  fallback below.
-- A ring of three render targets. Reco renders into the next free slot. A slot
-  is shown only after `queue.on_submitted_work_done` has fired for its
-  submission, and it is reused only after a newer slot has been on screen.
-- Portable fallback: `copy_texture_to_buffer` and `map_async` into a Makepad
-  `VecBGRAu8_32` texture. It is slower but works on every desktop.
+- The worker makes its own wgpu 28 device. Zero-copy needs it to be
+  Makepad's `MTLDevice` (`cx.metal_device()`, compared by pointer);
+  otherwise, or with `--preview-readback`, the worker reads frames back.
+- Decoding is `FfmpegFileSource`: CPU YUV planes, seekable. The zero-copy
+  decoder cannot seek yet ([FRICTION.md](FRICTION.md)).
+- Zero-copy: a ring of six `Bgra8Unorm` textures. The worker sends their raw
+  `MTLTexture` pointers (`PreviewEvent::Ring`), keeps them alive until the
+  widget answers `Adopted`, and holds back any new ring (a resize) until
+  then.
+- Makepad and the worker use different Metal queues with no fence between
+  them. So the worker waits for its own GPU work before it announces a
+  frame; the widget hands a slot back only three display beats after it
+  stopped showing it (`Retirement`); and the worker renders only into
+  slots it got back (`SlotRing`).
+- Readback: the frame is copied to a buffer, mapped, and sent as BGRA `u32`
+  pixels into a `VecBGRAu8_32` texture. Slower, but it works on every
+  desktop; the Module 1 check runs both paths.
+- The worker sleeps until the next frame while playing and blocks while
+  paused and still, so a paused preview costs about 0% CPU.
 
 Threading, adopted from Makepad's own rules:
 
@@ -161,8 +174,19 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   script needs `use mod.text.*` and `use mod.res.*` to name fonts.
 - A `use mod.widgets.*` is a snapshot: a widget registered in the same
   `script_mod!` block is named by its full path (`mod.widgets.X`).
-- The remote snapshot reports a widget's `#[redraw]` area, so a custom
-  widget makes its whole box the redraw area.
+- The remote snapshot reports a widget's `area()`: the field marked
+  `#[area]`, else the first `#[redraw]` field. A custom widget makes its
+  whole box the redraw area. Redrawing a draw quad that has never been
+  drawn does nothing, so `RecoPreview` redraws through its box and only
+  reports its frame quad (`#[area]`).
+- A script can set `visible:` on a custom widget only if the widget has a
+  `#[visible] #[live(true)] visible: bool` field; an unknown property is a
+  runtime script error, not a build error.
+- `scroll.y` is the macOS wheel delta negated (scrolling away is negative),
+  the opposite of Slint's `delta-y`.
+- The `log` crate has no backend in the app: whatever the remote log ring
+  (and so a check) must see is logged with Makepad's `log!`.
+- On macOS `maximize()` toggles fullscreen; `fullscreen()` does nothing.
 - Negative margins work, and are how trailing icons line up (Rule 11).
 - An SVG icon is scaled by its drawn content, not its viewBox, so a small
   drawing is blown up to fill the icon box. Every icon pins its 16 by 16
