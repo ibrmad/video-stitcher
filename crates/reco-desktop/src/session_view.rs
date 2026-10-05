@@ -440,7 +440,14 @@ impl App {
             0.0
         };
         let status = live.status();
-        self.set_label(cx, ids!(time_current), &time_ruler::clock(now));
+        let scrubbing = self
+            .ui
+            .widget(cx, ids!(timeline))
+            .borrow::<RecoTimeRuler>()
+            .is_some_and(|r| r.is_dragging());
+        if !scrubbing {
+            self.set_label(cx, ids!(time_current), &time_ruler::clock(now));
+        }
         self.set_label(cx, ids!(status_text), &status);
         self.set_play_icon(cx, playing);
         self.update_ruler(cx);

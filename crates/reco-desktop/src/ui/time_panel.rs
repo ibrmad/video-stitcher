@@ -255,6 +255,12 @@ impl RecoTimeRuler {
         self.area.redraw(cx);
     }
 
+    /// Whether a finger is scrubbing the ruler (the clock then shows the
+    /// scrub, not the frames still playing).
+    pub fn is_dragging(&self) -> bool {
+        self.dragging
+    }
+
     /// Tint the export range (`None`: no range).
     pub fn set_export_range(&mut self, cx: &mut Cx, range: Option<(f64, f64)>) {
         self.export_range = range;

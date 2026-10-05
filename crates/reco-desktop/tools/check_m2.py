@@ -198,6 +198,17 @@ def check_ruler():
         time.sleep(2.0)
         after = seconds(text_of(app, "time_current"))
         expect(after is not None and abs(after - 30) <= 1, f"ruler: releasing seeks there ({after})")
+        # While playing, the clock shows the scrub, not the frames playing on.
+        app.key("space")
+        time.sleep(1.0)
+        (x2, _), (x3, _) = ruler_point(app, 45, 60.0), ruler_point(app, 50, 60.0)
+        app.get("/m", k="down", x=x2, y=y0)
+        app.get("/m", k="move", x=x3, y=y0, wait=1)
+        time.sleep(0.6)
+        held = seconds(text_of(app, "time_current"))
+        app.get("/m", k="up", x=x3, y=y0, wait=1)
+        app.key("space")
+        expect(held is not None and abs(held - 50) <= 1, f"ruler: scrubbing while playing holds the clock ({held})")
         expect(app.errors() == [], "ruler: no errors in the app log")
 
     left, right, cal = FAST
