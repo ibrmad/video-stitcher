@@ -77,6 +77,9 @@ pub struct CalibrationValues {
     pub roi_points: usize,
     /// Changed since it was loaded or saved.
     pub dirty: bool,
+    /// Which open these values belong to (1 for the first): a UI takes
+    /// slider positions only from a newer open than the last it took.
+    pub opened: u64,
 }
 
 #[cfg(test)]

@@ -354,6 +354,8 @@ struct Worker {
     last_time: (u64, PlayState),
     /// A seek waiting for the end of this batch of commands.
     pending_seek: Option<u64>,
+    /// Successful opens so far: each one's values carry its number.
+    opened: u64,
     /// The file probe's answer, while it is being measured.
     lanes_rx: Option<Receiver<Lanes>>,
     /// The frame last recorded (`frame_index`), so each is recorded once.
@@ -383,6 +385,7 @@ impl Worker {
             easing: false,
             last_time: (0, PlayState::Empty),
             pending_seek: None,
+            opened: 0,
             lanes_rx: None,
             recorded_at: None,
             recorded: 0,
@@ -669,7 +672,9 @@ impl Worker {
     /// Tell the UI the live calibration's values.
     fn send_calibration(&self) {
         if let Some(session) = self.session.as_ref() {
-            self.out.send(PreviewEvent::Calibration(session.values()));
+            let mut values = session.values();
+            values.opened = self.opened;
+            self.out.send(PreviewEvent::Calibration(values));
         }
     }
 
@@ -772,6 +777,7 @@ impl Worker {
                     gpu.gpu_name()
                 );
                 self.session = Some(session);
+                self.opened += 1;
                 self.start_lanes_probe();
                 self.send_calibration();
                 self.retire_ring();
@@ -1498,5 +1504,17 @@ mod tests {
             (lanes.length - 59.0).abs() < 0.5,
             "30 frames at 30 fps less: {lanes:?}"
         );
+    }
+
+    #[test]
+    fn each_open_has_its_own_number() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        let first = calibration_where(&worker, |_| true).map(|v| v.opened);
+        assert!(open_fast(&worker));
+        let second = calibration_where(&worker, |v| Some(v.opened) != first).map(|v| v.opened);
+        assert_eq!((first, second), (Some(1), Some(2)));
     }
 }

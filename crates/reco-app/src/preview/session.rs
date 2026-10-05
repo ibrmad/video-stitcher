@@ -315,6 +315,8 @@ impl PreviewSession {
                 .as_ref()
                 .map_or(0, |r| r.left.len() + r.right.len()),
             dirty: self.dirty,
+            // The worker numbers its opens (`Worker::send_calibration`).
+            opened: 0,
         }
     }
 
