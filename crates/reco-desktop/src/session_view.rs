@@ -69,6 +69,17 @@ impl App {
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
                 Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
                 Some(PreviewEvent::Lanes(lanes)) => self.show_lanes(cx, lanes),
+                Some(PreviewEvent::Calibration(values)) => self.show_calibration_values(cx, values),
+                Some(PreviewEvent::CalibrationSaved(path)) => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    self.toast(cx, Severity::Info, "Calibration saved", &name);
+                }
+                Some(PreviewEvent::CalibrationSaveFailed(why)) => {
+                    self.toast(cx, Severity::Error, "Couldn't save the calibration", &why)
+                }
                 Some(PreviewEvent::RecordingStarted { path }) => self.recording_started(cx, path),
                 Some(PreviewEvent::Recorded { frames }) => self.recorded(cx, frames),
                 Some(PreviewEvent::RecordingSaved(recording)) => {

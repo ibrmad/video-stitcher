@@ -159,6 +159,9 @@ script_mod! {
                             text: "Auto-calibrate"
                         }
                         recalibrate := RecoButton{visible: false text: "Recalibrate"}
+                        Tip{text: "Save the adjusted calibration to its file"
+                            save_calibration := RecoButton{visible: false text: "Save"}
+                        }
                         cancel_calibration := RecoButton{visible: false text: "Cancel"}
                         load_calibration := RecoButton{text: "Load file…"}
                     }

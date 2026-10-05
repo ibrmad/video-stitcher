@@ -89,6 +89,43 @@ script_mod! {
                                 rig_roll := RecoSlider{min: -15.0 max: 15.0 default: 0.0}
                                 roll_value := Value{text: "0.0°"}
                             }
+                            RecoRow{
+                                Tip{text: "Frames between the cameras: positive when the right camera started first."
+                                    RecoLabelCell{RecoSubdued{text: "Sync (frames)"}}
+                                }
+                                sync_input := TextInput{
+                                    width: Fill height: theme.reco_button margin: 0
+                                    empty_text: "0"
+                                }
+                                sync_apply := RecoButton{text: "Apply"}
+                            }
+                            RecoRow{
+                                Tip{text: "How far the two cameras' pictures overlap."
+                                    RecoLabelCell{RecoSubdued{text: "Overlap"}}
+                                }
+                                intersect := RecoSlider{min: -1.0 max: 1.0 default: 0.0}
+                                intersect_value := Value{text: "0.000"}
+                            }
+                            RecoRow{
+                                Tip{text: "Where the virtual camera stands between the two."
+                                    RecoLabelCell{RecoSubdued{text: "Camera depth"}}
+                                }
+                                axis_offset := RecoSlider{min: -0.6 max: 0.6 default: 0.0}
+                                axis_value := Value{text: "0.000"}
+                            }
+                            RecoRow{
+                                Tip{text: "Lifts the right camera's picture to meet the left."
+                                    RecoLabelCell{RecoSubdued{text: "Vertical shift"}}
+                                }
+                                x_ty := RecoSlider{min: -0.1 max: 0.1 default: 0.0}
+                                x_ty_value := Value{text: "0.000"}
+                            }
+                            RecoRow{
+                                View{width: Fill height: Fit}
+                                Tip{text: "Back to the overlap, depth and shift in the calibration file."
+                                    reset_layout := RecoFlatButton{text: "Reset layout"}
+                                }
+                            }
                         }
                     }
                 }

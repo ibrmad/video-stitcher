@@ -29,6 +29,7 @@ mod shell_state;
 mod theme;
 mod time_ruler;
 mod toast_view;
+mod tune_view;
 mod ui;
 
 use calibrate_view::Calibrating;
@@ -483,7 +484,17 @@ impl App {
     }
 
     fn set_visible(&self, cx: &mut Cx, id: &[LiveId], visible: bool) {
-        self.ui.widget(cx, id).set_visible(cx, visible);
+        let widget = self.ui.widget(cx, id);
+        if widget.visible() != visible {
+            widget.set_visible(cx, visible);
+            // The side panels keep their own draw lists (`new_batch`), which
+            // redraw only when one of their own areas asks, and showing or
+            // hiding a widget doesn't ask. Redraw them, and the window.
+            for panel in [ids!(media_panel), ids!(inspector)] {
+                self.ui.widget(cx, panel).redraw(cx);
+            }
+            self.ui.redraw(cx);
+        }
     }
 
     /// Enable or disable a button. Makepad keeps these apart: `set_enabled`
@@ -593,6 +604,7 @@ impl MatchEvent for App {
         self.project_actions(cx, actions);
         self.calibration_actions(cx, actions);
         self.recent_actions(cx, actions);
+        self.tune_actions(cx, actions);
         self.file_dialog_actions(cx, actions);
     }
 }
