@@ -30,6 +30,7 @@ use super::readback::read_bgra;
 use super::recorder::Recording;
 use super::session::{OUTPUT_FORMAT, PreviewSession};
 use super::slots::{RING_SLOTS, SlotRing};
+use super::stats::{Stats, StatsMeter};
 use super::tuning::{CalibrationValues, Tuning};
 use super::view::should_resize;
 use crate::files::save_atomically;
@@ -221,6 +222,8 @@ pub enum PreviewEvent {
     /// The field of view the view is heading to, degrees (after a zoom, a
     /// reset, the slider or "stay inside").
     Fov(f32),
+    /// The last second's frame figures (once a second while frames show).
+    Stats(Stats),
     /// The tuned calibration was written here.
     CalibrationSaved(PathBuf),
     /// It could not be written; why.
@@ -390,6 +393,8 @@ struct Worker {
     problem: Option<String>,
     /// When the pose last took a smoothing step.
     last_step: Instant,
+    /// Frame times for the Stats section.
+    stats: StatsMeter,
     quit: bool,
 }
 
@@ -410,6 +415,7 @@ impl Worker {
             last_time: (0, PlayState::Empty),
             pending_seek: None,
             opened: 0,
+            stats: StatsMeter::new(Instant::now()),
             lanes_rx: None,
             recorded_at: None,
             recorded: 0,
@@ -536,7 +542,12 @@ impl Worker {
                 self.with_session(|s| s.set_constrained(on));
                 self.send_fov();
             }
-            PreviewCommand::TogglePlay => self.transport(|s| s.playback_mut().toggle().map(|_| ())),
+            PreviewCommand::TogglePlay => {
+                // Figures start with the playing, not the frames drawn
+                // while paused.
+                self.stats = StatsMeter::new(Instant::now());
+                self.transport(|s| s.playback_mut().toggle().map(|_| ()));
+            }
             PreviewCommand::Step { forward } => self.transport(|s| {
                 let playback = s.playback_mut();
                 if playback.state() == PlayState::Playing {
@@ -853,6 +864,7 @@ impl Worker {
         let Some(session) = self.session.as_mut() else {
             return;
         };
+        let ticked = Instant::now();
         let advanced = match session.playback_mut().tick() {
             Ok(advanced) => advanced,
             Err(e) => {
@@ -860,6 +872,7 @@ impl Worker {
                 false
             }
         };
+        let decode = ticked.elapsed();
         let Some(session) = self.session.as_mut() else {
             return;
         };
@@ -875,7 +888,16 @@ impl Worker {
         }
         self.record_new_frame();
         if advanced || moved || self.dirty {
-            self.dirty = !self.present();
+            let rendering = Instant::now();
+            let shown = self.present();
+            self.dirty = !shown;
+            if shown {
+                self.stats
+                    .frame(Instant::now(), decode, rendering.elapsed());
+            }
+        }
+        if let Some(stats) = self.stats.report(Instant::now()) {
+            self.out.send(PreviewEvent::Stats(stats));
         }
     }
 
@@ -1600,6 +1622,20 @@ mod tests {
             Some(super::super::session::FOV_DEFAULT),
             "reset goes back"
         );
+    }
+
+    #[test]
+    fn stats_arrive_while_playing() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        worker.send(PreviewCommand::TogglePlay);
+        let stats = wait_for(&worker, 5, |e| matches!(e, PreviewEvent::Stats(_)));
+        let Some(PreviewEvent::Stats(stats)) = stats else {
+            panic!("no stats while playing: {stats:?}");
+        };
+        assert!(stats.fps > 1.0 && stats.frame_ms > 0.0, "{stats:?}");
     }
 
     #[test]

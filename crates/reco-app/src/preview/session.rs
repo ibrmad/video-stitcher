@@ -829,7 +829,11 @@ mod tests {
                 ..lens
             },
         });
-        assert_ne!(before, render_to_cpu(&mut session), "the stitch follows the lens");
+        assert_ne!(
+            before,
+            render_to_cpu(&mut session),
+            "the stitch follows the lens"
+        );
     }
 
     #[test]

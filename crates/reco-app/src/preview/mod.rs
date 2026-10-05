@@ -12,6 +12,7 @@ pub mod readback;
 pub mod recorder;
 pub mod session;
 pub mod slots;
+pub mod stats;
 pub mod tuning;
 pub mod view;
 pub mod worker;
