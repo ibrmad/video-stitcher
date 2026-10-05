@@ -52,7 +52,9 @@ pub enum PreviewAction {
     None,
 }
 
-/// Degrees of FOV per point of wheel scroll (reco-gui: −dy / 40).
+/// Degrees of FOV per point of wheel scroll. reco-gui zooms by −dy / 40
+/// with macOS's sign (positive away); Makepad's `scroll.y` is the negated
+/// delta, so scrolling away (negative here) zooms in.
 const WHEEL_DEG_PER_POINT: f64 = 1.0 / 40.0;
 
 /// The live preview widget.
@@ -64,12 +66,16 @@ pub struct RecoPreview {
     source: ScriptObjectRef,
     #[walk]
     walk: Walk,
-    #[redraw]
     #[live]
     draw_frame: DrawPreview,
     #[visible]
     #[live(true)]
     visible: bool,
+    /// The whole widget: what redraws (the frame quad has no area until
+    /// its first draw, so redrawing it alone would never show a first
+    /// frame), input hits, and what the remote snapshot reports.
+    #[redraw]
+    #[area]
     #[rust]
     area: Area,
     #[rust]
@@ -107,13 +113,13 @@ impl RecoPreview {
     pub fn attach(&mut self, cx: &mut Cx, commands: SyncSender<PreviewCommand>) {
         self.commands = Some(commands);
         self.sent_size = None;
-        self.draw_frame.redraw(cx);
+        self.area.redraw(cx);
     }
 
     /// Letterbox to `aspect` (the render target follows on the next draw).
     pub fn set_aspect(&mut self, cx: &mut Cx, aspect: PreviewAspect) {
         self.aspect = aspect;
-        self.draw_frame.redraw(cx);
+        self.area.redraw(cx);
     }
 
     /// Take the frame events; hand every other event back to the App.
@@ -146,13 +152,13 @@ impl RecoPreview {
                 self.showing_pixels = false;
                 self.queue(PreviewCommand::Adopted { generation });
                 self.flush(cx);
-                self.draw_frame.redraw(cx);
+                self.area.redraw(cx);
                 None
             }
             PreviewEvent::Frame { generation, slot } => {
                 if generation == self.generation {
                     self.retirement.show(slot);
-                    self.draw_frame.redraw(cx);
+                    self.area.redraw(cx);
                     self.request_beat(cx);
                 } else {
                     // A slot of an older ring: the worker already let it go.
@@ -178,7 +184,7 @@ impl RecoPreview {
                 texture.set_data_u32(cx, width as usize, height as usize, data);
                 self.frame_size = Some((width, height));
                 self.showing_pixels = true;
-                self.draw_frame.redraw(cx);
+                self.area.redraw(cx);
                 None
             }
             other => Some(other),
@@ -285,7 +291,7 @@ impl Widget for RecoPreview {
             }
             Hit::FingerUp(_) => self.drag_from = None,
             Hit::FingerScroll(se) => {
-                self.zoom += -se.scroll.y * WHEEL_DEG_PER_POINT;
+                self.zoom += se.scroll.y * WHEEL_DEG_PER_POINT;
                 self.flush(cx);
             }
             _ => {}
