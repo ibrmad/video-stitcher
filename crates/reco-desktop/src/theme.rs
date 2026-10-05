@@ -3,7 +3,7 @@
 //! is set here.
 //!
 //! The design reference is the Rerun viewer (`re_ui`): neutral greys, Inter
-//! Medium at 12 px, 24 px rows, flat panels with section bands, and one
+//! Medium, flat panels with section bands, and one
 //! accent kept for selection, focus, the primary action and progress. Reco's
 //! accent is pitch green where Rerun's is blue.
 //!
@@ -39,7 +39,7 @@ script_mod! {
         space_2: 8.0
         space_3: 12.0
         mspace_1: mod.turtle.Inset{top: 4.0 right: 4.0 bottom: 4.0 left: 4.0}
-        font_size_p: 9.0
+        font_size_p: 9.75
 
         // Inter, as Rerun: Medium for everything, SemiBold for the one large
         // title. Makepad ships Inter as a variable font.
@@ -294,92 +294,94 @@ script_mod! {
         reco_tick: #x3a3939
         reco_playhead: #xffffff
 
-        // Type (points): 12 px for everything, 11 px for small print, one
-        // 20 px title for the next step.
-        reco_font_body: 9.0
-        reco_font_small: 8.25
-        reco_font_display: 15.0
+        // Type (points): 13 px for everything (macOS's own size), 12 px for
+        // small print, one 22 px title for the next step. Rerun's 12 px
+        // and 24 pt rows read too small on a 1x display (owner,
+        // 2026-10-05), so the design has more room than Rerun's.
+        reco_font_body: 9.75
+        reco_font_small: 9.0
+        reco_font_display: 16.5
 
-        // Spacing (points): Rerun's 12 pt view padding, 8 pt item spacing,
-        // 4 pt between an icon and its text, 14 pt indent.
+        // Spacing (points): 14 pt view padding, 10 pt item spacing, 5 pt
+        // between an icon and its text, 16 pt indent.
         reco_gap_xs: 2.0
-        reco_gap_s: 4.0
-        reco_gap: 8.0
-        reco_pad: 12.0
-        reco_indent: 14.0
-        reco_gap_l: 16.0
-        reco_gap_xl: 24.0
+        reco_gap_s: 5.0
+        reco_gap: 10.0
+        reco_pad: 14.0
+        reco_indent: 16.0
+        reco_gap_l: 18.0
+        reco_gap_xl: 28.0
 
         // Sizes (points)
-        reco_row: 24.0
-        reco_button: 22.0
-        reco_button_pad_x: 8.0
-        reco_icon_button: 22.0
-        reco_icon: 16.0
-        reco_icon_small: 12.0
+        reco_row: 28.0
+        reco_button: 26.0
+        reco_button_pad_x: 10.0
+        reco_icon_button: 26.0
+        reco_icon: 18.0
+        reco_icon_small: 14.0
         // Icons at the end of a panel row, title row or section band.
-        reco_row_icon: 14.0
+        reco_row_icon: 16.0
         // Record and Stop: Lucide's filled circle and square fill their box,
         // so they are drawn smaller to read as a dot and a square.
-        reco_record_icon: 9.0
-        // Lucide's step-back sits this far inside its 16 pt box (its tip at
+        reco_record_icon: 10.0
+        // Lucide's step-back sits this far inside its 18 pt box (its tip at
         // 4 of 24, less half the stroke).
-        reco_glyph_inset: 1.5
-        reco_icon_tiny: 10.0
-        reco_chevron: 12.0
+        reco_glyph_inset: 1.69
+        reco_icon_tiny: 11.0
+        reco_chevron: 14.0
         // The chevron's drawing inside its box, stroke included: a trailing
         // chevron's ink lines up with the content edge by the difference.
-        reco_chevron_ink: 7.25
-        reco_badge: 16.0
+        reco_chevron_ink: 8.46
+        reco_badge: 18.0
         // A file row's name sits under its camera's name: the row's pad, the
         // badge and the gap after it.
-        reco_file_indent: 36.0
-        reco_badge_radius: 8.0
-        reco_dot: 6.0
-        reco_dot_radius: 3.0
+        reco_file_indent: 42.0
+        reco_badge_radius: 9.0
+        reco_dot: 7.0
+        reco_dot_radius: 3.5
         reco_link_width: 1.0
-        reco_link_height: 8.0
-        reco_value_width: 44.0
-        reco_label_width: 112.0
-        reco_aspect_width: 72.0
-        reco_quality_width: 84.0
-        reco_progress_width: 400.0
+        reco_link_height: 10.0
+        reco_value_width: 50.0
+        reco_label_width: 124.0
+        reco_aspect_width: 80.0
+        reco_quality_width: 92.0
+        reco_progress_width: 440.0
         // The export sheet, and the time fields inside it.
-        reco_sheet_width: 480.0
-        reco_time_input: 72.0
+        reco_sheet_width: 540.0
+        reco_time_input: 80.0
         // The lens picker's results: ten rows, then it scrolls.
-        reco_picker_list: 240.0
+        reco_picker_list: 280.0
         // A few lines of writing (the bug report's description).
-        reco_text_area: 72.0
-        reco_toast_width: 320.0
+        reco_text_area: 84.0
+        reco_toast_width: 360.0
         reco_progress_thickness: 4.0
         reco_slider_track: 4.0
-        reco_slider_knob: 5.0
+        reco_slider_knob: 6.0
         // A checkbox's mark box, and where its text starts: after the box
-        // and the 8 pt gap controls keep (Makepad's 13 assumes padding).
-        reco_check_box: 15.0
-        reco_check_label: 23.0
-        reco_time_width: 52.0
-        reco_ruler_height: 16.0
-        reco_playhead_head: 5.0
+        // and the 10 pt gap controls keep (Makepad's 13 assumes padding).
+        reco_check_box: 16.0
+        reco_check_label: 26.0
+        reco_time_width: 58.0
+        reco_ruler_height: 18.0
+        reco_playhead_head: 6.0
         reco_chapter_gap: 2.0
-        reco_controls_height: 28.0
-        reco_tick_length: 5.0
-        reco_tick_spacing: 72.0
+        reco_controls_height: 32.0
+        reco_tick_length: 6.0
+        reco_tick_spacing: 80.0
         // A lane row and the file blocks inside it.
-        reco_lane_row: 16.0
+        reco_lane_row: 18.0
         reco_lane_inset: 4.0
         reco_playhead_width: 1.5
-        reco_menu_width: 200.0
+        reco_menu_width: 220.0
         // Room for the macOS window buttons at the left of the title bar.
         reco_caption_inset: 76.0
-        reco_media_width: 260.0
-        reco_media_min: 200.0
+        reco_media_width: 290.0
+        reco_media_min: 220.0
         reco_viewer_min: 360.0
-        reco_inspector_width: 280.0
-        // The Adjust panel's splitter floor includes the 6 pt bar, so 206
-        // keeps the panel itself at 200.
-        reco_inspector_floor: 206.0
+        reco_inspector_width: 310.0
+        // The Adjust panel's splitter floor includes the 6 pt bar, so 226
+        // keeps the panel itself at 220.
+        reco_inspector_floor: 226.0
     }
     mod.theme = mod.themes.reco_dark
 }
