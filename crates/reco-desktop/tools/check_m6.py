@@ -548,8 +548,43 @@ def check_ai_unavailable():
         expect(not app.errors(), f"unavailable: no errors in the app log {app.errors()[:3]}")
 
 
+def check_ai_figures():
+    """An export tracked without a lookahead puts the detector's figures in
+    Stats (with one, the engine measures none: FRICTION.md)."""
+    if not os.path.exists(MODEL):
+        expect(False, f"figures: the fixture model is missing ({MODEL})")
+        return
+    folder, files = linked("ai-figures")
+    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"ai_enabled": True, "ai_model_path": MODEL, "ai_lookahead": 0.0}, f)
+    with launch(files, ["--export-range", "0-2"], config) as app:
+        expect(open_sheet(app) is not None, "figures: Export opens the sheet")
+        wait_for(lambda: app.enabled("ai_enable"), 30)
+        expect(reveal(app, "ai_lookahead_value") is not None and text_of(app, "ai_lookahead_value") == "Off",
+               f"figures: the lookahead is off ({text_of(app, 'ai_lookahead_value')})")
+        expect(app.rect("stats_ai") is None, "figures: Stats has none before an export")
+        click(app, "sheet_export")
+        expect(bool(wait_for(lambda: logged(app, "export: done"), 120)), "figures: the export finishes")
+        open_advanced(app, "stats_section")
+        r = app.rect("stats_section")
+        if r:
+            app.scroll(r[0] + r[2] / 2, r[1] + 10, 200)
+        detection = wait_for(lambda: (text_of(app, "stats_detection") or "").endswith(" a frame")
+                             and text_of(app, "stats_detection"), 5)
+        expect(bool(detection), f"figures: Stats has the detector's time and finds ({text_of(app, 'stats_detection')})")
+        tracking = text_of(app, "stats_tracking") or ""
+        expect(" tracked · ball " in tracking, f"figures: and the tracks and the ball ({tracking})")
+        save_shot(app, "ai-figures")
+        expect(not app.errors(), f"figures: no errors in the app log {app.errors()[:3]}")
+    written = os.path.join(folder, "cam0_stitched.mp4")
+    if os.path.exists(written):
+        os.remove(written)
+
+
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
-          "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable}
+          "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
+          "ai_figures": check_ai_figures}
 
 
 def main():

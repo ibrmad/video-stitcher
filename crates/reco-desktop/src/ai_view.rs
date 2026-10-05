@@ -409,7 +409,8 @@ impl App {
     }
 
     /// The sheet's AI choices are the next export's: kept with the others,
-    /// and a model typed in becomes the default.
+    /// and a usable model typed in becomes the default (Sweep takes any
+    /// text there; Preferences wouldn't).
     pub(crate) fn remember_ai(&mut self, tracking: Option<&Tracking>) {
         self.settings.ai_enabled = tracking.is_some();
         let Some(tracking) = tracking else {
@@ -421,7 +422,7 @@ impl App {
         self.settings.ai_framing = tracking.knobs.framing.clone();
         self.settings.ai_lock_pitch = tracking.knobs.lock_pitch;
         self.settings.ai_lookahead = tracking.lookahead_secs;
-        if let Some(model) = &tracking.model {
+        if let Some(model) = tracking.usable_model() {
             self.settings.ai_model_path = Some(model.clone());
         }
     }

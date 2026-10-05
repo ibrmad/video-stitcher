@@ -169,6 +169,41 @@ Export (Module 6):
 - Cancel keeps the part written (StitchJob closes the file properly) and
   the notice names it.
 
+AI tracking (Module 6b):
+
+- reco-app takes `reco-autocam` behind its `ai` feature (on by default;
+  `coreml` passes through), as the Slint app's default build: ONNX Runtime
+  on the CPU. `reco_app::ai` holds the sheet's choices and builds the
+  engine's config: the style preset is the base and the knobs shown go
+  over it, as the Slint app built it. A ball-only mode raises the
+  confidence floor.
+- Whether the machine can run the detector is asked once at startup on a
+  thread (ONNX Runtime's engines can take a moment to load). Until it
+  answers, and when it can't, "Follow the play" is dimmed and off: the
+  sheet puts back a click (FRICTION.md), and the status line says why.
+- The sheet's rows scroll (`ScrollYView`, capped at the window's height
+  less the band, the buttons and a margin: `reco_sheet_rows_max`). The AI
+  rows show while tracking is on; the panner's finer knobs are a closed
+  Advanced tier (Rule 9).
+- The model is the one Preferences names. Choose… also makes it the
+  default; a model typed in becomes the default at Export. Tracking
+  without a usable model (an .onnx file that exists, Preferences' rule)
+  says why under the model, and Export waits; Sweep needs none.
+- A style preset sets the knobs it covers. On open, the Advanced tier
+  follows the saved preset; the mode, interval, preset, framing, tilt
+  lock and lookahead are remembered.
+- The lookahead's zones come from the GPU's free and total memory at the
+  preview's open, and the source's size and rate (the engine's budget, as
+  the Slint app). A saved lookahead past the ceiling opens at the safe
+  value. The track (`RecoZones` under a knob-only slider) shows the zones
+  dimmed and fills up to the knob in its zone's colour; without a reading
+  it is a plain slider.
+- The job adds the lookahead, then sets up the detector, trackers and
+  panner on the session as it opens (`on_session` → `setup_autocam`, with
+  the calibration's field outline). It says whether tracking started (the
+  card's line; the notice adds "tracked with AI") and sends the engine's
+  AI figures to Stats once measured.
+
 Camera and lens (Module 5):
 
 - The field of view and "stay inside" are view commands (`SetFov`,
@@ -432,7 +467,9 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   `RECO_DESKTOP_NO_NETWORK`, `RECO_DESKTOP_NO_BROWSER` and
   `RECO_DESKTOP_NO_CLIPBOARD`, which turn each request, link and copy into a
   log line (a switch naming a folder also keeps the payload there for the
-  check to read), and `RECO_DESKTOP_FAKE_RELEASE` answers the update check.
+  check to read), `RECO_DESKTOP_FAKE_RELEASE` answers the update check,
+  and `RECO_DESKTOP_FAKE_AI` stands in for a machine that can't run the
+  detector.
   Dialogs are answered through `RECO_DESKTOP_DIALOG_ANSWERS`, and settings go
   to a fresh `RECO_CONFIG_DIR`. Even a hidden window goes full screen, so no
   check starts one full screen.

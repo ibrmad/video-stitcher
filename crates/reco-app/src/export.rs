@@ -79,6 +79,64 @@ pub enum ExportEvent {
     /// AI tracking started (`Ok`), or why it didn't (the export goes on
     /// without it).
     Tracking(Result<(), String>),
+    /// How the tracking is doing (every half second or so).
+    AiFigures(AiFigures),
+}
+
+/// A tracked export's detector and tracker figures, from the engine's
+/// telemetry.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AiFigures {
+    /// Average time the detector takes, ms.
+    pub detection_ms: f64,
+    /// Detections a frame, on average.
+    pub per_frame: f64,
+    /// Players being tracked.
+    pub tracks: u32,
+    /// Frames with the ball found, percent.
+    pub ball_pct: f64,
+}
+
+/// The figures, once the detector has run (the engine reports zeros
+/// before, and throughout a lookahead: FRICTION.md).
+#[cfg(any(feature = "ai", test))]
+fn ai_figures(
+    detection_ms: f64,
+    total_detections: u64,
+    per_frame: f64,
+    tracks: u32,
+    ball_pct: f64,
+) -> Option<AiFigures> {
+    (detection_ms > 0.0 || total_detections > 0).then_some(AiFigures {
+        detection_ms,
+        per_frame,
+        tracks,
+        ball_pct,
+    })
+}
+
+/// Frames between the AI figures an export sends.
+#[cfg(feature = "ai")]
+const AI_FIGURES_EVERY: u64 = 15;
+
+/// Hands the engine's telemetry to the UI as AI figures.
+#[cfg(feature = "ai")]
+struct AiFiguresSink(Outbox);
+
+#[cfg(feature = "ai")]
+impl reco_core::telemetry::TelemetrySink for AiFiguresSink {
+    fn on_snapshot(&mut self, snapshot: &reco_core::telemetry::TelemetrySnapshot) {
+        let figures = ai_figures(
+            f64::from(snapshot.avg_detection_ms),
+            snapshot.total_detections,
+            f64::from(snapshot.detections_per_frame),
+            snapshot.active_tracks,
+            f64::from(snapshot.ball_presence_pct),
+        );
+        if let Some(figures) = figures {
+            self.0.send(ExportEvent::AiFigures(figures));
+        }
+    }
 }
 
 /// `path` with `.mp4` added when it has no extension.
@@ -428,6 +486,11 @@ fn with_tracking(
         match &status {
             Ok(()) => log::info!("export: AI tracking active ({})", tracking.mode),
             Err(why) => log::warn!("export: AI tracking not active: {why}"),
+        }
+        if status.is_ok() {
+            session
+                .telemetry_mut()
+                .set_sink(Box::new(AiFiguresSink(out.clone())), AI_FIGURES_EVERY);
         }
         out.send(ExportEvent::Tracking(status));
     })
@@ -780,6 +843,68 @@ mod tests {
         assert!(log.contains("detect"), "the events file has the detections");
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(output.with_extension("events.jsonl"));
+    }
+
+    /// The engine's telemetry has the detector's figures only without a
+    /// lookahead (its buffered produce phase records none; FRICTION.md).
+    #[cfg(feature = "ai")]
+    #[cfg_attr(
+        debug_assertions,
+        ignore = "needs an optimized build: Metal validation (FRICTION.md)"
+    )]
+    #[test]
+    fn a_tracked_export_reports_the_detectors_figures() {
+        let (Some((left, right, cal)), Some(model)) = (fixtures::fast_set(), fixtures::model())
+        else {
+            return;
+        };
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-figures-{}", std::process::id()));
+        let mut with_ai = options(output, (0.0, 2.0));
+        let mut tracking = tracking(Some(model));
+        tracking.lookahead_secs = 0.0;
+        with_ai.tracking = Some(tracking);
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            with_ai,
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 180, false);
+        let figures: Vec<&AiFigures> = events
+            .iter()
+            .filter_map(|e| match e {
+                ExportEvent::AiFigures(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            !figures.is_empty() && figures.iter().all(|f| f.detection_ms > 0.0),
+            "the detector's figures arrive while exporting: {figures:?}"
+        );
+        assert!(figures.iter().any(|f| f.per_frame > 0.0), "{figures:?}");
+        if let Some(ExportEvent::Done { path, .. }) = events.last() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn figures_come_only_once_the_detector_has_run() {
+        assert_eq!(ai_figures(0.0, 0, 0.0, 0, 0.0), None, "nothing measured");
+        assert_eq!(
+            ai_figures(12.5, 40, 1.3, 9, 62.0),
+            Some(AiFigures {
+                detection_ms: 12.5,
+                per_frame: 1.3,
+                tracks: 9,
+                ball_pct: 62.0
+            })
+        );
+        assert!(
+            ai_figures(8.0, 0, 0.0, 0, 0.0).is_some(),
+            "it ran and found nothing"
+        );
     }
 
     #[test]

@@ -197,3 +197,37 @@ it as "the default Makepad style". Reco's menus are a `Popover` with a
 `RecoMenuList` (template rows: items, separators, sections). The ask: row
 height, padding and the mark column as style values.
 
+
+## The detector's Metal preprocessing leaves an encoder open (Module 6b)
+
+Debug builds turn on wgpu's validation, and with it Metal's API
+validation. A tracked export there stops with Metal's `Command encoder
+released without endEncoding`. reco-detect's Metal preprocessing
+(`metal_compute.rs`) opens its compute encoder before steps that can
+return early with `?` (fetching the planes' Metal textures), so such a
+return drops the encoder open. Optimized builds (the app's) export with
+tracking fine. reco-app's two tracked export tests run in optimized builds
+only (`cargo test --profile desktop -p reco-app an_export_tracks`). The
+ask (engine): open the encoder after the steps that can fail, or end it on
+every path.
+
+## A lookahead's detections reach no telemetry (Module 6b)
+
+With a lookahead (the default, 2.5 s), detection runs in the session's
+buffered produce phase (`detect_and_track_only`). That phase records
+neither the detections nor the detection time, and the frame loop then
+skips detection, so the telemetry's AI figures (detection time,
+detections a frame, tracks, ball presence) stay zero for the whole export.
+The Slint app showed those zeros in its Stats panel. Reco sends AI figures
+only once the engine has measured something, so Stats shows them for
+exports without a lookahead. The ask (engine): record the produce phase's
+detections and detection time.
+
+## A disabled checkbox still takes clicks (Module 6b, Makepad)
+
+`CheckBox::set_disabled` only plays the disabled look: its event handler
+has no gate, unlike `Button`, which has `enabled`. The export sheet's
+"Follow the play" looks disabled until the machine can run the detector,
+and the sheet puts it back off when a click or Space flips it then. The
+ask: a disabled widget ignores input, or `CheckBox` gets an `enabled` as
+`Button` has.

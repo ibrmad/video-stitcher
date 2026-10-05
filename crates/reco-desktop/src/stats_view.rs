@@ -1,7 +1,9 @@
 //! The Adjust panel's Stats section in the App: the preview's frame figures
-//! once a second, the GPU, and the last calibration's confidence.
+//! once a second, the GPU, the last calibration's confidence, and how AI
+//! tracking did in the last export that measured it.
 
 use makepad_widgets::*;
+use reco_app::export::AiFigures;
 use reco_app::preview::stats::Stats;
 
 use crate::export_text::grouped;
@@ -26,7 +28,46 @@ pub(crate) fn calibration_line(confidence: f64, matches: usize) -> String {
     )
 }
 
+/// A figure with its tenths while it is small: "1.3", "57".
+fn short_figure(value: f64) -> String {
+    if value >= 10.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.1}")
+    }
+}
+
+/// "8.5 ms · 1.3 a frame": the detector's time and what it found.
+pub(crate) fn detection_line(ms: f64, per_frame: f64) -> String {
+    format!(
+        "{} ms · {} a frame",
+        short_figure(ms),
+        short_figure(per_frame)
+    )
+}
+
+/// "9 tracked · ball 62%": players tracked, and how often the ball was
+/// found.
+pub(crate) fn tracking_line(tracks: u32, ball_pct: f64) -> String {
+    format!("{tracks} tracked · ball {ball_pct:.0}%")
+}
+
 impl App {
+    /// A tracked export's detector and tracker figures.
+    pub(crate) fn show_ai_figures(&mut self, cx: &mut Cx, figures: &AiFigures) {
+        self.set_label(
+            cx,
+            ids!(stats_detection),
+            &detection_line(figures.detection_ms, figures.per_frame),
+        );
+        self.set_label(
+            cx,
+            ids!(stats_tracking),
+            &tracking_line(figures.tracks, figures.ball_pct),
+        );
+        self.set_visible(cx, ids!(stats_ai), true);
+    }
+
     /// The last second's frame figures.
     pub(crate) fn show_stats(&mut self, cx: &mut Cx, stats: &Stats) {
         self.last_stats = Some(stats.clone());
@@ -65,5 +106,9 @@ mod tests {
             calibration_line(0.823, 1234),
             "82% confidence · 1,234 matches"
         );
+        assert_eq!(detection_line(8.46, 1.33), "8.5 ms · 1.3 a frame");
+        // Figures from 10 up drop their tenths, so the line fits the panel.
+        assert_eq!(detection_line(380.42, 57.2), "380 ms · 57 a frame");
+        assert_eq!(tracking_line(9, 61.6), "9 tracked · ball 62%");
     }
 }

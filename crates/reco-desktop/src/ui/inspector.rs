@@ -241,7 +241,7 @@ script_mod! {
                 header +: {
                     fold_button +: {animator +: {active: {default: @off}}}
                     title +: {text: "Stats"}
-                    help +: {text: "How fast the preview runs, and how well the cameras were calibrated."}
+                    help +: {text: "How fast the preview runs, how well the cameras were calibrated, and how AI tracking did in the last export."}
                 }
                 body +: {
                     RecoRow{
@@ -285,6 +285,23 @@ script_mod! {
                             RecoLabelCell{RecoSubdued{text: "Calibration"}}
                         }
                         stats_calibration := RecoMeta{text: "—"}
+                    }
+                    // AI tracking's figures, once an export has measured them.
+                    stats_ai := View{
+                        visible: false
+                        width: Fill height: Fit flow: Down
+                        RecoRow{
+                            Tip{text: "In the last export with AI tracking: how long the detector took, and what it found a frame."
+                                RecoLabelCell{RecoSubdued{text: "Detection"}}
+                            }
+                            stats_detection := RecoMeta{text: "—"}
+                        }
+                        RecoRow{
+                            Tip{text: "In the last export with AI tracking: players tracked, and how often the ball was found."
+                                RecoLabelCell{RecoSubdued{text: "Tracking"}}
+                            }
+                            stats_tracking := RecoMeta{text: "—"}
+                        }
                     }
                 }
             }

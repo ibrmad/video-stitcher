@@ -106,23 +106,25 @@ impl Tracking {
     /// Why the tracking can't run as chosen, if it can't. The model is an
     /// .onnx file that exists, as Preferences takes it.
     pub fn problem(&self) -> Option<String> {
-        if self.mode == "sweep" {
+        if self.mode == "sweep" || self.usable_model().is_some() {
             return None;
         }
-        let onnx = |model: &PathBuf| {
-            model
-                .extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case("onnx"))
-        };
         match &self.model {
             None => Some("Choose the AI model (an .onnx file) to track.".into()),
-            Some(model) if !onnx(model) => Some("The AI model must be an .onnx file.".into()),
-            Some(model) if !model.is_file() => Some(format!(
+            Some(model) if !is_onnx(model) => Some("The AI model must be an .onnx file.".into()),
+            Some(model) => Some(format!(
                 "The AI model isn't there any more: {}",
                 model.display()
             )),
-            Some(_) => None,
         }
+    }
+
+    /// The model, when it is one Preferences would take: an .onnx file
+    /// that exists.
+    pub fn usable_model(&self) -> Option<&PathBuf> {
+        self.model
+            .as_ref()
+            .filter(|model| is_onnx(model) && model.is_file())
     }
 
     /// The engine's config: the preset with the knobs over it, the mode,
@@ -175,6 +177,12 @@ impl Tracking {
             None => config,
         }
     }
+}
+
+/// Whether `path` names an .onnx file.
+fn is_onnx(path: &std::path::Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("onnx"))
 }
 
 /// The lookahead slider's zones: comfortable up to `safe`, still fitting
@@ -402,6 +410,19 @@ mod tests {
             tracking(Some(notes.clone()), "field").problem().as_deref(),
             Some("The AI model must be an .onnx file.")
         );
+        let _ = std::fs::remove_file(notes);
+    }
+
+    #[test]
+    fn only_an_onnx_file_that_exists_is_a_usable_model() {
+        let model = temp_file("usable.onnx");
+        let notes = temp_file("usable.txt");
+        let usable = |path: Option<PathBuf>| tracking(path, "sweep").usable_model().cloned();
+        assert_eq!(usable(Some(model.clone())), Some(model.clone()));
+        assert_eq!(usable(Some(notes.clone())), None, "not an .onnx file");
+        assert_eq!(usable(Some(PathBuf::from("/no/such/m.onnx"))), None);
+        assert_eq!(usable(None), None);
+        let _ = std::fs::remove_file(model);
         let _ = std::fs::remove_file(notes);
     }
 

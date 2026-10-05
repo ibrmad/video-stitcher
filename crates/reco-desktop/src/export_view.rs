@@ -531,6 +531,7 @@ impl App {
                     );
                     self.toast(cx, Severity::Error, "Export failed", &why);
                 }
+                ExportEvent::AiFigures(figures) => self.show_ai_figures(cx, &figures),
                 ExportEvent::Tracking(status) => {
                     match &status {
                         Ok(()) => log!("export: AI tracking active"),

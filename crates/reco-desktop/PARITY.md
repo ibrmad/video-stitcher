@@ -370,8 +370,14 @@ for the real-pair calibration); and screenshots in
       `a_second_starts_at_its_first_frame`, `stats_arrive_while_playing`,
       `figures_read_plainly`. Shown: frame rate, frame time, the slowest
       1%, decode wait, render, GPU, and the last calibration's confidence and
-      matches. Not shown: a bottleneck line and dropped frames (the preview
-      has no drop count yet), and AI figures (Module 6b).
+      matches, and (Module 6b) a tracked export's detection time, finds a
+      frame, tracks and ball presence: "figures: Stats has the detector's
+      time and finds", "figures: and the tracks and the ball";
+      `a_tracked_export_reports_the_detectors_figures`,
+      `figures_come_only_once_the_detector_has_run`. The engine measures
+      those only without a lookahead (FRICTION.md); Stats shows them once
+      measured. Not shown: a bottleneck line and dropped frames (the
+      preview has no drop count yet).
 
 ## Module 6: export (§2.11, §7)
 
@@ -380,7 +386,12 @@ and `rules`, on the fast pair linked into a temporary folder, the Save
 dialog answered through `RECO_DESKTOP_DIALOG_ANSWERS`, the written file
 read back with ffprobe); the unit tests (`cargo test -p reco-app -p
 reco-desktop`); and screenshots in `target/desktop-checks/m6/`. AI
-tracking is Module 6b: `reco-autocam` is being changed in another branch.
+tracking (Module 6b) adds the checks `ai`, `ai_short`, `ai_unavailable`
+and `ai_figures`: the fixture model (`yolo26n.onnx`, or
+`RECO_FIXTURE_MODEL`) is chosen through the `model` answer, and
+`RECO_DESKTOP_FAKE_AI` stands in for a machine that can't run the
+detector. reco-app's tracked exports run in optimized builds only
+(`cargo test --profile desktop -p reco-app`; FRICTION.md).
 
 - [x] Output path with Save to… (adds `.mp4` when there is no extension).
       Evidence: "export: the file defaults to beside the left video",
@@ -408,11 +419,46 @@ tracking is Module 6b: `reco-autocam` is being changed in another branch.
 - [x] Record replay; save AI debug events. Evidence:
       `the_replay_and_events_files_go_beside_the_export` (the sheet's two
       boxes pass them to the job).
-- [ ] AI tracking: Enable (when available) and status; model picker with a
+- [x] AI tracking: Enable (when available) and status; model picker with a
       missing-model warning; tracking mode; detect every N frames; style
       preset; framing; pitch lock; lookahead with VRAM risk zones; advanced
       panner (cluster mode, ball weight, cluster bandwidth, dead zone, FOV
-      tight/default/wide).
+      tight/default/wide). Evidence: "ai: the status says where tracking
+      runs", "ai: Enable takes input once the machine answers", "ai: off,
+      the tracking rows are hidden", "ai: on, the rows show", "ai: no model
+      says so", "ai: no model, no Export", "ai: Choose… sets the model",
+      "ai: with the model, Export is enabled", "ai: Broadcast, every 15
+      frames to start", "ai: Broadcast's knobs", "ai: Action narrows the
+      dead zone", "ai: Frame all frames everyone", "ai: Broadcast puts its
+      knobs back", "ai: the lookahead fits this machine", "ai: the track's
+      safe zone is green", "ai: dragging the lookahead shows its value",
+      "ai: the export says tracking is active", "ai: the events file has
+      the detections", "unavailable: the status says why", "unavailable:
+      Enable is dimmed", "unavailable: a click leaves it off",
+      "unavailable: the rows stay hidden"; `an_export_tracks_with_the_model`,
+      `tracking_without_its_model_fails_before_writing`,
+      `the_config_is_the_preset_with_the_knobs_over_it`,
+      `presets_set_the_knobs_from_the_engine`,
+      `broadcast_is_the_slint_apps_starting_point`,
+      `a_model_is_needed_except_for_sweep`,
+      `zones_come_from_the_gpu_and_the_source`,
+      `a_lookahead_that_does_not_fit_starts_at_the_safe_value`,
+      `an_open_reports_the_gpus_memory`, `the_probe_answers`,
+      `the_status_says_where_tracking_runs_or_why_not`,
+      `the_note_says_whether_the_lookahead_fits`, `a_lookahead_sits_in_one_zone`,
+      `the_zones_end_where_the_track_says`. Labels in plain words ("Follow":
+      Players and ball, Ball only, Sweep (no AI); "Tilt": hold it level).
+      (New: Sweep needs no model, "ai: Sweep needs no model"; the model
+      follows Preferences' rule, an .onnx file that exists, and Choose…
+      makes it the default; every choice but the Advanced tier is
+      remembered, "ai: the choices are remembered, the model as the
+      default", `tracking_choices_default_as_the_slint_app`; the lookahead
+      fills in its zone's colour, with a line saying whether it fits; the
+      rows scroll in a short window, "short: Export stays inside the
+      window", "short: the sheet scrolls to its last row"; the card and
+      the notice say whether tracking started, "ai: so does the card", "ai:
+      the notice says it tracked", `the_card_says_whether_tracking_started`,
+      `the_notice_says_whether_the_export_tracked`.)
 - [x] Error text, Cancel, Start Export with its enable rules. Evidence:
       "rules: an input video is refused", "rules: the sheet stays open to
       fix it", "rules: no file, no Export", "rules: editing the file clears
