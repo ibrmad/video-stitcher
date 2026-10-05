@@ -2,6 +2,7 @@
 //! Reco's renderer, and the worker thread that owns it.
 
 pub mod clock;
+pub mod fit;
 #[cfg(test)]
 pub(crate) mod fixtures;
 pub mod lanes;

@@ -13,6 +13,7 @@ use reco_calibrate::{CalibrationConfig, CalibrationStep, ProfileSource};
 use reco_core::calibration::{CameraParams, MatchCalibration};
 
 use crate::files::save_atomically;
+use crate::lens::LensInfo;
 
 /// Below this confidence a warning says the stitch may be poor (the Slint
 /// app's threshold).
@@ -112,6 +113,10 @@ pub struct CalibrationDone {
     pub frames_used: usize,
     /// A camera had no lens profile and a generic one was used.
     pub fallback_lens: bool,
+    /// The left camera's lens, as the calibration found it.
+    pub left_lens: Option<LensInfo>,
+    /// The right camera's lens.
+    pub right_lens: Option<LensInfo>,
 }
 
 /// What a calibration job reports.
@@ -256,6 +261,14 @@ fn calibrate(
         matches: result.total_matches,
         frames_used: result.frames_used,
         fallback_lens,
+        left_lens: result
+            .left_lens_profile
+            .as_ref()
+            .map(LensInfo::from_profile),
+        right_lens: result
+            .right_lens_profile
+            .as_ref()
+            .map(LensInfo::from_profile),
     })
 }
 
@@ -423,6 +436,12 @@ mod tests {
         };
         assert_eq!(done.path, save_to);
         assert!((0.0..=1.0).contains(&done.confidence), "{done:?}");
+        // The lenses were kept from the old calibration, not looked up, so
+        // the run doesn't name them (the app looks them up itself).
+        assert!(
+            done.left_lens.is_none() && done.right_lens.is_none(),
+            "{done:?}"
+        );
         MatchCalibration::from_file(&save_to).expect("a calibration the preview can read");
     }
 }

@@ -16,11 +16,14 @@ use reco_core::render::viewport::ViewportConfig;
 use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
 
+use super::fit::Fit;
 use super::playback::Playback;
 use super::recorder::{Recorder, Recording};
 use super::tuning::{CalibrationValues, Tuning};
 use crate::lens::Lens;
+use crate::project::Camera;
 use crate::recording::RecordingQuality;
+use reco_core::lens::preview::LensPreviewRenderer;
 
 /// The pipeline's output and the ring's format (never sRGB: the shader
 /// writes sRGB-encoded values already).
@@ -87,6 +90,10 @@ pub struct PreviewSession {
     field_roi: Option<FieldRoi>,
     /// The view stays inside the stitched picture ("stay inside").
     constrained: bool,
+    /// One camera shown flat instead of the stitch (the lens preview), and
+    /// what draws it (made on first use).
+    shown: Option<Camera>,
+    lens_preview: Option<(LensPreviewRenderer, Fit)>,
     /// The calibration changed since it was loaded or saved.
     dirty: bool,
 }
@@ -204,6 +211,8 @@ impl PreviewSession {
             sync_offset,
             field_roi,
             constrained: true,
+            shown: None,
+            lens_preview: None,
             dirty: false,
         };
         session.clamp();
@@ -214,6 +223,20 @@ impl PreviewSession {
     pub fn pan(&mut self, dx_pt: f32, dy_pt: f32) {
         self.pose.apply_drag(dx_pt, dy_pt);
         self.clamp();
+    }
+
+    /// Show one camera on its own, flat (`None`: the stitched picture).
+    pub fn show_camera(&mut self, camera: Option<Camera>) {
+        self.shown = camera;
+        if camera.is_some() && self.lens_preview.is_none() {
+            let gpu = self.renderer.gpu().clone();
+            let (w, h) = self.playback.input_dimensions().unwrap_or((1, 1));
+            let aspect = w as f32 / h.max(1) as f32;
+            self.lens_preview = Some((
+                LensPreviewRenderer::new(&gpu, w, h, aspect, wgpu::TextureFormat::Rgba8Unorm),
+                Fit::new(&gpu, OUTPUT_FORMAT),
+            ));
+        }
     }
 
     /// Aim the field of view at `degrees` (kept inside its range).
@@ -279,6 +302,19 @@ impl PreviewSession {
     /// waits for the GPU).
     pub fn render(&self, target: &wgpu::TextureView) -> Result<(), SessionError> {
         let frame = self.playback.current_frame().ok_or(SessionError::NoFrame)?;
+        if let (Some(camera), Some((preview, fit))) = (self.shown, self.lens_preview.as_ref()) {
+            // One camera, flat, at its own shape inside the frame.
+            let calibration = self.renderer.calibration();
+            let (planes, params) = match camera {
+                Camera::Left => (frame.left.as_planes(), &calibration.left),
+                Camera::Right => (frame.right.as_planes(), &calibration.right),
+            };
+            let amount = self.renderer.pipeline().viewport().lens_correction_amount;
+            let gpu = self.renderer.gpu();
+            let picture = preview.render_yuv(gpu, &planes, params, amount);
+            fit.draw(gpu, &picture, target, self.size);
+            return Ok(());
+        }
         let rig_tilt = self.renderer.pipeline().viewport().rig_tilt;
         let pose = self.pose.render_pose(rig_tilt);
         self.renderer
@@ -518,6 +554,7 @@ mod tests {
     use super::*;
     use crate::lens::{Cameras, Lens};
     use crate::preview::fixtures;
+    use crate::project::Camera;
 
     /// One 60 Hz frame, reco-gui's smoothing step.
     const FRAME: Duration = Duration::from_micros(16_667);
@@ -778,6 +815,24 @@ mod tests {
     }
 
     #[test]
+    fn a_lens_change_changes_the_picture() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let before = render_to_cpu(&mut session);
+        let lens = session.values().left_lens;
+        session.tune(Tuning::Lens {
+            cameras: Cameras::Both,
+            lens: Lens {
+                fx: lens.fx * 1.2,
+                fy: lens.fy * 1.2,
+                ..lens
+            },
+        });
+        assert_ne!(before, render_to_cpu(&mut session), "the stitch follows the lens");
+    }
+
+    #[test]
     fn lens_correction_is_saved_with_the_calibration() {
         let Some(mut session) = open_fast((320, 180)) else {
             return;
@@ -812,6 +867,16 @@ mod tests {
     }
 
     #[test]
+    fn staying_inside_still_zooms_in() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let widest = session.target_fov();
+        session.set_fov(FOV_MIN);
+        assert_eq!(session.target_fov(), FOV_MIN, "from {widest}");
+    }
+
+    #[test]
     fn an_unconstrained_look_may_leave_the_picture() {
         let Some(mut session) = open_fast((320, 180)) else {
             return;
@@ -827,6 +892,45 @@ mod tests {
         assert!(
             session.pose.target_pose().yaw.abs() <= kept + 1e-3,
             "back inside at once"
+        );
+    }
+
+    #[test]
+    fn a_camera_shows_flat_and_each_side_differs() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let stitched = render_to_cpu(&mut session);
+        session.show_camera(Some(Camera::Left));
+        let left = render_to_cpu(&mut session);
+        assert_ne!(left, stitched, "one camera, not the stitch");
+        session.show_camera(Some(Camera::Right));
+        let right = render_to_cpu(&mut session);
+        assert_ne!(left, right, "the side matters");
+        session.tune(Tuning::LensCorrection(false));
+        assert_ne!(right, render_to_cpu(&mut session), "correction shows");
+        session.tune(Tuning::LensCorrection(true));
+        session.show_camera(None);
+        assert_eq!(render_to_cpu(&mut session), stitched, "back to the stitch");
+    }
+
+    #[test]
+    fn a_camera_sits_inside_the_frame() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        session.show_camera(Some(Camera::Left));
+        let pixels = render_to_cpu(&mut session);
+        let (w, h) = (320, 180);
+        let at = |x: usize, y: usize| pixels[y * w + x] & 0x00ff_ffff;
+        // The fast pair is 4:3: black at the sides of a 16:9 frame.
+        assert!(
+            (0..h).all(|y| at(5, y) == 0 && at(w - 6, y) == 0),
+            "bars at the sides"
+        );
+        assert!(
+            (0..h).any(|y| at(w / 2, y) != 0),
+            "the camera in the middle"
         );
     }
 

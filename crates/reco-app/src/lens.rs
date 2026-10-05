@@ -3,6 +3,12 @@
 //! lens profile scaled to the videos' size. The rules are the Slint app's
 //! (`set_lens_sliders`, the lens picker).
 
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
+
+use reco_calibrate::lens_database::{LensDatabase, detect_profile};
+use reco_calibrate::types::{LensProfileInfo, ProfileSource};
 use reco_core::calibration::CameraParams;
 
 /// A camera's lens: focal lengths and principal point in pixels, and the
@@ -81,14 +87,16 @@ pub struct FineTuneRanges {
     pub cx: (f64, f64),
     /// cy (pixels).
     pub cy: (f64, f64),
-    /// k1–k4.
-    pub k: (f64, f64),
+    /// k1–k4, each around its own value.
+    pub k: [(f64, f64); 4],
 }
 
 impl FineTuneRanges {
     /// The Slint app's ranges around `lens` for a `width`×`height` picture:
     /// fx and fy ±15% of the larger focal length, cx and cy ±10% of the
-    /// picture, at least 5 px each; k1–k4 ±0.3.
+    /// picture, at least 5 px each; each of k1–k4 ±0.3 around its own value
+    /// (the Slint app's ±0.3 was absolute, which can't show a calibrated k1
+    /// of 0.333).
     pub fn around(lens: &Lens, width: u32, height: u32) -> Self {
         let f = (lens.fx.max(lens.fy) * 0.15).max(5.0);
         let x = (f64::from(width.max(1)) * 0.10).max(5.0);
@@ -98,8 +106,121 @@ impl FineTuneRanges {
             fy: (lens.fy - f, lens.fy + f),
             cx: (lens.cx - x, lens.cx + x),
             cy: (lens.cy - y, lens.cy + y),
-            k: (-0.3, 0.3),
+            k: lens.k.map(|k| (k - 0.3, k + 0.3)),
         }
+    }
+}
+
+/// Where a camera's lens came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LensSource {
+    /// Read from the video's own telemetry.
+    Detected,
+    /// Matched in Reco's lens database.
+    Database,
+    /// Picked in the lens picker.
+    Picker,
+    /// Loaded from a profile file.
+    File,
+    /// A generic profile: nothing matched.
+    Fallback,
+}
+
+impl LensSource {
+    /// The word the Adjust panel shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Detected => "Detected",
+            Self::Database => "Database",
+            Self::Picker => "Picked",
+            Self::File => "File",
+            Self::Fallback => "Generic",
+        }
+    }
+}
+
+/// What a camera's lens is: the camera, its lens mode, and where that
+/// came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LensInfo {
+    /// Camera brand and model ("GoPro HERO9 Black").
+    pub camera: String,
+    /// Lens mode ("Wide 5.3K").
+    pub lens: String,
+    /// Where it came from.
+    pub source: LensSource,
+}
+
+impl LensInfo {
+    /// From a calibration's or a detection's profile.
+    pub fn from_profile(profile: &LensProfileInfo) -> Self {
+        let source = match profile.source {
+            ProfileSource::AutoDetected => LensSource::Detected,
+            ProfileSource::Database => LensSource::Database,
+            ProfileSource::File(_) => LensSource::File,
+            ProfileSource::Fallback => LensSource::Fallback,
+        };
+        Self {
+            camera: profile.camera.clone(),
+            lens: profile.lens.clone(),
+            source,
+        }
+    }
+
+    /// "GoPro HERO9 Black · Wide 5.3K".
+    pub fn name(&self) -> String {
+        if self.lens.is_empty() {
+            self.camera.clone()
+        } else {
+            format!("{} · {}", self.camera, self.lens)
+        }
+    }
+}
+
+/// The lens of `video` (`width`×`height`), read from its telemetry or
+/// matched in the database; `None` when neither knows it. Blocking (it
+/// reads the video's telemetry): run it off the UI thread.
+pub fn detect(video: &Path, width: u32, height: u32) -> Option<LensInfo> {
+    detect_profile(video, width, height, LensDatabase::embedded(), None)
+        .map(|(_, profile)| LensInfo::from_profile(&profile))
+}
+
+/// Both cameras' lenses being detected on a short thread.
+pub struct LensDetection {
+    result: Receiver<(Option<LensInfo>, Option<LensInfo>)>,
+}
+
+impl LensDetection {
+    /// Detect the lenses of `left` and `right` (`size` each); `waker` runs
+    /// when they are known.
+    pub fn start(
+        left: PathBuf,
+        right: PathBuf,
+        size: (u32, u32),
+        waker: Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        let (tx, result) = mpsc::channel();
+        let spawned = std::thread::Builder::new().name("reco-lens".into()).spawn({
+            let tx = tx.clone();
+            let waker = Arc::clone(&waker);
+            move || {
+                let (w, h) = size;
+                if tx.send((detect(&left, w, h), detect(&right, w, h))).is_ok() {
+                    waker();
+                }
+            }
+        });
+        if spawned.is_err() {
+            // Unknown, rather than never answering.
+            let _ = tx.send((None, None));
+            waker();
+        }
+        Self { result }
+    }
+
+    /// The two lenses, once known (never blocks).
+    pub fn try_result(&self) -> Option<(Option<LensInfo>, Option<LensInfo>)> {
+        self.result.try_recv().ok()
     }
 }
 
@@ -172,7 +293,14 @@ mod tests {
         // ±10% of the width and height.
         assert_eq!(r.cx, (768.0, 1152.0));
         assert_eq!(r.cy, (432.0, 648.0));
-        assert_eq!(r.k, (-0.3, 0.3));
+        // ±0.3 around each term (the Slint app's ±0.3 was absolute, which
+        // can't show a calibrated k1 of 0.333).
+        let k = [0.03, 0.06, -0.07, 0.02];
+        for (range, term) in r.k.iter().zip(k) {
+            assert!(
+                (range.0 - (term - 0.3)).abs() < 1e-12 && (range.1 - (term + 0.3)).abs() < 1e-12
+            );
+        }
         let tiny = FineTuneRanges::around(
             &Lens {
                 fx: 10.0,
@@ -184,6 +312,56 @@ mod tests {
         );
         assert_eq!(tiny.fx, (5.0, 15.0), "at least 5 px");
         assert_eq!(tiny.cx, (-5.0, 5.0), "at least 5 px");
+    }
+
+    #[test]
+    fn lens_info_reads_like_the_panel() {
+        let info = LensInfo::from_profile(&LensProfileInfo {
+            camera: "GoPro HERO9 Black".into(),
+            lens: "Wide".into(),
+            source: ProfileSource::AutoDetected,
+            path: None,
+        });
+        assert_eq!(info.source, LensSource::Detected);
+        assert_eq!(info.name(), "GoPro HERO9 Black · Wide");
+        let bare = LensInfo {
+            lens: String::new(),
+            ..info.clone()
+        };
+        assert_eq!(bare.name(), "GoPro HERO9 Black", "no lens mode, no dot");
+        let file = LensInfo::from_profile(&LensProfileInfo {
+            camera: "Custom".into(),
+            lens: String::new(),
+            source: ProfileSource::File("/m/lens.json".into()),
+            path: Some("/m/lens.json".into()),
+        });
+        assert_eq!(file.source, LensSource::File);
+    }
+
+    #[test]
+    fn a_gopro_video_names_its_camera() {
+        let Some((left, _, _)) = crate::preview::fixtures::real_set() else {
+            return;
+        };
+        let video = reco_io::ffmpeg::decoder::VideoDecoder::open(&left).unwrap();
+        let info = detect(&left, video.width(), video.height());
+        let info = info.expect("a GoPro tells its camera");
+        assert!(info.camera.contains("HERO"), "{info:?}");
+    }
+
+    #[test]
+    fn the_detection_job_reports_both_cameras() {
+        let Some((left, right, _)) = crate::preview::fixtures::fast_set() else {
+            return;
+        };
+        let job = LensDetection::start(left, right, (1280, 960), Arc::new(|| {}));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        let mut result = None;
+        while result.is_none() && std::time::Instant::now() < deadline {
+            result = job.try_result();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(result.is_some(), "it answers, known or not");
     }
 
     #[test]

@@ -33,6 +33,7 @@ use super::slots::{RING_SLOTS, SlotRing};
 use super::tuning::{CalibrationValues, Tuning};
 use super::view::should_resize;
 use crate::files::save_atomically;
+use crate::project::Camera;
 use crate::recording::RecordingQuality;
 
 /// Commands queued before the UI's sends start failing.
@@ -114,6 +115,9 @@ pub enum PreviewCommand {
     /// Keep the view inside the stitched picture (on by default) or let it
     /// go past the edges.
     StayInside(bool),
+    /// Show one camera on its own, flat (the lens preview); `None`: the
+    /// stitched picture.
+    ShowCamera(Option<Camera>),
     /// Play or pause.
     TogglePlay,
     /// One frame forward or back.
@@ -527,6 +531,7 @@ impl Worker {
                 self.with_session(|s| s.set_fov(degrees));
                 self.send_fov();
             }
+            PreviewCommand::ShowCamera(camera) => self.with_session(|s| s.show_camera(camera)),
             PreviewCommand::StayInside(on) => {
                 self.with_session(|s| s.set_constrained(on));
                 self.send_fov();
@@ -832,6 +837,8 @@ impl Worker {
                 self.opened += 1;
                 self.start_lanes_probe();
                 self.send_calibration();
+                // The picture can narrow the opening field of view.
+                self.send_fov();
                 self.retire_ring();
                 self.problem = None;
                 self.dirty = true;
@@ -1574,6 +1581,10 @@ mod tests {
             Some(PreviewEvent::Fov(degrees)) => Some(degrees),
             _ => None,
         };
+        assert!(
+            fov(&worker).is_some(),
+            "the opening field of view is reported"
+        );
         worker.send(PreviewCommand::StayInside(false));
         assert!(
             fov(&worker).is_some(),
