@@ -296,20 +296,75 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       `the_editor_carries_both_frames_and_the_calibration`,
       `the_editor_job_reports_its_page`. The outline is pasted into the
       field (⌘V) rather than read from the clipboard by a button.
-- [ ] ROI points drawn over the lens preview. (New: aligned to the image.)
-      → Module 5, with the lens preview.
+- [ ] ROI points drawn over the lens preview. Not done, by ruling (Module
+      5): the outline is drawn on the raw frames (the browser editor), and
+      Reco's lens preview never shows a raw frame (both of its modes
+      re-project the picture), so the points would sit in the wrong places,
+      as they did in the Slint app. The browser editor shows the outline on
+      the pictures it was drawn on. A raw single-camera view would make the
+      overlay possible.
 
 ## Module 5: camera and lens (§2.4, §2.12)
 
-- [ ] FOV 20–150°, constrained look, Reset View.
-- [ ] Lens info for L and R, or "Auto-calibrate to detect lens".
-- [ ] Browse profiles…, lens correction, lens preview (single camera) with
-      Left/Right.
-- [ ] Fine-tune: Left/Right/Both; fx, fy, cx, cy, k1–k4; Reset Lens.
-- [ ] Lens picker: apply to Both/Left/Right, search the profile database,
+Evidence for this module: `tools/check_m5.py` (checks `view`, `lens`,
+`preview`, `picker` and `stats`, on the fast pair with a temporary copy of
+its calibration; the lens file through `RECO_DESKTOP_DIALOG_ANSWERS`); the
+unit tests (`cargo test -p reco-app -p reco-desktop`, plus `-- --ignored`
+for the real-pair calibration); and screenshots in
+`target/desktop-checks/m5/`.
+
+- [x] FOV 20–150°, constrained look, Reset View. Evidence: "view: the
+      opening field of view is what the picture allows", "view: the slider
+      narrows the view", "view: the picture follows", "view: the zoom keys
+      move the slider", "view: staying inside caps the field of view",
+      "view: switched off, the whole range is free", "view: Reset view goes
+      back"; `the_field_of_view_follows_its_slider`,
+      `an_unconstrained_look_may_leave_the_picture`,
+      `staying_inside_still_zooms_in`, `the_view_reports_its_field_of_view`.
+      (New: the slider follows the wheel, the keys and the picture's limit.)
+- [x] Lens info for L and R, or "Auto-calibrate to detect lens". Evidence:
+      "lens: the left lens is named", "lens: the right lens is named";
+      `a_gopro_video_names_its_camera`, `lens_info_reads_like_the_panel`,
+      `the_detection_job_reports_both_cameras`,
+      `lens_rows_say_where_a_lens_came_from`. (New: looked up from the
+      videos for a loaded calibration too; a generic lens says so.)
+- [x] Browse profiles…, lens correction, lens preview (single camera) with
+      Left/Right. Evidence: "lens: switching correction off changes the
+      picture", "lens: the file keeps correction off", "preview: Left camera
+      shows one camera", "preview: the camera keeps its shape, black at the
+      sides", "preview: Right camera shows the other one", "preview:
+      Stitched picture goes back"; `a_camera_shows_flat_and_each_side_differs`,
+      `a_camera_sits_inside_the_frame`, `lens_correction_is_saved_with_the_calibration`,
+      `a_picture_fits_inside_and_centres`. The preview's Show list (Stitched
+      picture, Left camera, Right camera) replaces the checkbox and side
+      buttons.
+- [x] Fine-tune: Left/Right/Both; fx, fy, cx, cy, k1–k4; Reset Lens.
+      Evidence: "lens: fine-tune shows the file's focal length", "lens: the
+      focal length follows its slider", "lens: the picture follows", "lens:
+      Reset lens can go back", "lens: Save appears", "lens: Reset lens
+      restores the file's lens"; `lens_changes_reach_the_renderer_and_reset_restores_them`,
+      `a_lens_change_changes_the_picture`, `fine_tune_ranges_are_the_slint_apps`,
+      `slider_places_and_values_meet`. Each k range is ±0.3 around its own
+      value (the Slint app's ±0.3 was absolute and couldn't show a k1 of
+      0.333).
+- [x] Lens picker: apply to Both/Left/Right, search the profile database,
       pick a result, Load from file…, Close. (New: search off the UI thread.)
-- [ ] Stats: fps, frame times, bottleneck, GPU, dropped frames, AI and
-      calibration figures. (New: fed during preview too.)
+      Evidence: "picker: a search lists matching profiles", "picker: and
+      says how many", "picker: picking applies it", "picker: both cameras
+      are named by it", "picker: a file loads for the left camera",
+      "picker: the right camera keeps its lens"; `the_newest_search_wins`,
+      `a_profile_gives_its_lens_at_the_calibration_size`,
+      `a_profile_file_gives_its_lens`, `the_hint_says_what_the_list_holds`.
+- [x] Stats: fps, frame times, bottleneck, GPU, dropped frames, AI and
+      calibration figures. (New: fed during preview too.) Evidence: "stats:
+      the GPU is named", "stats: the first second of playing reads near the
+      source's 30 fps", "stats: the frame time and the slowest", "stats:
+      decode and render times"; `a_second_of_frames_is_reported`,
+      `a_second_starts_at_its_first_frame`, `stats_arrive_while_playing`,
+      `figures_read_plainly`. Shown: frame rate, frame time, the slowest
+      1%, decode wait, render, GPU, and the last calibration's confidence and
+      matches. Not shown: a bottleneck line and dropped frames (the preview
+      has no drop count yet), and AI figures (Module 6b).
 
 ## Module 6: export (§2.11, §7)
 

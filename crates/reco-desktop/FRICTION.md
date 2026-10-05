@@ -101,3 +101,13 @@ header). Hidden rows overlapping the header strip itself still get events
 there; none of them holds a control where a header has one. The ask: a
 closed fold gives its body no events (and draws none of it).
 
+## The lens preview allocates a full-size texture a frame and shows no raw view (Module 5)
+
+`LensPreviewRenderer::render_yuv` creates a new texture at the input's size
+for every frame (63 MB at 5.3K), so the single-camera view allocates that
+much per frame; the app then fits it into the preview's frame with its own
+blit. Neither correction mode shows the raw frame: both re-project the
+camera, so the field outline (drawn on raw frames) can't be overlaid where
+it belongs. The asks: render into a caller's texture (any size), and a raw
+mode.
+

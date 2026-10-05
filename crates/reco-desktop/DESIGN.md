@@ -169,6 +169,33 @@ Export (Module 6):
 - Cancel keeps the part written (StitchJob closes the file properly) and
   the notice names it.
 
+Camera and lens (Module 5):
+
+- The field of view and "stay inside" are view commands (`SetFov`,
+  `StayInside`): they don't change the calibration, so they don't mark it
+  unsaved. The worker answers each view change, and each open, with the
+  field of view it is heading to (`Fov`), and the slider follows the
+  wheel, the keys and the picture's limit (staying inside narrows it).
+- Lens changes are `Tune` changes on a small `Lens` value (fx, fy, cx, cy,
+  k1–k4) for the left camera, the right or both; Reset lens returns to the
+  file's lenses. Lens correction is saved with the calibration.
+- The fine-tune sliders run 0 to 1 over the Slint app's ranges (±15% of the
+  focal length, ±10% of the picture for the centre), centred on the lens
+  loaded or picked; each k term is ±0.3 around its own value.
+- Lens names come from the videos' telemetry (a short thread when the
+  preview opens) or from the calibration run that made the file; a picked
+  profile or a file names its cameras "(picked)" or "(file)".
+- The single-camera view uses Reco's `LensPreviewRenderer`, which draws at
+  the input's size; the worker fits that picture into the preview's frame
+  with a small blit (letterboxed) on both the zero-copy and readback paths.
+- The lens picker searches on a short thread; only the newest query's
+  results are kept. A profile is scaled to the calibration's lens size.
+- Stats: the worker times each shown frame's wait for decoded frames and
+  its render, and reports once a second from the first frame (reset on
+  Play), so the first figure after Play is not diluted by the pause.
+- Folds: `RecoFold` wraps Makepad's FoldHeader so a closed body takes no
+  pointer events outside the fold (FRICTION).
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
