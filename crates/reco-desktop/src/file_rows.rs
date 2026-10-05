@@ -10,6 +10,19 @@ pub fn row_at(y: f64, row_height: f64, rows: usize) -> Option<usize> {
     (row < rows).then_some(row)
 }
 
+/// Where a list `visible` points tall, scrolled to `scroll`, scrolls so the
+/// row from `top` to `top + height` shows: where it is when the row shows
+/// already, else just far enough.
+pub fn scroll_to_show(top: f64, height: f64, scroll: f64, visible: f64) -> f64 {
+    if top < scroll {
+        top
+    } else if top + height > scroll + visible {
+        top + height - visible
+    } else {
+        scroll
+    }
+}
+
 /// The gap between rows (0 before the first, `rows` after the last) nearest
 /// `y`: where a dragged row would go.
 pub fn gap_at(y: f64, row_height: f64, rows: usize) -> usize {
@@ -90,6 +103,27 @@ mod tests {
         assert_eq!(row_at(-1.0, 24.0, 3), None);
         assert_eq!(row_at(72.0, 24.0, 3), None);
         assert_eq!(row_at(10.0, 0.0, 3), None);
+    }
+
+    #[test]
+    fn a_row_scrolls_just_into_view() {
+        // Ten 24 pt rows show in 240 pt.
+        assert_eq!(
+            scroll_to_show(48.0, 24.0, 0.0, 240.0),
+            0.0,
+            "showing already"
+        );
+        assert_eq!(
+            scroll_to_show(240.0, 24.0, 0.0, 240.0),
+            24.0,
+            "one below: one row"
+        );
+        assert_eq!(scroll_to_show(264.0, 24.0, 0.0, 240.0), 48.0);
+        assert_eq!(
+            scroll_to_show(24.0, 24.0, 48.0, 240.0),
+            24.0,
+            "above: to its top"
+        );
     }
 
     #[test]

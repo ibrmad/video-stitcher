@@ -47,7 +47,7 @@ script_mod! {
                         padding: Inset{left: theme.reco_pad right: theme.reco_pad top: theme.reco_gap_s bottom: theme.reco_gap_s}
                         picker_hint := RecoSubdued{width: Fill text: ""}
                     }
-                    ScrollYView{
+                    picker_scroll := ScrollYView{
                         width: Fill height: theme.reco_picker_list
                         picker_results := RecoPickList{}
                     }

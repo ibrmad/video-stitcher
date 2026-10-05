@@ -2,14 +2,15 @@
 //! a row highlights under the pointer, and a click picks it; with the
 //! keyboard, ↑/↓ move the highlight and Return picks. Rows come from the
 //! `row` template; the App fills them (`set_rows`) and reads
-//! `PickListAction::Picked`.
+//! `PickListAction::Picked`. In a scrolling view the row under the pointer
+//! is the one whose drawn rect holds it (the list's own hit rect is only
+//! its visible part), and a highlight moved by the keys asks the App to
+//! scroll it into view (`Highlighted`).
 
 use std::collections::HashMap;
 
 use makepad_widgets::widget_tree::CxWidgetExt;
 use makepad_widgets::*;
-
-use crate::file_rows::row_at;
 
 script_mod! {
     use mod.prelude.widgets.*
@@ -33,6 +34,14 @@ script_mod! {
 pub enum PickListAction {
     /// This row was picked.
     Picked(usize),
+    /// The keys moved the highlight to this row, `top` points down the
+    /// list and `height` tall: scroll it into view.
+    Highlighted {
+        /// Its top, from the list's top.
+        top: f64,
+        /// Its height.
+        height: f64,
+    },
     #[default]
     None,
 }
@@ -142,6 +151,27 @@ impl RecoPickList {
     fn pick(&mut self, cx: &mut Cx, row: usize) {
         cx.widget_action(self.widget_uid(), PickListAction::Picked(row));
     }
+
+    /// The row whose drawn rect (scrolled and clipped) holds `abs`.
+    fn row_under(&self, cx: &Cx, abs: Vec2d) -> Option<usize> {
+        self.items
+            .iter()
+            .take(self.rows.len())
+            .position(|item| item.area().clipped_rect(cx).contains(abs))
+    }
+
+    /// Highlight `row` from the keys, and ask for it to show.
+    fn highlight(&mut self, cx: &mut Cx, row: usize) {
+        self.hover = Some(row);
+        self.area.redraw(cx);
+        cx.widget_action(
+            self.widget_uid(),
+            PickListAction::Highlighted {
+                top: row as f64 * self.row_height,
+                height: self.row_height,
+            },
+        );
+    }
 }
 
 impl Widget for RecoPickList {
@@ -149,7 +179,7 @@ impl Widget for RecoPickList {
         let rows = self.rows.len();
         match event.hits(cx, self.area) {
             Hit::FingerHoverIn(fe) | Hit::FingerHoverOver(fe) => {
-                let hover = row_at(fe.abs.y - fe.rect.pos.y, self.row_height, rows);
+                let hover = self.row_under(cx, fe.abs);
                 if hover != self.hover {
                     self.hover = hover;
                     self.area.redraw(cx);
@@ -165,18 +195,18 @@ impl Widget for RecoPickList {
                 cx.set_key_focus(self.area);
             }
             Hit::FingerUp(fe) if fe.is_primary_hit() && fe.is_over && !fe.cancelled => {
-                if let Some(row) = row_at(fe.abs.y - fe.rect.pos.y, self.row_height, rows) {
+                if let Some(row) = self.row_under(cx, fe.abs) {
                     self.pick(cx, row);
                 }
             }
             Hit::KeyDown(ke) => match ke.key_code {
                 KeyCode::ArrowDown if rows > 0 => {
-                    self.hover = Some(self.hover.map_or(0, |r| (r + 1).min(rows - 1)));
-                    self.area.redraw(cx);
+                    let row = self.hover.map_or(0, |r| (r + 1).min(rows - 1));
+                    self.highlight(cx, row);
                 }
                 KeyCode::ArrowUp if rows > 0 => {
-                    self.hover = Some(self.hover.map_or(0, |r| r.saturating_sub(1)));
-                    self.area.redraw(cx);
+                    let row = self.hover.map_or(0, |r| r.saturating_sub(1));
+                    self.highlight(cx, row);
                 }
                 KeyCode::ReturnKey => {
                     if let Some(row) = self.hover {

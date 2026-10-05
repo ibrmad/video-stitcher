@@ -15,6 +15,7 @@ use reco_app::preview::tuning::Tuning;
 use reco_app::preview::worker::PreviewCommand;
 use reco_app::toasts::Severity;
 
+use crate::file_rows::scroll_to_show;
 use crate::project_view::Pick;
 use crate::ui::pick_list::{PickListAction, RecoPickList};
 use crate::App;
@@ -75,7 +76,23 @@ impl App {
         {
             list.set_rows(cx, found.iter().map(profile_line).collect());
         }
+        // New results start at the top.
+        self.ui
+            .view(cx, ids!(picker_scroll))
+            .set_scroll_pos(cx, dvec2(0.0, 0.0));
         self.profiles = found;
+    }
+
+    /// Scroll the results so the row the keys moved to shows.
+    fn show_picker_row(&mut self, cx: &mut Cx, top: f64, height: f64) {
+        let view = self.ui.view(cx, ids!(picker_scroll));
+        let Some(extent) = view.scroll_extent() else {
+            return;
+        };
+        let y = scroll_to_show(top, height, extent.pos.y, extent.visible.y);
+        if y != extent.pos.y {
+            view.set_scroll_pos(cx, dvec2(extent.pos.x, y));
+        }
     }
 
     /// The Lens section's profiles button and the picker's controls.
@@ -88,8 +105,12 @@ impl App {
         }
         let uid = self.ui.widget(cx, ids!(picker_results)).widget_uid();
         for action in actions.filter_widget_actions_cast::<PickListAction>(uid) {
-            if let PickListAction::Picked(row) = action {
-                self.apply_profile(cx, row);
+            match action {
+                PickListAction::Picked(row) => self.apply_profile(cx, row),
+                PickListAction::Highlighted { top, height } => {
+                    self.show_picker_row(cx, top, height)
+                }
+                PickListAction::None => {}
             }
         }
         if self.ui.button(cx, ids!(picker_file)).clicked(actions) {

@@ -301,6 +301,96 @@ def check_picker():
         expect(app.errors() == [], f"picker: no errors in the app log {app.errors()[:3]}")
 
 
+def logged(app, needle):
+    return any(needle in line for line in app.log_lines())
+
+
+def visible_rows(app):
+    """The lens picker's drawn result rows, top to bottom: (text, rect)."""
+    rows = [(i.get("t", ""), i["r"]) for i in app.snap("line") if i.get("i") == "line"]
+    return sorted(rows, key=lambda row: row[1][1])
+
+
+def check_picker_scroll():
+    """A list longer than the picker scrolls, and every row can be picked:
+    scrolled to the end, the row under the pointer is the one applied; a
+    new search starts at the top."""
+    files = calibration_copy()
+    with launch(files) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "scroll: the preview opens")
+        wait_for(lambda: text_of(app, "left_lens_name") not in (None, "", "Looking up…"), 20)
+        click(app, "lens_browse")
+        wait_for(lambda: app.rect("picker_search"), 5)
+        type_into(app, "picker_search", "hero9 wide 5")
+        expect(wait_for(lambda: text_of(app, "picker_hint") == "12 profiles", 10) is not None,
+               f"scroll: the search finds more profiles than the list shows ({text_of(app, 'picker_hint')})")
+        time.sleep(0.4)
+        top = visible_rows(app)
+        r = app.rect("picker_results")
+        for _ in range(4):
+            app.scroll(r[0] + 100, r[1] + 100, 60)
+            time.sleep(0.2)
+        time.sleep(0.4)
+        rows = visible_rows(app)
+        expect(rows and top and rows[0][0] != top[0][0], "scroll: the wheel scrolls the list")
+        # One of the last two rows, unlike the row two above it (a pick that
+        # missed by the scroll would land there).
+        texts = [t for t, _ in rows]
+        at = next((i for i in (len(texts) - 1, len(texts) - 2) if i >= 2 and texts[i] != texts[i - 2]), None)
+        expect(at is not None, f"scroll: the last rows differ from the ones above ({texts[-4:]})")
+        if at is None:
+            return
+        text, rect = rows[at]
+        x = r[0] + 60
+        y = rect[1] + rect[3] / 2
+        app.get("/m", k="move", x=x, y=y, wait=1)
+        time.sleep(0.3)
+        png = app.grab(os.path.join(OUT, "probe.png"))
+        scale = png.width / app.get("/s")["w"][0]["sz"][0]
+        under = png.pixel(int((r[0] + r[2] - 20) * scale), int(y * scale))[:3]
+        above = png.pixel(int((r[0] + r[2] - 20) * scale), int((y - 48) * scale))[:3]
+        expect(sum(under) > sum(above), f"scroll: the row under the pointer is highlighted ({under} vs {above} two rows up)")
+        save_shot(app, "picker-scrolled")
+        app.get("/click", x=x, y=y, wait=1)
+        name = text.rsplit(" · ", 1)[0]
+        expect(wait_for(lambda: logged(app, f"lens: {name} for"), 5) is not None,
+               f"scroll: picking a row near the end applies that row ({name})")
+        last = texts[-1].rsplit(" · ", 1)[0]
+        click(app, "lens_browse")
+        time.sleep(0.6)
+        # The keys: a press released off the list gives it the keyboard
+        # without picking; ↓ to the last row scrolls it into view.
+        app.get("/m", k="down", x=x, y=r[1] + 12, wait=1)
+        hint = app.rect("picker_hint")
+        app.get("/m", k="move", x=x, y=hint[1] + 4, wait=1)
+        app.get("/m", k="up", x=x, y=hint[1] + 4, wait=1)
+        for _ in range(12):
+            app.key("down")
+        time.sleep(0.5)
+        shown = visible_rows(app)
+        expect([t for t, _ in shown] == texts, "scroll: ↓ to the last row scrolls the list to its end")
+        png = app.grab(os.path.join(OUT, "probe.png"))
+        lit = lambda row: sum(png.pixel(int((r[0] + r[2] - 20) * scale), int((row[1][1] + row[1][3] / 2) * scale))[:3])
+        expect(lit(shown[-1]) > lit(shown[-3]), "scroll: and highlights the last row")
+        picks = sum("lens: " in line for line in app.log_lines())
+        app.key("return")
+        expect(wait_for(lambda: sum("lens: " in line for line in app.log_lines()) > picks, 5) is not None
+               and logged(app, f"lens: {last} for"), f"scroll: Return picks it ({last})")
+        click(app, "lens_browse")
+        time.sleep(0.4)
+        type_into(app, "picker_search", "hero9 wide")
+        wait_for(lambda: (text_of(app, "picker_hint") or "").endswith("profiles"), 10)
+        time.sleep(0.4)
+        first = visible_rows(app)
+        for _ in range(4):
+            app.scroll(r[0] + 100, r[1] + 100, -60)
+            time.sleep(0.2)
+        time.sleep(0.4)
+        expect(first and visible_rows(app)[0][0] == first[0][0],
+               "scroll: a new search starts at the top of the list")
+        expect(app.errors() == [], f"scroll: no errors in the app log {app.errors()[:3]}")
+
+
 def save_shot(app, name):
     shutil.copyfile(app.get("/g", scale=1.0)["png"], os.path.join(OUT, f"{name}.png"))
 
@@ -330,7 +420,7 @@ def check_stats():
 
 
 CHECKS = {"view": check_view, "lens": check_lens, "preview": check_preview, "picker": check_picker,
-          "stats": check_stats}
+          "picker_scroll": check_picker_scroll, "stats": check_stats}
 
 
 def main():
