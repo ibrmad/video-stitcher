@@ -1,5 +1,5 @@
-//! The shell: Media | viewer | Inspector between splitters, then the
-//! transport bar and the status bar.
+//! The shell: Setup | viewer | Adjust between splitters, then the time panel
+//! across the full width, as in Rerun.
 
 use makepad_widgets::*;
 
@@ -7,9 +7,33 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
+    // A splitter drawn as Rerun draws its panel edges: a one-point line
+    // that brightens and thickens under the pointer.
+    let RecoSplitter = Splitter{
+        draw_bg +: {
+            color_bg: uniform(theme.reco_panel)
+            line_color: uniform(theme.reco_separator)
+            line_hover: uniform(theme.reco_stroke)
+            line_width: uniform(theme.reco_separator_width)
+            pixel: fn() {
+                let sdf = Sdf2d.viewport(self.pos * self.rect_size)
+                sdf.clear(self.color_bg)
+                let active = max(self.hover, self.drag)
+                let w = self.line_width * (1.0 + active)
+                if self.is_vertical > 0.5 {
+                    sdf.rect(self.rect_size.x * 0.5 - w * 0.5, 0.0, w, self.rect_size.y)
+                } else {
+                    sdf.rect(0.0, self.rect_size.y * 0.5 - w * 0.5, self.rect_size.x, w)
+                }
+                sdf.fill(mix(self.line_color, self.line_hover, active))
+                return sdf.result
+            }
+        }
+    }
+
     mod.widgets.RecoShell = View{
         width: Fill height: Fill flow: Down
-        main_split := Splitter{
+        main_split := RecoSplitter{
             axis: SplitterAxis.Horizontal
             align: SplitterAlign.FromA(theme.reco_media_width)
             min_vertical: theme.reco_media_min max_vertical: theme.reco_viewer_min
@@ -17,11 +41,11 @@ script_mod! {
             a: View{width: Fill height: Fill media_panel := RecoMediaPanel{}}
             b: View{
                 width: Fill height: Fill
-                inner_split := Splitter{
+                inner_split := RecoSplitter{
                     axis: SplitterAxis.Horizontal
                     align: SplitterAlign.FromB(theme.reco_inspector_width)
-                    // The B floor includes the 6 pt bar: the Inspector itself
-                    // stops at 200 pt.
+                    // The B floor includes the 6 pt bar: the Adjust panel
+                    // itself stops at 200 pt.
                     min_vertical: theme.reco_viewer_min max_vertical: theme.reco_inspector_floor
                     min_horizontal: theme.reco_viewer_min max_horizontal: theme.reco_inspector_floor
                     a: View{width: Fill height: Fill viewer := RecoViewer{}}
@@ -29,7 +53,6 @@ script_mod! {
                 }
             }
         }
-        transport := RecoTransport{}
-        status_bar := RecoStatusBar{}
+        time_panel := RecoTimePanel{}
     }
 }

@@ -42,11 +42,10 @@ script_mod! {
         height: Fit
         aspect: theme.reco_panorama_aspect
         max_width: theme.reco_panorama_max_width
-        // Secondary, not muted: the labels sit on the lit green halves too
-        // and must stay above 4.5:1 there.
+        // Subdued text stays above 4.5:1 on the lit green halves too.
         draw_label +: {
-            color: theme.reco_text_secondary
-            text_style: theme.font_regular{font_size: theme.reco_font_meta}
+            color: theme.reco_text_subdued
+            text_style: theme.font_regular{font_size: theme.reco_font_small}
         }
     }
 }

@@ -24,3 +24,12 @@ published paper and OpenCV documentation.
 **Makepad icons** - `crates/reco-desktop/resources/icons/{help,play,pause,plus,folder,check}.svg`
 are copied from [Makepad](https://github.com/makepad/makepad)
 (`libs/fab/resources/icons`), MIT License, Copyright (c) 2023 Makepad B.V.
+
+**Inter** - `reco-desktop` sets its text in Inter, loaded from the copy
+`makepad-widgets` ships (`widgets/resources/Inter.ttf`), SIL Open Font
+License 1.1, Copyright 2020 The Inter Project Authors.
+
+**Rerun** - `reco-desktop`'s look follows the Rerun viewer's design system
+(`re_ui`: its grey scale, 12 px Inter, 24 px rows and time panel). No Rerun
+code or assets are copied. Rerun is MIT OR Apache-2.0, Copyright (c) Rerun
+Technologies AB.

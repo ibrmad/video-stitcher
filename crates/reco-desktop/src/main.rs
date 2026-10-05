@@ -1,9 +1,10 @@
 //! Reco Desktop: the Makepad 2 desktop app for Reco.
 //!
-//! Module 0 (see `DESIGN.md`): the window shell and the look. Nothing is
-//! wired to the engine yet; `--look-preview[=STATE]` shows each state of the
-//! job (one camera, both cameras, calibrating, ready, exporting) with sample
-//! content for design review.
+//! Module 0 (see `DESIGN.md`): the window shell and the look, after the
+//! Rerun viewer. Nothing is wired to the engine yet; `--look-preview[=STATE]`
+//! shows each state of the job (one camera, both cameras, calibrating,
+//! calibration failed, ready, exporting) with sample content for design
+//! review.
 
 pub use makepad_widgets;
 use makepad_widgets::*;
@@ -12,15 +13,21 @@ mod cli;
 mod names;
 mod shell_state;
 mod theme;
+mod time_ruler;
 mod ui;
 
 use cli::{Args, LookPreview};
 use names::middle_ellipsis;
 use shell_state::{Panel, ShellState};
 use ui::panorama::RecoPanorama;
+use ui::time_panel::RecoTimeRuler;
 
 /// Longest project name shown in the title bar before its middle is cut.
 const PROJECT_NAME_CHARS: usize = 44;
+
+/// The sample match the look preview shows: 1:45:00, the playhead at 12:34.
+const SAMPLE_LENGTH: f64 = 6300.0;
+const SAMPLE_PLAYHEAD: f64 = 754.0;
 
 app_main!(App);
 
@@ -43,17 +50,44 @@ script_mod! {
                     }
                 }
                 window_menu +: {
-                    main := MenuItem.Main{items: [@app_menu, @view_menu]}
-                    app_menu := MenuItem.Sub{name: "Reco" items: [@quit]}
+                    main := MenuItem.Main{items: [@app_menu_item, @view_menu]}
+                    app_menu_item := MenuItem.Sub{name: "Reco" items: [@quit]}
                     quit := MenuItem.Item{name: "Quit Reco" key: KeyCode.KeyQ enabled: true}
-                    view_menu := MenuItem.Sub{name: "View" items: [@toggle_media_menu, @toggle_inspector_menu]}
+                    view_menu := MenuItem.Sub{name: "View" items: [@toggle_media_menu, @toggle_inspector_menu, @toggle_timeline_menu]}
                     toggle_media_menu := MenuItem.Item{name: "Setup Panel" key: KeyCode.Key1 enabled: true}
                     toggle_inspector_menu := MenuItem.Item{name: "Adjust Panel" key: KeyCode.Key2 enabled: true}
+                    toggle_timeline_menu := MenuItem.Item{name: "Time Panel" key: KeyCode.Key3 enabled: true}
                 }
                 body +: {
                     flow: Overlay
                     shell := RecoShell{}
                     tip_layer := TipLayer{}
+                    // Menus as Rerun's: a dark floating panel, a grey row
+                    // under the pointer, Inter at the app's one size.
+                    menus := MenuLayer{
+                        draw_bg +: {
+                            color: theme.reco_band
+                            border_color: theme.reco_widget
+                            radius: theme.container_corner_radius
+                        }
+                        draw_row +: {
+                            color_hover: theme.reco_widget
+                            color_down: theme.reco_hover
+                        }
+                        draw_sep +: {color: theme.reco_separator}
+                        draw_label +: {
+                            color: theme.reco_text
+                            text_style: theme.font_regular{font_size: theme.reco_font_body}
+                        }
+                        draw_section +: {
+                            color: theme.reco_text_subdued
+                            text_style: theme.font_regular{font_size: theme.reco_font_small}
+                        }
+                        draw_shortcut +: {
+                            color: theme.reco_text_subdued
+                            text_style: theme.font_regular{font_size: theme.reco_font_body}
+                        }
+                    }
                 }
             }
         }
@@ -66,6 +100,36 @@ enum Step {
     Todo,
     Current,
     Done,
+}
+
+/// The app menu: what Rerun keeps under its logo.
+fn app_menu_rows() -> Vec<MenuRow> {
+    vec![
+        MenuRow::new(live_id!(shortcuts), "Keyboard shortcuts"),
+        MenuRow::new(live_id!(preferences), "Preferences…"),
+        MenuRow::separator(),
+        MenuRow::new(live_id!(report_bug), "Report a bug…"),
+        MenuRow::separator(),
+        MenuRow::section(concat!("Reco ", env!("CARGO_PKG_VERSION"))),
+    ]
+}
+
+/// Recently used camera pairs (Module 3 fills this from settings).
+fn recent_rows() -> Vec<MenuRow> {
+    vec![
+        MenuRow::new(live_id!(recent_1), "GX010120 + GX010092"),
+        MenuRow::new(live_id!(recent_2), "GX010087 + GX010061"),
+        MenuRow::separator(),
+        MenuRow::new(live_id!(clear_recent), "Clear recent files"),
+    ]
+}
+
+/// `count` equal files covering `length` seconds, as (start, end) spans.
+fn sample_files(count: usize, length: f64) -> Vec<(f64, f64)> {
+    let each = length / count as f64;
+    (0..count)
+        .map(|i| (i as f64 * each, (i + 1) as f64 * each))
+        .collect()
 }
 
 /// The application: widget tree, shell state and startup options.
@@ -81,6 +145,9 @@ pub struct App {
     /// these states from Module 1 on).
     #[rust]
     preview: Option<LookPreview>,
+    /// The time panel shows only its control row.
+    #[rust]
+    timeline_folded: bool,
 }
 
 impl App {
@@ -103,6 +170,7 @@ impl App {
         self.ui
             .splitter(cx, ids!(inner_split))
             .set_collapse(cx, inspector);
+        self.set_visible(cx, ids!(lanes), !self.timeline_folded);
 
         let loaded = self.shell.files_loaded();
         let exporting = self.preview == Some(LookPreview::Exporting);
@@ -127,6 +195,7 @@ impl App {
         let left = state.is_some();
         let right = !matches!(state, None | Some(OneCamera));
         let calibrating = state == Some(Calibrating);
+        let failed = state == Some(CalibrationFailed);
         let calibrated = matches!(state, Some(Ready | Exporting));
         let exporting = state == Some(Exporting);
         self.shell.set_files_loaded(calibrated);
@@ -138,36 +207,38 @@ impl App {
         };
         self.set_label(cx, ids!(project_name), &project);
 
-        // Setup panel: the camera pair.
-        self.set_visible(cx, ids!(left_badge), !left);
-        self.set_visible(cx, ids!(left_badge_on), left);
-        self.set_visible(cx, ids!(right_badge), !right);
-        self.set_visible(cx, ids!(right_badge_on), right);
+        // Setup panel: the camera pair. The title bar names the first
+        // files; the rows say how much each camera has.
+        for (on, idle, lit) in [
+            (ids!(left_badge_on), ids!(left_badge), left),
+            (ids!(lane_left_badge_on), ids!(lane_left_badge), left),
+            (ids!(right_badge_on), ids!(right_badge), right),
+            (ids!(lane_right_badge_on), ids!(lane_right_badge), right),
+        ] {
+            self.set_visible(cx, on, lit);
+            self.set_visible(cx, idle, !lit);
+        }
         self.set_visible(cx, ids!(link_idle), !right);
         self.set_visible(cx, ids!(link_on), right);
         self.set_visible(cx, ids!(add_left), !left);
         self.set_visible(cx, ids!(change_left), left);
         self.set_visible(cx, ids!(add_right), !right);
         self.set_visible(cx, ids!(change_right), right);
-        // The title bar names the first files; the rows say how much is there.
-        let left_files = if left {
-            "21 files · 1:45:12"
-        } else {
-            "No video yet"
-        };
-        let right_files = if right {
-            "22 files · 1:45:31"
-        } else {
-            "No video yet"
-        };
-        self.set_label(cx, ids!(left_files), left_files);
-        self.set_label(cx, ids!(right_files), right_files);
+        // An empty camera says nothing: its Add button is the message.
+        let files = |has: bool, text| if has { text } else { "" };
+        self.set_label(cx, ids!(left_files), files(left, "21 files · 1:45:00"));
+        self.set_label(cx, ids!(right_files), files(right, "22 files · 1:45:00"));
 
         // Setup panel: calibration.
         let (status, detail) = if calibrated {
             ("Calibrated", "match.json · 412 matched points")
         } else if calibrating {
             ("Calibrating…", "Step 3 of 6 · matching pitch markings")
+        } else if failed {
+            (
+                "Calibration failed",
+                "Too few pitch markings in view of both cameras.",
+            )
         } else if right {
             ("Not calibrated", "Ready to calibrate")
         } else {
@@ -175,9 +246,11 @@ impl App {
         };
         self.set_label(cx, ids!(calibration_status), status);
         self.set_label(cx, ids!(calibration_detail), detail);
-        self.set_visible(cx, ids!(cal_dot_idle), !calibrating && !calibrated);
+        let idle = !calibrating && !calibrated && !failed;
+        self.set_visible(cx, ids!(cal_dot_idle), idle);
         self.set_visible(cx, ids!(cal_dot_busy), calibrating);
         self.set_visible(cx, ids!(cal_dot_ok), calibrated);
+        self.set_visible(cx, ids!(cal_dot_error), failed);
         self.set_visible(cx, ids!(auto_calibrate), !calibrated);
         self.set_button_enabled(cx, ids!(auto_calibrate), right && !calibrating);
         self.set_visible(cx, ids!(recalibrate), calibrated);
@@ -207,6 +280,12 @@ impl App {
                 "Matching the pitch markings both cameras can see.",
                 "",
                 "",
+            ),
+            Some(CalibrationFailed) => (
+                "Calibration didn't work",
+                "Too few pitch markings were in view of both cameras. Try again at a moment when more of the pitch is visible, or load a calibration file.",
+                "Try again",
+                "Load calibration file…",
             ),
             Some(Ready | Exporting) => ("", "", "", ""),
         };
@@ -269,22 +348,33 @@ impl App {
             .set_value(cx, 0.34);
         self.set_label(cx, ids!(export_eta), "About 25 min left");
 
-        // Transport and status.
-        let (now, total, position) = if calibrated {
-            ("12:34", "1:45:00", 754.0 / 6300.0)
-        } else {
-            ("0:00", "0:00", 0.0)
-        };
-        self.set_label(cx, ids!(time_current), now);
-        self.set_label(cx, ids!(time_total), total);
-        self.ui.slider(cx, ids!(timeline)).set_value(cx, position);
+        // Time panel: the time, a status line, and each camera's files.
+        let length = if left { SAMPLE_LENGTH } else { 0.0 };
+        let playhead = if calibrated { SAMPLE_PLAYHEAD } else { 0.0 };
+        self.set_label(cx, ids!(time_current), &time_ruler::clock(playhead));
+        self.set_label(cx, ids!(time_total), &time_ruler::clock(length));
         let status = match state {
             Some(Calibrating) => "Calibrating · step 3 of 6",
-            Some(Ready) => "Ready · 59.9 fps",
+            Some(CalibrationFailed) => "Calibration failed",
+            Some(Ready) => "59.9 fps",
             Some(Exporting) => "Exporting · 34%",
-            _ => "Ready",
+            _ => "",
         };
         self.set_label(cx, ids!(status_text), status);
+        let lane = |has: bool, count| {
+            if has {
+                sample_files(count, SAMPLE_LENGTH)
+            } else {
+                Vec::new()
+            }
+        };
+        if let Some(mut ruler) = self
+            .ui
+            .widget(cx, ids!(timeline))
+            .borrow_mut::<RecoTimeRuler>()
+        {
+            ruler.set_timeline(cx, length, playhead, vec![lane(left, 21), lane(right, 22)]);
+        }
     }
 
     /// Show one of a step's three badges.
@@ -315,6 +405,11 @@ impl App {
             self.apply_shell(cx);
         }
     }
+
+    fn toggle_timeline(&mut self, cx: &mut Cx) {
+        self.timeline_folded = !self.timeline_folded;
+        self.apply_shell(cx);
+    }
 }
 
 impl MatchEvent for App {
@@ -324,8 +419,11 @@ impl MatchEvent for App {
             Err(err) => log!("ignoring command line: {err}"),
         }
         self.ui
-            .label(cx, ids!(version_text))
-            .set_text(cx, concat!("v", env!("CARGO_PKG_VERSION")));
+            .menu_button(cx, ids!(app_menu))
+            .set_rows(app_menu_rows());
+        self.ui
+            .menu_button(cx, ids!(recent_menu))
+            .set_rows(recent_rows());
         if let Some((w, h)) = self.args.window_size {
             self.ui
                 .window(cx, ids!(main_window))
@@ -343,6 +441,14 @@ impl MatchEvent for App {
             || self.ui.button(cx, ids!(fold_hint_button)).clicked(actions)
         {
             self.toggle(cx, Panel::Inspector);
+        }
+        if self.ui.button(cx, ids!(toggle_timeline)).clicked(actions) {
+            self.toggle_timeline(cx);
+        }
+        // The menus' commands arrive with Modules 3 and 7.
+        let app_menu = self.ui.menu_button(cx, ids!(app_menu)).menu_owner();
+        if let Some(picked) = menu_picked(actions, app_menu) {
+            log!("app menu: {picked} (not wired in Module 0)");
         }
     }
 }
@@ -369,6 +475,9 @@ impl AppMain for App {
             }
             Event::MacosMenuCommand(item) if *item == live_id!(toggle_inspector_menu) => {
                 self.toggle(cx, Panel::Inspector);
+            }
+            Event::MacosMenuCommand(item) if *item == live_id!(toggle_timeline_menu) => {
+                self.toggle_timeline(cx);
             }
             _ => {}
         }

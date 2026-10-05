@@ -2,231 +2,279 @@
 //! Rule 5). Every colour, radius, spacing step and type size the app uses
 //! is set here.
 //!
+//! The design reference is the Rerun viewer (`re_ui`): neutral greys, Inter
+//! Medium at 12 px, 24 px rows, flat panels with section bands, and one
+//! accent kept for selection, focus, the primary action and progress. Reco's
+//! accent is pitch green where Rerun's is blue.
+//!
 //! Stock widgets copy theme values when they are registered, so this module
 //! runs after `makepad_widgets::theme_mod` and before
 //! `makepad_widgets::widgets_mod`. Makepad's theme values are computed once,
 //! so every role a stock widget reads is set explicitly rather than derived
-//! from a few knobs; the role list follows Makepad's own macOS-dark style.
-//! Reco's own surfaces read the `reco_*` keys.
+//! from a few knobs. Reco's own surfaces read the `reco_*` keys.
 //!
 //! Units: sizes are layout points; font sizes are typographic points
-//! (Makepad renders 1 pt as 96/72 points, so 10.25 pt is about 13.7 px).
-//! Makepad's `Sdf2d.box` draws a corner of twice the radius it is given, so
-//! the radii below are half the rendered radius.
+//! (Makepad renders 1 pt as 96/72 points, so 9 pt is 12 px). Makepad's
+//! `Sdf2d.box` draws a corner of twice the radius it is given, so the radii
+//! below are half the rendered radius.
 //!
-//! Text roles: body text, values and placeholders all reach at least 4.5:1
-//! on every surface; disabled text stays readable but quieter.
+//! Contrast on the panel (#0d0d0d): text 12.5:1, subdued text 6.1:1 (5.1:1
+//! on a section band), white on the green fill 5.8:1. Disabled text is
+//! quieter by design.
 
 use makepad_widgets::*;
 
 script_mod! {
+    use mod.text.*
+    use mod.res.*
+
     mod.themes.reco_dark = mod.themes.dark{
-        // Geometry. Rendered radii: controls 6 pt, cards and the viewer 11 pt.
-        corner_radius: 3.0
-        container_corner_radius: 5.5
-        textselection_corner_radius: 1.5
+        // Geometry. Rendered radii: controls 4 pt, cards and menus 6 pt.
+        corner_radius: 2.0
+        container_corner_radius: 3.0
+        textselection_corner_radius: 1.0
         beveling: 1.0
         space_factor: 8.0
         space_1: 4.0
         space_2: 8.0
         space_3: 12.0
         mspace_1: mod.turtle.Inset{top: 4.0 right: 4.0 bottom: 4.0 left: 4.0}
-        font_size_p: 10.25
+        font_size_p: 9.0
+
+        // Inter, as Rerun: Medium for everything, SemiBold for the one large
+        // title. Makepad ships Inter as a variable font.
+        font_regular: TextStyle{
+            font_family: FontFamily{
+                latin := FontMember{res: crate_resource("makepad_widgets:resources/Inter.ttf") weight: 500.0 asc: 0.0 desc: 0.0}
+            }
+            line_spacing: 1.33
+        }
+        font_label: TextStyle{
+            font_family: FontFamily{
+                latin := FontMember{res: crate_resource("makepad_widgets:resources/Inter.ttf") weight: 500.0 asc: 0.0 desc: 0.0}
+            }
+            line_spacing: 1.33
+        }
+        font_bold: TextStyle{
+            font_family: FontFamily{
+                latin := FontMember{res: crate_resource("makepad_widgets:resources/Inter.ttf") weight: 600.0 asc: 0.0 desc: 0.0}
+            }
+            line_spacing: 1.2
+        }
 
         // Surfaces
-        color_bg_app: #x0f1115
-        color_fg_app: #x0f1115
-        color_app_caption_bar: #x0f1115
-        color_bg_container: #x14171c
-        color_bg_highlight: #x1f4d3a
-        color_bg_highlight_inline: #x1f4d3a
+        color_bg_app: #x0d0d0d
+        color_fg_app: #x0d0d0d
+        color_app_caption_bar: #x0d0d0d
+        color_bg_container: #x0d0d0d
+        color_bg_highlight: #x007541
+        color_bg_highlight_inline: #x007541
 
-        // Accent and focus
+        // Accent and focus: bright green rings and fills, deep green faces.
         color_focus: #x34d399
         color_ctrl_selected: #x34d399
         color_ctrl_active: #x34d399
-        color_primary: #x34d399
-        color_on_primary: #x052e1c
-        color_primary_container: #x133d2c
-        color_on_primary_container: #xa7f3d0
-        color_text_on_accent: #x052e1c
+        color_primary: #x007541
+        color_on_primary: #xffffff
+        color_primary_container: #x0b3a24
+        color_on_primary_container: #x8ff0c4
+        color_text_on_accent: #xffffff
         color_success: #x34d399
         color_warning: #xfbbf24
-        color_error: #xf87171
-        color_cursor: #xe6e9ef
-        color_text_cursor: #xe6e9ef
+        color_error: #xef4444
+        color_cursor: #xffffff
+        color_text_cursor: #xffffff
 
         // Text, labels and icons
-        color_text: #xe6e9ef
-        color_text_hover: #xe6e9ef
-        color_text_focus: #xe6e9ef
-        color_text_active: #xe6e9ef
-        color_text_down: #xe6e9ef
-        color_text_disabled: #x6b7280
-        color_text_placeholder: #x8b93a1
-        color_text_meta: #xa6adb8
-        color_text_val: #xc9ced6
-        color_on_surface_variant: #xa6adb8
-        color_label: #xe6e9ef
-        color_label_hover: #xe6e9ef
-        color_label_focus: #xe6e9ef
-        color_label_active: #xe6e9ef
-        color_label_down: #xe6e9ef
-        color_label_disabled: #x6b7280
-        color_label_inner: #xe6e9ef
-        color_label_inner_hover: #xe6e9ef
-        color_label_inner_focus: #xe6e9ef
-        color_label_inner_active: #xe6e9ef
-        color_label_inner_down: #xe6e9ef
-        color_label_inner_disabled: #x6b7280
-        color_label_outer: #xe6e9ef
-        color_label_outer_hover: #xe6e9ef
-        color_label_outer_focus: #xe6e9ef
-        color_label_outer_active: #xe6e9ef
-        color_label_outer_down: #xe6e9ef
-        color_label_outer_disabled: #x6b7280
-        color_icon: #xa6adb8
-        color_icon_hover: #xe6e9ef
-        color_icon_focus: #xe6e9ef
-        color_icon_active: #xe6e9ef
-        color_icon_down: #xe6e9ef
-        color_icon_disabled: #x5c6270
+        color_text: #xcfcfcf
+        color_text_hover: #xffffff
+        color_text_focus: #xffffff
+        color_text_active: #xffffff
+        color_text_down: #xffffff
+        color_text_disabled: #x646363
+        color_text_placeholder: #x939090
+        color_text_meta: #x939090
+        color_text_val: #xcfcfcf
+        color_on_surface_variant: #x939090
+        color_on_surface: #xcfcfcf
+        // Floating surfaces (menus, popups) and their edges, as Rerun's.
+        color_surface: #x0d0d0d
+        color_surface_container_lowest: #x0d0d0d
+        color_surface_container_low: #x171717
+        color_surface_container: #x212121
+        color_surface_container_high: #x212121
+        color_surface_container_highest: #x2c2b2b
+        color_outline: #x2c2b2b
+        color_outline_variant: #x272626
+        color_label: #xcfcfcf
+        color_label_hover: #xffffff
+        color_label_focus: #xffffff
+        color_label_active: #xffffff
+        color_label_down: #xffffff
+        color_label_disabled: #x646363
+        color_label_inner: #xcfcfcf
+        color_label_inner_hover: #xffffff
+        color_label_inner_focus: #xffffff
+        color_label_inner_active: #xffffff
+        color_label_inner_down: #xffffff
+        color_label_inner_disabled: #x646363
+        color_label_outer: #xcfcfcf
+        color_label_outer_hover: #xffffff
+        color_label_outer_focus: #xffffff
+        color_label_outer_active: #xffffff
+        color_label_outer_down: #xffffff
+        color_label_outer_disabled: #x646363
+        color_icon: #x9f9f9f
+        color_icon_hover: #xffffff
+        color_icon_focus: #xffffff
+        color_icon_active: #xffffff
+        color_icon_down: #xffffff
+        color_icon_disabled: #x525151
 
-        // Raised controls (buttons, dropdowns): a face lighter than the card
-        // and a border that reads on every surface.
-        color_outset: #x252931
-        color_outset_1: #x252931
-        color_outset_2: #x252931
-        color_outset_hover: #x2d323b
-        color_outset_1_hover: #x2d323b
-        color_outset_2_hover: #x2d323b
-        color_outset_focus: #x252931
-        color_outset_1_focus: #x252931
-        color_outset_2_focus: #x252931
-        color_outset_active: #x34d399
-        color_outset_1_active: #x252931
-        color_outset_2_active: #x252931
-        color_outset_down: #x1f232a
-        color_outset_1_down: #x1f232a
-        color_outset_2_down: #x1f232a
-        color_outset_disabled: #x1b1e24
-        color_outset_1_disabled: #x1b1e24
-        color_outset_2_disabled: #x1b1e24
-        color_outset_empty: #x252931
-        color_outset_1_empty: #x252931
-        color_outset_2_empty: #x252931
-        color_outset_drag: #x2d323b
-        color_outset_1_drag: #x2d323b
-        color_outset_2_drag: #x2d323b
+        // Raised controls (buttons, dropdowns): a flat face, no border.
+        color_outset: #x2c2b2b
+        color_outset_1: #x2c2b2b
+        color_outset_2: #x2c2b2b
+        color_outset_hover: #x383737
+        color_outset_1_hover: #x383737
+        color_outset_2_hover: #x383737
+        color_outset_focus: #x2c2b2b
+        color_outset_1_focus: #x2c2b2b
+        color_outset_2_focus: #x2c2b2b
+        color_outset_active: #x007541
+        color_outset_1_active: #x2c2b2b
+        color_outset_2_active: #x2c2b2b
+        color_outset_down: #x242323
+        color_outset_1_down: #x242323
+        color_outset_2_down: #x242323
+        color_outset_disabled: #x1a1a1a
+        color_outset_1_disabled: #x1a1a1a
+        color_outset_2_disabled: #x1a1a1a
+        color_outset_empty: #x2c2b2b
+        color_outset_1_empty: #x2c2b2b
+        color_outset_2_empty: #x2c2b2b
+        color_outset_drag: #x383737
+        color_outset_1_drag: #x383737
+        color_outset_2_drag: #x383737
 
-        // Sunken controls (slider tracks, checkbox wells)
-        color_inset: #x101317
-        color_inset_1: #x101317
-        color_inset_2: #x101317
-        color_inset_hover: #x13161b
-        color_inset_1_hover: #x13161b
-        color_inset_2_hover: #x13161b
-        color_inset_focus: #x13161b
-        color_inset_1_focus: #x13161b
-        color_inset_2_focus: #x13161b
-        color_inset_active: #x13161b
-        color_inset_1_active: #x13161b
-        color_inset_2_active: #x13161b
-        color_inset_down: #x101317
-        color_inset_1_down: #x101317
-        color_inset_2_down: #x101317
-        color_inset_disabled: #x15181d
-        color_inset_1_disabled: #x15181d
-        color_inset_2_disabled: #x15181d
-        color_inset_empty: #x101317
-        color_inset_1_empty: #x101317
-        color_inset_2_empty: #x101317
-        color_inset_drag: #x13161b
-        color_inset_1_drag: #x13161b
-        color_inset_2_drag: #x13161b
+        // Sunken controls (checkbox wells, text fields)
+        color_inset: #x212121
+        color_inset_1: #x212121
+        color_inset_2: #x212121
+        color_inset_hover: #x272626
+        color_inset_1_hover: #x272626
+        color_inset_2_hover: #x272626
+        color_inset_focus: #x272626
+        color_inset_1_focus: #x272626
+        color_inset_2_focus: #x272626
+        color_inset_active: #x272626
+        color_inset_1_active: #x272626
+        color_inset_2_active: #x272626
+        color_inset_down: #x212121
+        color_inset_1_down: #x212121
+        color_inset_2_down: #x212121
+        color_inset_disabled: #x171717
+        color_inset_1_disabled: #x171717
+        color_inset_2_disabled: #x171717
+        color_inset_empty: #x212121
+        color_inset_1_empty: #x212121
+        color_inset_2_empty: #x212121
+        color_inset_drag: #x272626
+        color_inset_1_drag: #x272626
+        color_inset_2_drag: #x272626
 
-        // Control borders (bevels). Focus uses the accent; disabled keeps a
-        // visible outline so the control's shape never disappears.
-        color_bevel: #x363c46
-        color_bevel_hover: #x434a56
-        color_bevel_down: #x363c46
+        // Borders: raised faces have none (the border matches the face);
+        // wells keep a quiet edge; focus always shows the accent.
+        color_bevel: #x2c2b2b
+        color_bevel_hover: #x383737
+        color_bevel_down: #x242323
         color_bevel_focus: #x34d399
-        color_bevel_disabled: #x2a2e36
-        color_bevel_inset_1: #x3a404a
-        color_bevel_inset_2: #x3a404a
-        color_bevel_outset_1: #x363c46
-        color_bevel_outset_2: #x363c46
-        color_bevel_inset_1_hover: #x474e5a
-        color_bevel_inset_2_hover: #x474e5a
-        color_bevel_outset_1_hover: #x434a56
-        color_bevel_outset_2_hover: #x434a56
+        color_bevel_disabled: #x1a1a1a
+        color_bevel_inset_1: #x3a3939
+        color_bevel_inset_2: #x3a3939
+        color_bevel_outset_1: #x2c2b2b
+        color_bevel_outset_2: #x2c2b2b
+        color_bevel_inset_1_hover: #x525151
+        color_bevel_inset_2_hover: #x525151
+        color_bevel_outset_1_hover: #x383737
+        color_bevel_outset_2_hover: #x383737
         color_bevel_inset_1_focus: #x34d399
         color_bevel_inset_2_focus: #x34d399
         color_bevel_outset_1_focus: #x34d399
         color_bevel_outset_2_focus: #x34d399
-        color_bevel_inset_1_active: #x3a404a
-        color_bevel_inset_2_active: #x3a404a
-        color_bevel_outset_1_active: #x363c46
-        color_bevel_outset_2_active: #x363c46
-        color_bevel_inset_1_down: #x3a404a
-        color_bevel_inset_2_down: #x3a404a
-        color_bevel_outset_1_down: #x363c46
-        color_bevel_outset_2_down: #x363c46
-        color_bevel_inset_1_disabled: #x2a2e36
-        color_bevel_inset_2_disabled: #x2a2e36
-        color_bevel_outset_1_disabled: #x2a2e36
-        color_bevel_outset_2_disabled: #x2a2e36
+        color_bevel_inset_1_active: #x3a3939
+        color_bevel_inset_2_active: #x3a3939
+        color_bevel_outset_1_active: #x2c2b2b
+        color_bevel_outset_2_active: #x2c2b2b
+        color_bevel_inset_1_down: #x3a3939
+        color_bevel_inset_2_down: #x3a3939
+        color_bevel_outset_1_down: #x242323
+        color_bevel_outset_2_down: #x242323
+        color_bevel_inset_1_disabled: #x272626
+        color_bevel_inset_2_disabled: #x272626
+        color_bevel_outset_1_disabled: #x1a1a1a
+        color_bevel_outset_2_disabled: #x1a1a1a
 
         // Sliders: the filled value is state, so it takes the accent.
         color_val: #x34d399
         color_val_hover: #x5ce0a8
         color_val_focus: #x34d399
         color_val_drag: #x5ce0a8
-        color_val_disabled: #x3a3f48
-        color_handle: #xe6e9ef
-        color_handle_hover: #xf5f7fa
-        color_handle_focus: #xe6e9ef
+        color_val_disabled: #x3a3939
+        color_handle: #xcfcfcf
+        color_handle_hover: #xffffff
+        color_handle_focus: #xffffff
         color_handle_drag: #xffffff
-        color_handle_disabled: #x4b5160
+        color_handle_disabled: #x525151
 
-        // Reco surfaces
-        reco_panel: #x14171c
-        reco_surface: #x1a1d23
-        reco_hairline: #x2a2e36
-        reco_hairline_width: 1.0
-        reco_viewer: #x08090b
-        reco_text_secondary: #xa6adb8
-        reco_text_muted: #x8b93a1
-        reco_record: #xef4444
+        // Reco surfaces, darkest to lightest (Rerun's grey scale)
+        reco_viewport: #x000000
+        reco_panel: #x0d0d0d
+        reco_bar: #x171717
+        reco_band: #x212121
+        reco_hover: #x272626
+        reco_widget: #x2c2b2b
+        reco_stroke: #x525151
+        reco_separator: #x272626
+        reco_separator_width: 1.0
         reco_transparent: #x0000
-        // A focus ring that reads on the green accent as well as on dark faces.
-        reco_focus_contrast: #xe6e9ef
-        reco_focus_width: 2.0
-        // Icon opacity on enabled and disabled controls (disabled stays ≥3:1).
+
+        // Reco text and icons
+        reco_text: #xcfcfcf
+        reco_text_strong: #xffffff
+        reco_text_subdued: #x939090
+        reco_text_disabled: #x646363
+        reco_icon_tint: #x9f9f9f
+
+        // Reco accent: bright green for rings, fills and lit marks; deep
+        // green faces carry white text.
+        reco_accent: #x34d399
+        reco_accent_fill: #x007541
+        reco_accent_fill_hover: #x00854a
+        reco_on_accent: #xffffff
+        reco_record: #xef4444
+        reco_error: #xef4444
+        reco_focus_width: 1.5
+        // Icon opacity on enabled and disabled controls.
         reco_icon_opacity: 1.0
-        reco_disabled_icon_opacity: 0.55
+        reco_disabled_icon_opacity: 0.5
         // Status dots
-        reco_dot_idle: #x6b7280
+        reco_dot_idle: #x646363
         reco_dot_busy: #xfbbf24
         reco_dot_ok: #x34d399
-        reco_badge_idle: #x252931
+        reco_dot_error: #xef4444
+        reco_badge_idle: #x2c2b2b
 
         // The panorama frame drawn in the empty states: two camera halves
         // meeting at the seam.
-        reco_frame_line: #x2f343d
-        reco_frame_fill: #x101317
-        reco_frame_lit: #x15392a
+        reco_frame_line: #x2c2b2b
+        reco_frame_fill: #x0d0d0d
+        reco_frame_lit: #x0b2a1c
         reco_seam: #x34d399
-        reco_seam_idle: #x3a404a
-        // The unfilled part of a progress bar.
-        reco_progress_track: #x363c46
-        reco_progress_thickness: 6.0
-        // The transport's timeline: track thickness and playhead radius.
-        reco_timeline_track: 4.0
-        reco_timeline_knob: 6.0
+        reco_seam_idle: #x525151
         reco_panorama_aspect: 2.5
-        reco_panorama_max_width: 560.0
-        reco_panorama_radius: 4.0
+        reco_panorama_max_width: 520.0
+        reco_panorama_radius: 3.0
 
         // Placeholder pitch shown by --look-preview until Module 1 draws the
         // stitched video.
@@ -234,52 +282,71 @@ script_mod! {
         reco_grass_b: #x1a5235
         reco_pitch_line: #xcfe3d6
 
-        // Type scale (points): four roles, each step at least 1.14x.
-        reco_font_meta: 9.0
-        reco_font_body: 10.25
-        reco_font_title: 11.75
-        reco_font_display: 17.0
+        // The time panel: camera lanes, chapters and the playhead.
+        reco_lane_fill: #x2c2b2b
+        reco_lane_fill_on: #x0f4a30
+        reco_lane_edge: #x0d0d0d
+        reco_tick: #x3a3939
+        reco_playhead: #xffffff
 
-        // Spacing scale (points)
-        reco_space_hair: 2.0
-        reco_space_xs: 4.0
-        reco_space_s: 6.0
-        reco_space_m: 8.0
-        reco_space_l: 10.0
-        reco_space_xl: 12.0
-        reco_space_xxl: 16.0
-        reco_space_xxxl: 24.0
+        // Type (points): 12 px for everything, 11 px for small print, one
+        // 20 px title for the next step.
+        reco_font_body: 9.0
+        reco_font_small: 8.25
+        reco_font_display: 15.0
 
-        // Control and layout sizes (points)
-        reco_compact_height: 24.0
-        reco_control_height: 28.0
-        reco_primary_height: 30.0
-        reco_button_pad_x: 14.0
-        reco_icon_button: 30.0
+        // Spacing (points): Rerun's 12 pt view padding, 8 pt item spacing,
+        // 4 pt between an icon and its text, 14 pt indent.
+        reco_gap_xs: 2.0
+        reco_gap_s: 4.0
+        reco_gap: 8.0
+        reco_pad: 12.0
+        reco_indent: 14.0
+        reco_gap_l: 16.0
+        reco_gap_xl: 24.0
+
+        // Sizes (points)
+        reco_row: 24.0
+        reco_button: 22.0
+        reco_button_pad_x: 8.0
+        reco_icon_button: 22.0
         reco_icon: 16.0
-        reco_icon_medium: 14.0
         reco_icon_small: 12.0
+        // Icons at the end of a panel row, title row or section band.
+        reco_row_icon: 14.0
         reco_icon_tiny: 10.0
-        reco_play_button: 36.0
-        reco_play_icon: 18.0
-        reco_badge: 22.0
-        reco_badge_radius: 11.0
-        reco_dot: 8.0
-        reco_dot_radius: 4.0
-        reco_link_width: 2.0
-        reco_link_height: 14.0
-        reco_time_width: 56.0
-        reco_aspect_width: 84.0
-        reco_progress_width: 420.0
+        reco_chevron: 12.0
+        reco_badge: 16.0
+        reco_badge_radius: 8.0
+        reco_dot: 6.0
+        reco_dot_radius: 3.0
+        reco_link_width: 1.0
+        reco_link_height: 8.0
+        reco_value_width: 44.0
+        reco_label_width: 112.0
+        reco_aspect_width: 72.0
+        reco_progress_width: 400.0
+        reco_progress_thickness: 4.0
+        reco_slider_track: 4.0
+        reco_slider_knob: 5.0
+        reco_time_width: 52.0
+        reco_lane_label_width: 132.0
+        reco_ruler_height: 20.0
+        reco_playhead_head: 5.0
+        reco_chapter_gap: 1.0
+        reco_controls_height: 28.0
+        reco_tick_length: 5.0
+        reco_tick_spacing: 72.0
+        reco_lane_inset: 5.0
+        reco_playhead_width: 1.5
+        reco_menu_width: 200.0
         // Room for the macOS window buttons at the left of the title bar.
-        reco_caption_inset: 80.0
-        reco_transport_height: 52.0
-        reco_statusbar_height: 30.0
+        reco_caption_inset: 76.0
         reco_media_width: 260.0
-        reco_media_min: 180.0
+        reco_media_min: 200.0
         reco_viewer_min: 360.0
         reco_inspector_width: 280.0
-        // The Inspector's splitter floor includes the 6 pt bar, so 206
+        // The Adjust panel's splitter floor includes the 6 pt bar, so 206
         // keeps the panel itself at 200.
         reco_inspector_floor: 206.0
     }

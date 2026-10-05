@@ -21,6 +21,8 @@ pub enum LookPreview {
     Cameras,
     /// Calibration is running.
     Calibrating,
+    /// Calibration ran and could not line the cameras up.
+    CalibrationFailed,
     /// Calibrated and previewing: the default.
     Ready,
     /// An export is running over the preview.
@@ -29,17 +31,18 @@ pub enum LookPreview {
 
 impl LookPreview {
     /// The state named on the command line (`one-camera`, `cameras`,
-    /// `calibrating`, `ready`, `exporting`).
+    /// `calibrating`, `calibration-failed`, `ready`, `exporting`).
     fn parse(name: &str) -> Result<Self, String> {
         match name {
             "one-camera" => Ok(Self::OneCamera),
             "cameras" => Ok(Self::Cameras),
             "calibrating" => Ok(Self::Calibrating),
+            "calibration-failed" => Ok(Self::CalibrationFailed),
             "ready" => Ok(Self::Ready),
             "exporting" => Ok(Self::Exporting),
             other => Err(format!(
                 "unknown --look-preview state `{other}` \
-                 (one-camera, cameras, calibrating, ready, exporting)"
+                 (one-camera, cameras, calibrating, calibration-failed, ready, exporting)"
             )),
         }
     }
@@ -122,6 +125,7 @@ mod tests {
             ("one-camera", LookPreview::OneCamera),
             ("cameras", LookPreview::Cameras),
             ("calibrating", LookPreview::Calibrating),
+            ("calibration-failed", LookPreview::CalibrationFailed),
             ("ready", LookPreview::Ready),
             ("exporting", LookPreview::Exporting),
         ] {
