@@ -174,7 +174,9 @@ def check_transport():
 def ruler_point(app, secs, length, lane=None):
     """Window point at `secs` on the ruler: in the ruler band, or in lane 0/1."""
     x, y, w, h = app.rect("timeline")
-    row = 8 if lane is None else 16 + 16 * lane + 8
+    # The ruler band, then the lanes (theme.reco_ruler_height, reco_lane_row).
+    ruler, lane_row = 18, 18
+    row = ruler / 2 if lane is None else ruler + lane_row * lane + lane_row / 2
     return x + w * secs / length, y + row
 
 

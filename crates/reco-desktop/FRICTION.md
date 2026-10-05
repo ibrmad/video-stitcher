@@ -175,3 +175,25 @@ smoothing makes strokes fuller (the same word in CoreText carried about
 tried and the owner found it "much worse": the answer is size, so the
 design gets more room (bigger type, icons and rows). The asks stand: font
 smoothing for low-density displays, and baselines snapped to device pixels.
+
+## A popup over the title bar loses presses (Module 7, Makepad)
+
+The window answers each `WindowDragQuery` from its caption geometry: a
+press in the caption strip is the window manager's drag unless it lands on
+the chrome buttons or on a control hung in the caption bar. A popup's rows
+drawn over the strip are neither, so on macOS a real click on them dragged
+the window and the row was never chosen (the owner found a dropdown's top
+row unclickable; press-and-drag worked, since the popup already held the
+pointer). Injected clicks (the checks) never reach the OS hit test, so no
+check could see it. Reco's dropdowns open their list below themselves.
+The ask: an open popup's rects count as the client's in the drag query.
+
+## Makepad's menu fixes its geometry (Module 7, Makepad)
+
+`MenuLayer` (what `MenuButton` opens) takes colours and fonts from the
+theme but fixes its geometry in code: 22 pt rows, 4 pt padding and a 24 pt
+mark column reserved on every row, so text started 28 pt in. The owner saw
+it as "the default Makepad style". Reco's menus are a `Popover` with a
+`RecoMenuList` (template rows: items, separators, sections). The ask: row
+height, padding and the mark column as style values.
+

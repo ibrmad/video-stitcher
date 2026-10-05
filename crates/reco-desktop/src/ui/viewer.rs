@@ -36,11 +36,14 @@ script_mod! {
             draw_bg.color: theme.reco_bar
             view_title := RecoStrong{text: "Preview"}
             View{width: Fill height: Fit}
-            // Shown when the window got too narrow for the Adjust panel.
+            // Shown when the window got too narrow for the Adjust panel; short,
+            // so the view bar still fits at the minimum width.
             fold_hint := View{
                 visible: false
                 width: Fit height: Fit
-                fold_hint_button := RecoFlatButton{text: "Adjust panel hidden · ⌘2"}
+                Tip{text: "The window is too narrow for the Adjust panel. Click (or ⌘2) to show it anyway."
+                    fold_hint_button := RecoFlatButton{text: "Adjust · ⌘2"}
+                }
             }
             Tip{text: "Preview aspect"
                 aspect := RecoDropDown{

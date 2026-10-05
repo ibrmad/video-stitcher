@@ -206,22 +206,26 @@ Threading, adopted from Makepad's own rules:
 
 ## Look
 
-After the Rerun viewer. Every value is a token in `src/theme.rs`.
+After the Rerun viewer, with more room: Rerun's 12 px text and 24 pt rows
+read too small on a 1x monitor, so the owner chose a roomier design
+everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
 
 - **Surfaces**, Rerun's neutral grey scale: viewport `#000000`, panels and
   the title bar `#0d0d0d`, view bars `#171717`, section bands and floating
   panels (menus, the export card) `#212121`, control faces `#2c2b2b`,
   separators `#272626`.
-- **Text**: Inter Medium at 12 px for everything (Makepad's bundled
-  variable Inter at weight 500), 11 px for small print, one 20 px SemiBold
-  title for the viewer's next step. Colour does the hierarchy: white for
+- **Text**: Inter Medium at 13 px for everything (Makepad's bundled
+  variable Inter at weight 500; macOS's own interface size), 12 px for
+  small print, one 22 px SemiBold title for the viewer's next step. Colour does the hierarchy: white for
   names and titles, `#cfcfcf` for values, `#939090` for labels and meta.
 - **Accent**: pitch green where Rerun uses blue, and nowhere else: the
   primary action (white on `#007541`), focus rings, slider and progress
   fills, the lit seam, camera lanes (`#34d399` marks, `#0f4a30` blocks).
-- **Geometry**: 24 pt rows, title rows and bands; a 12 pt content edge in
-  every panel; 8 pt between items, 4 pt between an icon and its text;
-  22 pt buttons; 4 pt control corners, 6 pt floating corners.
+- **Geometry**: 28 pt rows, title rows and bands; a 14 pt content edge in
+  every panel; 10 pt between items, 5 pt between an icon and its text;
+  26 pt buttons and 18 pt icons; 4 pt control corners, 6 pt floating
+  corners. Menus (the app menu, Recent, every dropdown's list) share the
+  floating panel and the row height; a dropdown's list opens below it.
 - **Structure**: a title bar with the "Reco" app menu (shortcuts,
   preferences, bug report, version), the project, Export and three panel
   toggles. Setup (left) and Adjust (right) are flat panels: a title row,
@@ -280,7 +284,7 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
 11. **Containers own every gap.** Text roles (`RecoText` and its family)
     carry no padding or margin, and Reco controls carry no outer margin;
     insets live on the enclosing view. Everything in a panel starts on its
-    12 pt content edge, and a status line's detail starts under its words.
+    14 pt content edge, and a status line's detail starts under its words.
     A trailing icon (`RecoRowIcon`) reaches past the row's padding by its
     own inset, so its ink, not its box, ends on the right content edge.
     `check_m0.py` measures where the ink starts and ends, not just widget
@@ -359,9 +363,14 @@ After the Rerun viewer. Every value is a token in `src/theme.rs`.
   in `on_after_apply`, make rows with `WidgetRef::script_from_value`, and
   register them with `widget_tree_insert_child` so snapshots see them
   (`ui::file_list`).
-- A menu opens from anywhere with `MenuAction::Open` and the menu button's
-  `menu_owner()`; its picks come back through `menu_picked` like the
-  button's own.
+- Makepad's `MenuLayer` fixes its geometry in code (22 pt rows, an empty
+  24 pt mark column), so Reco's menus are a `Popover` (`ui::menu_list`'s
+  `RecoMenu`) holding a `RecoMenuList`; `open_at` opens one from anywhere
+  (the next-step card's "Recent files…").
+- A popup drawn over the title bar loses real presses: the window's drag
+  query answers "caption" for any point in the bar not over a control
+  hung there, so the OS drags the window instead. A dropdown's list opens
+  below it (`BelowInput`) so no row lies there.
 - A window accepts dropped files by answering `Event::Drag` with
   `DragResponse::Copy`.
 - `ids!(...)` in an array of tuples is `&[LiveId; 1]`; pass `*id` where a

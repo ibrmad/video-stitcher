@@ -167,6 +167,19 @@ script_mod! {
     mod.widgets.RecoDropDown = DropDown{
         height: theme.reco_button margin: 0
         popup_menu_position: #(makepad_widgets::drop_down::PopupMenuPosition::BelowInput)
+        // The menu's rows and panel match Reco's own menus.
+        popup_menu: PopupMenu{
+            menu_item: PopupMenuItem{
+                height: theme.reco_row
+                align: Align{y: 0.5}
+                draw_text +: {text_style: theme.font_regular{font_size: theme.reco_font_body}}
+            }
+            draw_bg +: {
+                color: theme.reco_band
+                border_color: theme.reco_widget
+                border_color_2: theme.reco_widget
+            }
+        }
         draw_text +: {text_style: theme.font_regular{font_size: theme.reco_font_body}}
         draw_bg +: {
             pixel: fn() {

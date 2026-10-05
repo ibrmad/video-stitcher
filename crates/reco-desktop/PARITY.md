@@ -67,10 +67,15 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       (Recent files, help, Change and band icons, Adjust values), "time
       panel's first icon starts on the edge 12", "`<id>` centred on the
       control row".
-- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state.
-      (On a 1x external monitor the owner found the compact text too small
-      and thin; the design is getting more room, owner's choice of
-      2026-10-05.)
+- [x] Looks right at 720×600, 1280×820 and 1920×1200, in every state, on
+      Retina and on a 1x monitor. The design has more room than Rerun's
+      (the owner found 12 px text and 24 pt rows too small on a 1x
+      monitor, 2026-10-05): 13 px text, 28 pt rows, a 14 pt content edge,
+      26 pt buttons, 18 pt icons; `check_m0.py` measures the new edges.
+      Menus (app, Recent, every dropdown's list) share one panel and row
+      height, and a dropdown's list opens below it ("dropdown: the click
+      on row 1 picks Fast", "menus: the text starts on the content
+      edge").
       Evidence: the screenshots, reviewed in two batched rounds after the
       Rerun restyle (fixes: the app menu button's border, empty camera
       rows, trailing icon alignment, the checkbox column, the time panel's

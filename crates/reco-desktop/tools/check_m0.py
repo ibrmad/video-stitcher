@@ -6,9 +6,9 @@ Run after `cargo build --profile desktop -p reco-desktop`. Walks every
 exits non-zero if any check failed. Every failure is listed, not just the
 first.
 
-The look follows the Rerun viewer: neutral grey panels, 24 pt rows that
-start on a 12 pt content edge, section bands, a black viewport and a time
-panel with camera lanes.
+The look follows the Rerun viewer, with more room: neutral grey panels,
+28 pt rows that start on a 14 pt content edge, section bands, a black
+viewport and a time panel with camera lanes.
 """
 import os
 import sys
@@ -30,16 +30,18 @@ LANE_EMPTY = "#171717"
 PLAYHEAD = "#ffffff"
 # Rows start this far inside a panel (theme.reco_pad), and a status line's
 # words after its dot (theme.reco_dot + reco_gap).
-PAD = 12
-DOT_INDENT = 6 + 8
+PAD = 14
+DOT_INDENT = 7 + 10
 # Adjust rows: label cell, then a gap, then the control (theme.reco_label_width,
 # reco_gap).
-LABEL_WIDTH = 112
-GAP = 8
+LABEL_WIDTH = 124
+GAP = 10
 # The sample match: 1:45:00 with the playhead at 12:34; the ruler's height
-# and a lane's (theme.reco_ruler_height, reco_row).
+# and a lane's (theme.reco_ruler_height, reco_lane_row).
 LENGTH, PLAYHEAD_AT = 6300.0, 754.0
-RULER, LANE_HEIGHT = 16, 16
+RULER, LANE_HEIGHT = 18, 18
+# A row (theme.reco_row): section bands and control rows.
+ROW = 28
 
 # Every --look-preview state in job order; None is a fresh start.
 STATES = (None, "one-camera", "cameras", "calibrating", "calibration-failed", "ready", "exporting")
@@ -308,8 +310,8 @@ def check_state(size, state):
                 expect(abs(y + h / 2 - centre) <= 2,
                        f"{name}: `{wid}` centred on the control row ({y + h / 2:.1f} vs {centre:.1f})")
 
-        # One content edge per panel: titles, rows and buttons start 12 pt
-        # in; trailing icons end 12 pt from the right; the time panel's
+        # One content edge per panel: titles, rows and buttons start 14 pt
+        # in; trailing icons end 14 pt from the right; the time panel's
         # first icon and lane badges share the same edge.
         if size[0] >= 1280:
             edge, right = mx + PAD, mx + mw - PAD
@@ -319,7 +321,7 @@ def check_state(size, state):
             for wid in ("calibration_status", "calibration_detail"):
                 check_text_edge(app, png, scale, wid, edge + DOT_INDENT, PANEL, name)
             check_icon_right(app, png, scale, app.rect("recent_menu"), right, PANEL, "Recent files icon", name)
-            check_icon_right(app, png, scale, (cx, cy, cw, 24), right, BAND, "Cameras help icon", name)
+            check_icon_right(app, png, scale, (cx, cy, cw, ROW), right, BAND, "Cameras help icon", name)
             if state:
                 check_icon_right(app, png, scale, app.rect("left_fold"), right, PANEL, "Files chevron", name)
             sx, sy, sw, sh = app.rect("step_back")
@@ -332,7 +334,7 @@ def check_state(size, state):
         # The next step fits the viewer: no text runs into its right edge.
         if not stitched:
             sx, sy, sw, sh = app.rect("empty_state")
-            ink = ink_left(png, scale, (vx + vw - 12, sy, vx + vw - 1, sy + sh), VIEWPORT)
+            ink = ink_left(png, scale, (vx + vw - PAD, sy, vx + vw - 1, sy + sh), VIEWPORT)
             expect(ink is None, f"{name}: next step clear of the viewer's right edge (ink at {ink})")
         if state == "calibrating":
             bx, by, bw, bh = app.rect("step2_current")
@@ -363,7 +365,7 @@ def check_adjust_edges():
             expect(ink is not None and right - 2 <= ink <= right + 0.5,
                    f"{name}: `{wid}` ends on the content edge {right} (ink at {ink})")
         vx, vy, vw, vh = app.rect("view_section")
-        check_icon_right(app, png, scale, (vx, vy, vw, 24), right, BAND, "View band icons", name)
+        check_icon_right(app, png, scale, (vx, vy, vw, ROW), right, BAND, "View band icons", name)
         expect(app.errors() == [], f"{name}: no errors in the app log")
 
 
@@ -409,13 +411,13 @@ def check_toggles():
         mx, my, mw, mh = app.rect("media_panel")
         drag(app, mx + mw + 3, bar_y, 10)
         media = app.rect("media_panel")
-        expect(media is not None and media[2] >= 195,
-               f"resize: Setup stops at its 200 pt minimum ({media and media[2]})")
+        expect(media is not None and media[2] >= 215,
+               f"resize: Setup stops at its 220 pt minimum ({media and media[2]})")
         ix, iy, iw, ih = app.rect("inspector")
         drag(app, ix - 3, bar_y, 1270)
         inspector = app.rect("inspector")
-        expect(inspector is not None and inspector[2] >= 195,
-               f"resize: Adjust stops at its 200 pt minimum ({inspector and inspector[2]})")
+        expect(inspector is not None and inspector[2] >= 215,
+               f"resize: Adjust stops at its 220 pt minimum ({inspector and inspector[2]})")
         expect(app.errors() == [], "toggle: no errors in the app log")
     with launch((1280, 820), None) as app:
         app.click_id("toggle_inspector")
@@ -473,8 +475,8 @@ def check_dropdowns():
         for row, label in ((0, "Fast"), (2, "High"), (1, "Balanced"), (0, "Fast")):
             click(app, r)
             time.sleep(0.4)
-            # The menu's padding, then one 24 pt row each.
-            app.get("/click", x=r[0] + r[2] / 2, y=bottom + 16 + 24 * row, wait=1)
+            # The menu's 4 pt padding, then one 28 pt row each (theme.reco_row).
+            app.get("/click", x=r[0] + r[2] / 2, y=bottom + 4 + ROW / 2 + ROW * row, wait=1)
             time.sleep(0.4)
             picked = next((i.get("t") for i in app.snap("record_quality") if i.get("i") == "record_quality"), None)
             expect(picked == label, f"dropdown: the click on row {row + 1} picks {label} ({picked})")

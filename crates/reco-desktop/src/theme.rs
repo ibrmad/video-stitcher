@@ -329,9 +329,10 @@ script_mod! {
         reco_glyph_inset: 1.69
         reco_icon_tiny: 11.0
         reco_chevron: 14.0
-        // The chevron's drawing inside its box, stroke included: a trailing
-        // chevron's ink lines up with the content edge by the difference.
-        reco_chevron_ink: 8.46
+        // The chevron's drawing inside its box, stroke included (drawn at a
+        // fixed size, whatever the box): a trailing chevron's ink lines up
+        // with the content edge by the difference.
+        reco_chevron_ink: 7.25
         reco_badge: 18.0
         // A file row's name sits under its camera's name: the row's pad, the
         // badge and the gap after it.

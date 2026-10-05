@@ -193,11 +193,12 @@ def check_mode(mode, extra):
         check_focus(app, name)
 
         # A pick with the mouse gives the keyboard back to the preview. The
-        # open list puts the chosen row (Auto) over the dropdown, so a second
-        # click there picks it.
+        # list opens below the dropdown; its first row (Auto) is the menu's
+        # 4 pt padding and half a 28 pt row down.
         app.click_id("aspect")
         time.sleep(0.3)
-        app.click_id("aspect")
+        ax, ay, aw, ah = app.rect("aspect")
+        app.get("/click", x=ax + aw / 2, y=ay + ah + 4 + 14, wait=1)
         time.sleep(0.5)
         before = seconds(text_of(app, "time_current"))
         app.key("]")
