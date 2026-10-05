@@ -11,6 +11,7 @@ use reco_app::toasts::Severity;
 use crate::keys::SHORTCUTS;
 use crate::network::offline;
 use crate::ui::key_table::RecoKeyTable;
+use crate::ui::menu_list::{MenuEntry, MenuListAction, RecoMenuList};
 use crate::App;
 
 /// This build's version, and its commit when known: "0.5.4 (2fba497)".
@@ -19,14 +20,14 @@ pub(crate) fn version_line() -> String {
 }
 
 /// The app menu: what Rerun keeps under its logo.
-pub(crate) fn app_menu_rows() -> Vec<MenuRow> {
+pub(crate) fn app_menu_entries() -> Vec<MenuEntry> {
     vec![
-        MenuRow::new(live_id!(shortcuts), "Keyboard shortcuts"),
-        MenuRow::new(live_id!(preferences), "Preferences…"),
-        MenuRow::separator(),
-        MenuRow::new(live_id!(report_bug), "Report a bug…"),
-        MenuRow::separator(),
-        MenuRow::section(&format!("Reco {}", version_line())),
+        MenuEntry::Item(live_id!(shortcuts), "Keyboard shortcuts".into()),
+        MenuEntry::Item(live_id!(preferences), "Preferences…".into()),
+        MenuEntry::Separator,
+        MenuEntry::Item(live_id!(report_bug), "Report a bug…".into()),
+        MenuEntry::Separator,
+        MenuEntry::Section(format!("Reco {}", version_line())),
     ]
 }
 
@@ -38,10 +39,35 @@ const FAKE_RELEASE: &str = "RECO_DESKTOP_FAKE_RELEASE";
 const UPDATE_NOTICE: Duration = Duration::from_secs(30);
 
 impl App {
+    /// Show `entries` in the menu whose list is `list`.
+    pub(crate) fn set_menu(&mut self, cx: &mut Cx, list: &[LiveId], entries: Vec<MenuEntry>) {
+        if let Some(mut menu) = self.ui.widget(cx, list).borrow_mut::<RecoMenuList>() {
+            menu.set_entries(cx, entries);
+        }
+    }
+
+    /// The item picked in the menu whose list is `list`; the menu closes.
+    pub(crate) fn menu_pick(
+        &mut self,
+        cx: &mut Cx,
+        actions: &Actions,
+        menu: &[LiveId],
+        list: &[LiveId],
+    ) -> Option<LiveId> {
+        let uid = self.ui.widget(cx, list).widget_uid();
+        let picked = actions
+            .filter_widget_actions_cast::<MenuListAction>(uid)
+            .find_map(|action| match action {
+                MenuListAction::Picked(id) => Some(id),
+                MenuListAction::None => None,
+            })?;
+        self.ui.popover(cx, menu).close(cx);
+        Some(picked)
+    }
+
     /// The app menu's commands.
     pub(crate) fn app_menu_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        let owner = self.ui.menu_button(cx, ids!(app_menu)).menu_owner();
-        match menu_picked(actions, owner) {
+        match self.menu_pick(cx, actions, ids!(app_menu), ids!(app_menu_list)) {
             Some(id) if id == live_id!(preferences) => self.open_preferences(cx),
             Some(id) if id == live_id!(shortcuts) => self.open_shortcuts(cx),
             Some(id) if id == live_id!(report_bug) => self.open_bug_report(cx),

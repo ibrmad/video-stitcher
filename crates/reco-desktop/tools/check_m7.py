@@ -151,7 +151,7 @@ def shows(app, widget_id, colour):
 def menu(app, row):
     """Pick the app menu's row `row` (1 = the first) with the keyboard."""
     click(app, "app_menu")
-    wait_for(lambda: app.rect("menus"), 5)
+    wait_for(lambda: app.rect("app_menu_list"), 5)
     time.sleep(0.2)
     for _ in range(row):
         app.key("down")

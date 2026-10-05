@@ -11,6 +11,7 @@ use reco_app::project::{Camera, Stage};
 use reco_app::settings::RecentSession;
 use reco_app::toasts::Severity;
 
+use crate::ui::menu_list::MenuEntry;
 use crate::App;
 
 /// A recent session's menu row id.
@@ -20,25 +21,28 @@ fn recent_id(index: usize) -> LiveId {
 
 impl App {
     /// The Recent menu's rows: each session, then Clear.
-    pub(crate) fn recent_rows(&self) -> Vec<MenuRow> {
+    pub(crate) fn recent_entries(&self) -> Vec<MenuEntry> {
         if self.settings.recent.is_empty() {
-            return vec![MenuRow::section("No recent files")];
+            return vec![MenuEntry::Section("No recent files".into())];
         }
-        let mut rows: Vec<MenuRow> = self
+        let mut rows: Vec<MenuEntry> = self
             .settings
             .recent
             .iter()
             .enumerate()
-            .map(|(index, session)| MenuRow::new(recent_id(index), &session.label()))
+            .map(|(index, session)| MenuEntry::Item(recent_id(index), session.label()))
             .collect();
-        rows.push(MenuRow::separator());
-        rows.push(MenuRow::new(live_id!(clear_recent), "Clear recent files"));
+        rows.push(MenuEntry::Separator);
+        rows.push(MenuEntry::Item(
+            live_id!(clear_recent),
+            "Clear recent files".into(),
+        ));
         rows
     }
 
     pub(crate) fn refresh_recent(&mut self, cx: &mut Cx) {
-        let rows = self.recent_rows();
-        self.ui.menu_button(cx, ids!(recent_menu)).set_rows(rows);
+        let entries = self.recent_entries();
+        self.set_menu(cx, ids!(recent_menu_list), entries);
     }
 
     /// The preview opened: remember this pair and its calibration.
@@ -57,19 +61,14 @@ impl App {
 
     /// Open the Recent menu below `anchor` (the next-step card's button).
     fn open_recent_menu(&mut self, cx: &mut Cx, anchor: Rect) {
-        let owner = self.ui.menu_button(cx, ids!(recent_menu)).menu_owner();
-        cx.action(MenuAction::Open {
-            owner,
-            rows: self.recent_rows(),
-            anchor,
-            place: MenuPlace::Below,
-        });
+        self.refresh_recent(cx);
+        self.ui.popover(cx, ids!(recent_menu)).open_at(cx, anchor);
     }
 
     /// The Recent menu's picks and the next-step card's "Recent files…".
     pub(crate) fn recent_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        let owner = self.ui.menu_button(cx, ids!(recent_menu)).menu_owner();
-        if let Some(picked) = menu_picked(actions, owner) {
+        if let Some(picked) = self.menu_pick(cx, actions, ids!(recent_menu), ids!(recent_menu_list))
+        {
             if picked == live_id!(clear_recent) {
                 self.settings.clear_recent();
                 self.save_settings();

@@ -17,9 +17,8 @@ script_mod! {
         padding: Inset{left: theme.reco_caption_inset right: theme.reco_gap_s}
         // The app menu holds what Rerun keeps there: help, preferences, the
         // bug report and the version.
-        app_menu := MenuButton{
-            place: Below
-            button := RecoFlatButton{
+        app_menu := RecoMenu{
+            app_menu_button := RecoFlatButton{
                 text: "Reco"
                 padding: Inset{left: theme.reco_gap_s right: theme.reco_gap_s}
                 spacing: theme.reco_gap_xs
@@ -27,6 +26,7 @@ script_mod! {
                 icon_end_walk: Walk{width: theme.reco_icon_small height: theme.reco_icon_small}
                 draw_icon_end +: {svg: crate_resource("self:resources/icons/chevron_down.svg") color: theme.reco_text_subdued}
             }
+            content +: {app_menu_list := RecoMenuList{}}
         }
         project_name := RecoSubdued{text: "No videos yet"}
         View{width: Fill height: Fit}

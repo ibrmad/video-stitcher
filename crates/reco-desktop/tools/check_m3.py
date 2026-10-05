@@ -334,7 +334,7 @@ def check_recent():
         expect(text_of(app, "next_secondary") == "Recent files…",
                f"recent: the card offers Recent files ({text_of(app, 'next_secondary')})")
         click(app, "next_secondary")
-        opened = wait_for(lambda: app.rect("menus"), 5)
+        opened = wait_for(lambda: app.rect("recent_menu_list"), 5)
         expect(bool(opened), "recent: Recent files opens the menu")
         app.key("down")
         app.key("return")
@@ -342,7 +342,7 @@ def check_recent():
         expect(text_of(app, "left_files") == "1 file · 1:00" and text_of(app, "calibration_status") == "Calibrated",
                f"recent: with both cameras and the calibration ({text_of(app, 'left_files')}, {text_of(app, 'calibration_status')})")
         click(app, "recent_menu")
-        wait_for(lambda: app.rect("menus"), 5)
+        wait_for(lambda: app.rect("recent_menu_list"), 5)
         app.key("up")
         app.key("return")
         time.sleep(0.5)

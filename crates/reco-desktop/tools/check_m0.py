@@ -425,12 +425,40 @@ def check_toggles():
         for menu in ("app_menu", "recent_menu"):
             click(app, app.rect(menu))
             time.sleep(0.3)
-            opened = app.rect("menus")
+            opened = app.rect(f"{menu}_list")
             expect(opened is not None, f"menu: `{menu}` opens a menu ({opened})")
             app.grab(os.path.join(OUT, f"ready-{menu}.png"))
             app.key("Escape")
             time.sleep(0.3)
         expect(app.errors() == [], "menu: no errors in the app log")
+
+
+def check_menus():
+    """The app menu is Reco's own: its text starts on the menu's 14 pt
+    content edge (Makepad's menu kept an empty mark column), a click on an
+    item does it and closes the menu, and Escape closes it."""
+    with launch((1280, 820), "ready") as app:
+        click(app, app.rect("app_menu"))
+        time.sleep(0.4)
+        menu = app.rect("app_menu_list")
+        expect(menu is not None, "menus: the app menu opens")
+        items = {i.get("t"): i["r"] for i in app.snap("label") if i.get("i") == "label"}
+        first = items.get("Keyboard shortcuts")
+        expect(menu is not None and first is not None and abs(first[0] - menu[0] - 14) <= 1,
+               f"menus: the text starts on the content edge ({first} in {menu})")
+        app.grab(os.path.join(OUT, "app-menu.png"))
+        app.get("/click", x=first[0] + 20, y=first[1] + first[3] / 2, wait=1)
+        time.sleep(0.5)
+        expect(app.rect("shortcuts_close") is not None and app.rect("app_menu_list") is None,
+               "menus: a click on an item does it and closes the menu")
+        app.key("Escape")
+        time.sleep(0.3)
+        click(app, app.rect("app_menu"))
+        time.sleep(0.4)
+        app.key("Escape")
+        time.sleep(0.4)
+        expect(app.rect("app_menu_list") is None, "menus: Escape closes it")
+        expect(app.errors() == [], "menus: no errors in the app log")
 
 
 def check_dropdowns():
@@ -462,6 +490,7 @@ def main():
             check_state(size, state)
     check_adjust_edges()
     check_toggles()
+    check_menus()
     check_dropdowns()
     if FAILURES:
         print(f"\nModule 0 check FAILED: {len(FAILURES)} failure(s):")

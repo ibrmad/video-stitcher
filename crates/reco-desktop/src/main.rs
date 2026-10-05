@@ -61,6 +61,7 @@ use reco_app::roi::EditorJob;
 use reco_app::settings::{self, DesktopSettings};
 use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
+use ui::menu_list::MenuEntry;
 use ui::panorama::RecoPanorama;
 use ui::time_panel::RecoTimeRuler;
 
@@ -154,13 +155,13 @@ enum Step {
     Done,
 }
 
-/// Recently used camera pairs (Module 3 fills this from settings).
-fn sample_recent_rows() -> Vec<MenuRow> {
+/// Recently used camera pairs, for the look preview.
+fn sample_recent_entries() -> Vec<MenuEntry> {
     vec![
-        MenuRow::new(live_id!(recent_1), "GX010120 + GX010092"),
-        MenuRow::new(live_id!(recent_2), "GX010087 + GX010061"),
-        MenuRow::separator(),
-        MenuRow::new(live_id!(clear_recent), "Clear recent files"),
+        MenuEntry::Item(live_id!(recent_1), "GX010120 + GX010092".into()),
+        MenuEntry::Item(live_id!(recent_2), "GX010087 + GX010061".into()),
+        MenuEntry::Separator,
+        MenuEntry::Item(live_id!(clear_recent), "Clear recent files".into()),
     ]
 }
 
@@ -646,12 +647,8 @@ impl MatchEvent for App {
         self.settings = settings::load();
         self.apply_settings(cx);
         self.show_calibration_defaults(cx);
-        self.ui
-            .menu_button(cx, ids!(app_menu))
-            .set_rows(help_view::app_menu_rows());
-        self.ui
-            .menu_button(cx, ids!(recent_menu))
-            .set_rows(sample_recent_rows());
+        self.set_menu(cx, ids!(app_menu_list), help_view::app_menu_entries());
+        self.set_menu(cx, ids!(recent_menu_list), sample_recent_entries());
         // A density first, so the size below is in its points.
         if let Some(dpi) = self.args.dpi {
             if let Some(window) = self.ui.window(cx, ids!(main_window)).window_id() {

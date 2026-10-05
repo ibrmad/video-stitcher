@@ -43,9 +43,9 @@ script_mod! {
             setup_header := RecoStrong{text: "Setup"}
             View{width: Fill height: Fit}
             Tip{text: "Recent files"
-                recent_menu := MenuButton{
-                    place: Below
-                    button := RecoRowIcon{draw_icon +: {svg: crate_resource("self:resources/icons/history.svg")}}
+                recent_menu := RecoMenu{
+                    recent_button := RecoRowIcon{draw_icon +: {svg: crate_resource("self:resources/icons/history.svg")}}
+                    content +: {recent_menu_list := RecoMenuList{}}
                 }
             }
         }
