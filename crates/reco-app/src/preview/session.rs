@@ -738,4 +738,22 @@ mod tests {
             "a refused offset changes nothing"
         );
     }
+
+    #[test]
+    fn tilt_and_layout_change_the_picture() {
+        let Some(mut session) = open_fast((320, 180)) else { return };
+        // Looking straight ahead the render pitch cancels the tilt exactly
+        // (rig_correction::render_pitch): it shows once the view turns.
+        session.pan(200.0, 0.0);
+        for _ in 0..80 {
+            session.smooth(FRAME);
+        }
+        let before = render_to_cpu(&mut session);
+        session.tune(Tuning::Tilt(18.0));
+        let tilted = render_to_cpu(&mut session);
+        assert_ne!(before, tilted, "tilting the rig changes the picture");
+        session.tune(Tuning::Tilt(0.0));
+        session.tune(Tuning::Intersect(0.3));
+        assert_ne!(before, render_to_cpu(&mut session), "the overlap changes the picture");
+    }
 }
