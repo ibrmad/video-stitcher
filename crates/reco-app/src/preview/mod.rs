@@ -2,6 +2,10 @@
 //! Reco's renderer, and the worker thread that owns it.
 
 pub mod clock;
+#[cfg(test)]
+pub(crate) mod fixtures;
 pub mod playback;
+pub mod readback;
+pub mod session;
 pub mod slots;
 pub mod view;
