@@ -325,7 +325,10 @@ def check_record():
             told = body.split()[0] if body else ""
             expect(told == str(frames), f"record: the toast counts the frames written ({body!r} vs {frames})")
         # Three short recordings: six notices in a few seconds, all still due.
+        # Each starts in a new second: recordings are named by the second,
+        # and notices with the same words merge into one.
         for _ in range(3):
+            time.sleep(1.0 - time.time() % 1.0 + 0.05)
             app.click_id("record_button")
             wait_for(lambda: app.rect("recording_badge"), 10)
             app.click_id("record_button")
