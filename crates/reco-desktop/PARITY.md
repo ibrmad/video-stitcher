@@ -313,20 +313,60 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
 
 ## Module 6: export (§2.11, §7)
 
-- [ ] Output path with Save to… (adds `.mp4` when there is no extension).
-- [ ] Resolution (1080p, 720p, 2K, 4K) with the size shown; codec (from the
-      probed list; New: no fixed indices); quality.
-- [ ] Processing range: start and end as sliders and text, duration, and an
-      empty-range warning.
-- [ ] Record replay; save AI debug events.
+Evidence for this module: `tools/check_m6.py` (checks `export`, `cancel`
+and `rules`, on the fast pair linked into a temporary folder, the Save
+dialog answered through `RECO_DESKTOP_DIALOG_ANSWERS`, the written file
+read back with ffprobe); the unit tests (`cargo test -p reco-app -p
+reco-desktop`); and screenshots in `target/desktop-checks/m6/`. AI
+tracking is Module 6b: `reco-autocam` is being changed in another branch.
+
+- [x] Output path with Save to… (adds `.mp4` when there is no extension).
+      Evidence: "export: the file defaults to beside the left video",
+      "export: Save to… sets the file, with .mp4 added";
+      `outputs_get_an_mp4_extension`, `outputs_are_checked_before_exporting`.
+      (New: a missing folder, a folder, a file that isn't MP4, MOV or MKV,
+      or one of the input videos is refused with the reason: "rules: an
+      input video is refused".)
+- [x] Resolution (1080p, 720p, 2K, 4K) with the size shown; codec (from the
+      probed list; New: no fixed indices); quality. Evidence: "export:
+      1080p by default", "export: the choices are remembered";
+      `this_machine_encodes_h264`, `sizes_and_codecs_have_names`,
+      `export_defaults_match_the_slint_app`.
+- [x] Processing range: start and end as sliders and text, duration, and an
+      empty-range warning. Evidence: "export: the range comes from
+      --export-range", "export: the time fields show the range", "export:
+      the typed end counts, about three seconds at 30 fps", "rules: both
+      times apply together", "rules: the start stops at the end", "rules: an
+      empty range says so", "rules: an empty range can't be exported",
+      "rules: a time that doesn't read is put back";
+      `the_range_stays_inside_the_videos`, `the_start_never_passes_the_end`,
+      `both_ends_move_at_once`, `a_range_keeps_its_place_when_the_length_changes`,
+      `typed_times_read_as_seconds`, `an_empty_range_fails_at_once`. (New: a
+      time typed but not entered still counts when Export is pressed.)
+- [x] Record replay; save AI debug events. Evidence:
+      `the_replay_and_events_files_go_beside_the_export` (the sheet's two
+      boxes pass them to the job).
 - [ ] AI tracking: Enable (when available) and status; model picker with a
       missing-model warning; tracking mode; detect every N frames; style
       preset; framing; pitch lock; lookahead with VRAM risk zones; advanced
       panner (cluster mode, ball weight, cluster bandwidth, dead zone, FOV
       tight/default/wide).
-- [ ] Error text, Cancel, Start Export with its enable rules.
-- [ ] During an export: preview paused overlay, progress, Cancel. Afterwards
+- [x] Error text, Cancel, Start Export with its enable rules. Evidence:
+      "rules: an input video is refused", "rules: the sheet stays open to
+      fix it", "rules: no file, no Export", "rules: editing the file clears
+      the reason", "rules: Escape closes the sheet".
+- [x] During an export: preview paused overlay, progress, Cancel. Afterwards
       the preview is rebuilt. (New: the playback position is kept.)
+      Evidence: "export: the card shows over the picture", "export:
+      playback and the ruler are locked while exporting", "export: it
+      finishes", "export: a notice says so", "export: the preview stays where
+      it was", "export: playback and the ruler come back", "export: Show in
+      folder offers the file", "cancel: it stops", "cancel: a notice says
+      so", "cancel: playback comes back";
+      `exporting_two_seconds_writes_a_playable_file`,
+      `cancelling_an_export_stops_it`, `a_snapshot_carries_the_tuning`,
+      `progress_reads_in_frames_and_time`. The preview is paused rather
+      than rebuilt, so unsaved tuning and the position both stay.
 
 ## Module 7: preferences and help (§2.8–§2.10, §8)
 

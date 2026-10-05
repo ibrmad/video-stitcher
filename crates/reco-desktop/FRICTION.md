@@ -69,3 +69,20 @@ calibrates each camera's first file, as the Slint app did. A recalibration
 starts at the preview's time only while it falls inside both first files.
 The ask: calibrate a chained input at a stitched-timeline time.
 
+## A cancelled stitch job reports success (Module 6)
+
+`StitchJob::run` returns `Ok` with the frames written when its interrupt
+flag is set: `session.run` stops early and the file is finished normally.
+The Slint app therefore announced a cancelled export as complete. The app
+reads its own cancel flag to tell the two apart. The ask: an
+`Interrupted { frames }` outcome (or a flag on `StitchResult`).
+
+## Labels blank once over a new modal (Module 6)
+
+On the first run of a freshly built binary, one capture taken while the
+export sheet was open showed every `Label` blank (in the sheet and in the
+panels behind it), while buttons, fields and dropdowns drew their text;
+moving the pointer brought them back. It has not happened again in seven
+runs, cold or warm. If it returns, suspect the first draw of the modal's
+new draw list (shader or glyph work) leaving the frame without a
+follow-up redraw.

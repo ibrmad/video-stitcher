@@ -142,6 +142,33 @@ Stitching and calibration (Module 4):
   thread into `$XDG_CACHE_HOME/reco/roi` (a sandboxed browser can't read
   `/tmp`) and opened in the browser; checks set `RECO_DESKTOP_NO_BROWSER`.
 
+Export (Module 6):
+
+- `reco_app::export` runs Reco's `StitchJob` on its own thread with a
+  cancel flag. It reports progress (at most ten times a second, the rate
+  counted from the first frame), finishing, and done, failed or
+  cancelled. The output is checked first: a missing folder, a folder
+  itself, a file that isn't MP4, MOV or MKV (a calibration would be
+  overwritten), or one of the input videos (an export over its own source
+  would destroy it) is refused with the reason.
+- The export uses the live tuning: the worker answers `Snapshot` with the
+  calibration as tuned and the colour match, and the job starts from it.
+- The preview pauses for an export and stays where it was. Closing it
+  would drop the Adjust panel's unsaved changes, and a paused preview
+  neither decodes nor renders. Playback (buttons, keys and the ruler) is
+  locked until the export ends; the ruler keeps showing the playhead.
+- The encoders are probed once at startup on a thread; the codec list
+  offers what this machine can encode (H.264 until the probe answers).
+- The sheet is Makepad's `Modal`: it dims the window, keeps the keyboard,
+  and closes on Escape or a press outside. Its range sliders run over the
+  match in whole seconds (Makepad's slider has no runtime range); the
+  time fields take "90", "1:30" or "1:02:03", and count when Export is
+  pressed even if not entered (buttons take no focus). The range belongs
+  to the match: a new sync offset keeps it in place. Size, codec, quality,
+  replay and events are remembered in `desktop.json` for the next export.
+- Cancel keeps the part written (StitchJob closes the file properly) and
+  the notice names it.
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
