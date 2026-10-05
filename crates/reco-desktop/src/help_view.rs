@@ -68,9 +68,9 @@ impl App {
     /// The app menu's commands.
     pub(crate) fn app_menu_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         match self.menu_pick(cx, actions, ids!(app_menu), ids!(app_menu_list)) {
-            Some(id) if id == live_id!(preferences) => self.open_preferences(cx),
-            Some(id) if id == live_id!(shortcuts) => self.open_shortcuts(cx),
-            Some(id) if id == live_id!(report_bug) => self.open_bug_report(cx),
+            Some(live_id!(preferences)) => self.open_preferences(cx),
+            Some(live_id!(shortcuts)) => self.open_shortcuts(cx),
+            Some(live_id!(report_bug)) => self.open_bug_report(cx),
             Some(id) => log!("app menu: no command for {id}"),
             None => {}
         }
