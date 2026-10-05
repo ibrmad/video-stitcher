@@ -23,6 +23,40 @@ pub struct DesktopSettings {
     pub recording_quality: String,
     /// Where recordings go; beside the left video when unset or missing.
     pub recording_folder: Option<PathBuf>,
+    /// Recently opened sessions, newest first.
+    pub recent: Vec<RecentSession>,
+}
+
+/// Sessions the Recent menu keeps.
+pub const MAX_RECENT: usize = 8;
+
+/// A camera pair and its calibration, as the Recent menu restores it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecentSession {
+    /// The left camera's files, in play order.
+    pub left: Vec<PathBuf>,
+    /// The right camera's files.
+    pub right: Vec<PathBuf>,
+    /// The calibration.
+    pub calibration: Option<PathBuf>,
+}
+
+impl RecentSession {
+    /// "GX010120 + GX010092": each camera's first file, without extension.
+    pub fn label(&self) -> String {
+        let first = |files: &[PathBuf]| {
+            files
+                .first()
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().into_owned())
+        };
+        match (first(&self.left), first(&self.right)) {
+            (Some(l), Some(r)) => format!("{l} + {r}"),
+            (Some(one), None) | (None, Some(one)) => one,
+            (None, None) => String::new(),
+        }
+    }
 }
 
 impl Default for DesktopSettings {
@@ -31,6 +65,7 @@ impl Default for DesktopSettings {
             preview_aspect: PreviewAspect::Auto.name().into(),
             recording_quality: RecordingQuality::Balanced.name().into(),
             recording_folder: None,
+            recent: Vec::new(),
         }
     }
 }
@@ -49,6 +84,20 @@ impl DesktopSettings {
     /// The saved recording quality (Balanced when unknown).
     pub fn quality(&self) -> RecordingQuality {
         RecordingQuality::from_name(&self.recording_quality)
+    }
+
+    /// Put `session` first in the Recent menu: a session with the same files
+    /// is replaced, and only the newest [`MAX_RECENT`] are kept.
+    pub fn push_recent(&mut self, session: RecentSession) {
+        self.recent
+            .retain(|r| (&r.left, &r.right) != (&session.left, &session.right));
+        self.recent.insert(0, session);
+        self.recent.truncate(MAX_RECENT);
+    }
+
+    /// Forget every recent session.
+    pub fn clear_recent(&mut self) {
+        self.recent.clear();
     }
 
     /// Remember `quality`.
@@ -96,6 +145,39 @@ mod tests {
         .unwrap();
         assert_eq!(s.aspect(), PreviewAspect::Auto);
         assert_eq!(s.quality(), RecordingQuality::Balanced);
+    }
+
+    fn session(left: &str, right: &str) -> RecentSession {
+        RecentSession {
+            left: vec![PathBuf::from(format!("/m/{left}.MP4"))],
+            right: vec![PathBuf::from(format!("/m/{right}.MP4"))],
+            calibration: None,
+        }
+    }
+
+    #[test]
+    fn recent_sessions_are_newest_first_without_repeats() {
+        let mut s = DesktopSettings::default();
+        for i in 0..10 {
+            s.push_recent(session(&format!("L{i}"), "R"));
+        }
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        assert_eq!(s.recent[0].label(), "L9 + R");
+        let mut again = session("L5", "R");
+        again.calibration = Some("/m/c.json".into());
+        s.push_recent(again.clone());
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        assert_eq!(s.recent[0], again);
+        assert_eq!(s.recent.iter().filter(|r| r.label() == "L5 + R").count(), 1);
+        s.clear_recent();
+        assert!(s.recent.is_empty());
+    }
+
+    #[test]
+    fn a_settings_file_without_sessions_still_loads() {
+        let s: DesktopSettings = serde_json::from_str(r#"{"preview_aspect":"16:9"}"#).unwrap();
+        assert!(s.recent.is_empty());
+        assert_eq!(RecentSession::default().label(), "");
     }
 
     #[test]
