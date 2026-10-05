@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
+use reco_core::calibration::FieldRoi;
 use reco_core::gpu::GpuContext;
 use reco_core::wgpu;
 use reco_io::stitch_job::InputPath;
@@ -29,7 +30,9 @@ use super::readback::read_bgra;
 use super::recorder::Recording;
 use super::session::{OUTPUT_FORMAT, PreviewSession};
 use super::slots::{RING_SLOTS, SlotRing};
+use super::tuning::{CalibrationValues, Tuning};
 use super::view::should_resize;
+use crate::files::save_atomically;
 use crate::recording::RecordingQuality;
 
 /// Commands queued before the UI's sends start failing.
@@ -135,6 +138,20 @@ pub enum PreviewCommand {
     /// Close the open videos (a recording is finished first). The thread
     /// and its texture ring stay for the next `Open`.
     Close,
+    /// A change from the Adjust panel.
+    Tune(Tuning),
+    /// Play the cameras this many frames apart.
+    SetSyncOffset {
+        /// Frames (positive: the right camera started first).
+        frames: i64,
+    },
+    /// Set or clear the field outline.
+    SetFieldRoi(Option<FieldRoi>),
+    /// Write the tuned calibration to `path`.
+    SaveCalibration {
+        /// The file.
+        path: PathBuf,
+    },
     /// Panic on the render thread (tests of the crash report).
     #[cfg(test)]
     Crash,
@@ -184,6 +201,13 @@ pub enum PreviewEvent {
         /// `width * height` pixels.
         data: Vec<u32>,
     },
+    /// The live calibration's values (after opening and after every
+    /// change).
+    Calibration(CalibrationValues),
+    /// The tuned calibration was written here.
+    CalibrationSaved(PathBuf),
+    /// It could not be written; why.
+    CalibrationSaveFailed(String),
     /// A recording started.
     RecordingStarted {
         /// The file being written.
@@ -506,6 +530,16 @@ impl Worker {
             } => self.start_recording(&path, size, quality),
             PreviewCommand::StopRecording => self.finish_recording(),
             PreviewCommand::Close => self.close(),
+            PreviewCommand::Tune(tuning) => {
+                self.with_session(|s| s.tune(tuning));
+                self.send_calibration();
+            }
+            PreviewCommand::SetSyncOffset { frames } => self.set_sync_offset(frames),
+            PreviewCommand::SetFieldRoi(roi) => {
+                self.with_session(|s| s.set_field_roi(roi));
+                self.send_calibration();
+            }
+            PreviewCommand::SaveCalibration { path } => self.save_calibration(&path),
             PreviewCommand::Quit => self.quit = true,
         }
     }
@@ -610,6 +644,70 @@ impl Worker {
         }
     }
 
+    /// Measure the files on a short-lived thread: the lanes and the exact
+    /// length arrive later (`collect_lanes`).
+    fn start_lanes_probe(&mut self) {
+        let Some(session) = self.session.as_ref() else {
+            return;
+        };
+        let (left, right) = session.inputs();
+        let (sync_offset, fps) = (session.sync_offset(), session.playback().fps());
+        let (tx, rx) = mpsc::channel();
+        let probe = std::thread::Builder::new()
+            .name("reco-probe".into())
+            .spawn(move || {
+                let _ = tx.send(lanes::lanes(
+                    &lanes::probe(&left),
+                    &lanes::probe(&right),
+                    sync_offset,
+                    fps,
+                ));
+            });
+        self.lanes_rx = probe.is_ok().then_some(rx);
+    }
+
+    /// Tell the UI the live calibration's values.
+    fn send_calibration(&self) {
+        if let Some(session) = self.session.as_ref() {
+            self.out.send(PreviewEvent::Calibration(session.values()));
+        }
+    }
+
+    /// Play the cameras `frames` apart; the lanes are measured again.
+    fn set_sync_offset(&mut self, frames: i64) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        match session.set_sync_offset(frames) {
+            Ok(()) => {
+                self.start_lanes_probe();
+                self.dirty = true;
+                self.send_calibration();
+            }
+            Err(e) => self.stop(e.to_string()),
+        }
+    }
+
+    /// Write the tuned calibration to `path` (atomically).
+    fn save_calibration(&mut self, path: &std::path::Path) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        let json = session.calibration_to_save().to_json_pretty();
+        match save_atomically(path, &json) {
+            Ok(()) => {
+                session.mark_saved();
+                self.out
+                    .send(PreviewEvent::CalibrationSaved(path.to_path_buf()));
+                self.send_calibration();
+            }
+            Err(e) => self.out.send(PreviewEvent::CalibrationSaveFailed(format!(
+                "couldn't write {}: {e}",
+                path.display()
+            ))),
+        }
+    }
+
     /// Drop the open videos, finishing a recording first. The ring stays:
     /// the UI may still show one of its textures until the next open.
     fn close(&mut self) {
@@ -673,22 +771,9 @@ impl Worker {
                     },
                     gpu.gpu_name()
                 );
-                let (tx, rx) = mpsc::channel();
-                let (left, right) = (left.clone(), right.clone());
-                let (sync_offset, fps) = (session.sync_offset(), session.playback().fps());
-                let probe =
-                    std::thread::Builder::new()
-                        .name("reco-probe".into())
-                        .spawn(move || {
-                            let _ = tx.send(lanes::lanes(
-                                &lanes::probe(&left),
-                                &lanes::probe(&right),
-                                sync_offset,
-                                fps,
-                            ));
-                        });
-                self.lanes_rx = probe.is_ok().then_some(rx);
                 self.session = Some(session);
+                self.start_lanes_probe();
+                self.send_calibration();
                 self.retire_ring();
                 self.problem = None;
                 self.dirty = true;
@@ -1334,5 +1419,84 @@ mod tests {
         let shown = wait_for(&worker, 10, |e| matches!(e, PreviewEvent::Pixels { .. }));
         assert!(shown.is_some());
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// The next `Calibration` event that `accept`s.
+    fn calibration_where(
+        worker: &PreviewWorker,
+        accept: impl Fn(&CalibrationValues) -> bool,
+    ) -> Option<CalibrationValues> {
+        match wait_for(
+            worker,
+            10,
+            |e| matches!(e, PreviewEvent::Calibration(v) if accept(v)),
+        ) {
+            Some(PreviewEvent::Calibration(values)) => Some(values),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn tuning_is_reported_with_its_values() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        assert!(
+            calibration_where(&worker, |v| !v.dirty).is_some(),
+            "the loaded values come first"
+        );
+        worker.send(PreviewCommand::Tune(Tuning::Blend(0.2)));
+        let tuned = calibration_where(&worker, |v| v.dirty);
+        assert!(tuned.is_some_and(|v| (v.blend - 0.2).abs() < 1e-6));
+    }
+
+    #[test]
+    fn saving_writes_the_file_and_clears_the_change() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        worker.send(PreviewCommand::Tune(Tuning::Tilt(2.0)));
+        assert!(calibration_where(&worker, |v| v.dirty).is_some());
+        let path =
+            std::env::temp_dir().join(format!("reco-app-worker-cal-{}.json", std::process::id()));
+        worker.send(PreviewCommand::SaveCalibration { path: path.clone() });
+        let saved = wait_for(&worker, 10, |e| {
+            matches!(
+                e,
+                PreviewEvent::CalibrationSaved(_) | PreviewEvent::CalibrationSaveFailed(_)
+            )
+        });
+        assert!(
+            matches!(&saved, Some(PreviewEvent::CalibrationSaved(p)) if *p == path),
+            "{saved:?}"
+        );
+        assert!(
+            calibration_where(&worker, |v| !v.dirty).is_some(),
+            "saved: nothing unsaved"
+        );
+        let back = reco_core::calibration::MatchCalibration::from_file(&path).unwrap();
+        assert!((back.rig_tilt - 2f64.to_radians()).abs() < 1e-6);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_new_sync_offset_brings_new_lanes() {
+        let worker = readback_worker();
+        if !open_fast(&worker) {
+            return;
+        }
+        assert!(wait_for(&worker, 30, |e| matches!(e, PreviewEvent::Lanes(_))).is_some());
+        worker.send(PreviewCommand::SetSyncOffset { frames: 30 });
+        assert!(calibration_where(&worker, |v| v.sync_offset == 30).is_some());
+        let lanes = wait_for(&worker, 30, |e| matches!(e, PreviewEvent::Lanes(_)));
+        let Some(PreviewEvent::Lanes(lanes)) = lanes else {
+            panic!("{lanes:?}")
+        };
+        assert!(
+            (lanes.length - 59.0).abs() < 0.5,
+            "30 frames at 30 fps less: {lanes:?}"
+        );
     }
 }

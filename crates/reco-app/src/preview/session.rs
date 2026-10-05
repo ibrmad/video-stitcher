@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use reco_control::pose_control::{PoseControl, PoseControlConfig};
 use reco_control::{ControlIntent, IntentTranslator, PoseIntent};
-use reco_core::calibration::MatchCalibration;
+use reco_core::calibration::{FieldRoi, MatchCalibration, PlaneLayout};
 use reco_core::detect::director::ViewportPosition;
 use reco_core::gpu::GpuContext;
 use reco_core::render::renderer::InputFormat;
@@ -18,6 +18,7 @@ use reco_io::stitch_job::InputPath;
 
 use super::playback::Playback;
 use super::recorder::{Recorder, Recording};
+use super::tuning::{CalibrationValues, Tuning};
 use crate::recording::RecordingQuality;
 
 /// The pipeline's output and the ring's format (never sRGB: the shader
@@ -49,6 +50,8 @@ pub enum SessionError {
     NoFrame,
     /// Recording failed.
     Record(String),
+    /// The sync offset could not change.
+    Sync(String),
 }
 
 impl std::fmt::Display for SessionError {
@@ -59,6 +62,7 @@ impl std::fmt::Display for SessionError {
             Self::Render(e) => write!(f, "The preview failed to render: {e}"),
             Self::NoFrame => write!(f, "No frame decoded yet"),
             Self::Record(e) => write!(f, "Couldn't record: {e}"),
+            Self::Sync(e) => write!(f, "Couldn't change the sync offset: {e}"),
         }
     }
 }
@@ -72,6 +76,14 @@ pub struct PreviewSession {
     pose: PoseControl,
     size: (u32, u32),
     recorder: Option<Recorder>,
+    /// The inputs, for reopening at another sync offset.
+    inputs: (InputPath, InputPath),
+    /// The layout the calibration file had (Reset goes back to it).
+    loaded_layout: PlaneLayout,
+    sync_offset: i64,
+    field_roi: Option<FieldRoi>,
+    /// The calibration changed since it was loaded or saved.
+    dirty: bool,
 }
 
 fn pose_config() -> PoseControlConfig {
@@ -171,6 +183,8 @@ impl PreviewSession {
             .map_err(|e| SessionError::Source(e.to_string()))?;
         let (input_w, input_h) = playback.input_dimensions().ok_or(SessionError::NoFrame)?;
         check_first_frame(&playback, (input_w, input_h))?;
+        let loaded_layout = calibration.layout.clone();
+        let (sync_offset, field_roi) = (calibration.sync_offset, calibration.field_roi.clone());
         let renderer = build_renderer(gpu, calibration, (input_w, input_h), size, OUTPUT_FORMAT)?;
         let mut session = Self {
             renderer,
@@ -178,6 +192,11 @@ impl PreviewSession {
             pose: PoseControl::new(pose_config()),
             size,
             recorder: None,
+            inputs: (left.clone(), right.clone()),
+            loaded_layout,
+            sync_offset,
+            field_roi,
+            dirty: false,
         };
         session.clamp();
         Ok(session)
@@ -246,10 +265,109 @@ impl PreviewSession {
         self.size
     }
 
+    /// The two cameras' inputs.
+    pub fn inputs(&self) -> (InputPath, InputPath) {
+        self.inputs.clone()
+    }
+
     /// The calibration's sync offset in frames (positive: the right camera
     /// started first).
     pub fn sync_offset(&self) -> i64 {
-        self.renderer.calibration().sync_offset
+        self.sync_offset
+    }
+
+    /// Apply one change from the Adjust panel (kept inside its range).
+    pub fn tune(&mut self, tuning: Tuning) {
+        match tuning.clamped() {
+            Tuning::Blend(v) => self.renderer.set_blend_width(v),
+            Tuning::ColorMatch(on) => self.renderer.set_color_match(on),
+            Tuning::Tilt(degrees) => self.renderer.set_rig_tilt(degrees.to_radians()),
+            Tuning::Roll(degrees) => self.renderer.set_rig_roll(degrees.to_radians()),
+            Tuning::Intersect(v) => self.edit_layout(|l| l.intersect = v),
+            Tuning::AxisOffset(v) => self.edit_layout(|l| l.camera_axis_offset = v),
+            Tuning::XTy(v) => self.edit_layout(|l| l.x_ty = v),
+            Tuning::ResetLayout => self.renderer.update_layout(self.loaded_layout.clone()),
+        }
+        self.dirty = true;
+        // Tilt and the layout move the picture's edges: keep the view inside.
+        self.clamp();
+    }
+
+    /// What the Adjust panel shows.
+    pub fn values(&self) -> CalibrationValues {
+        let viewport = self.renderer.pipeline().viewport();
+        let layout = &self.renderer.calibration().layout;
+        CalibrationValues {
+            blend: viewport.blend_width,
+            color_match: viewport.color_match,
+            tilt: viewport.rig_tilt.to_degrees(),
+            roll: viewport.rig_roll.to_degrees(),
+            intersect: layout.intersect,
+            axis_offset: layout.camera_axis_offset,
+            x_ty: layout.x_ty,
+            sync_offset: self.sync_offset,
+            roi_points: self
+                .field_roi
+                .as_ref()
+                .map_or(0, |r| r.left.len() + r.right.len()),
+            dirty: self.dirty,
+        }
+    }
+
+    /// Play the cameras `frames` apart, from the same frame (blocking: it
+    /// reopens the videos). Refused when the offset is as long as the videos.
+    pub fn set_sync_offset(&mut self, frames: i64) -> Result<(), SessionError> {
+        let length = self.playback.total_frames().unwrap_or(u64::MAX);
+        if frames.unsigned_abs() >= length {
+            return Err(SessionError::Sync(format!(
+                "{frames} frames is as long as the videos"
+            )));
+        }
+        let at = self.playback.frame_index().saturating_sub(1);
+        let (left, right) = self.inputs.clone();
+        self.playback
+            .open(&left, &right, frames)
+            .map_err(|e| SessionError::Sync(e.to_string()))?;
+        self.sync_offset = frames;
+        self.dirty = true;
+        if at > 0 {
+            // Past the new end it stays at the start; the frame shown is
+            // still a real one.
+            let _ = self.playback.seek_to_frame(at);
+        }
+        Ok(())
+    }
+
+    /// Set or clear the field outline.
+    pub fn set_field_roi(&mut self, roi: Option<FieldRoi>) {
+        self.field_roi = roi;
+        self.dirty = true;
+    }
+
+    /// The calibration as tuned: the file's, with the live blend, tilt,
+    /// roll, sync offset and field outline folded in (the Slint app's save).
+    pub fn calibration_to_save(&self) -> MatchCalibration {
+        let mut out = self.renderer.calibration().clone();
+        let viewport = self.renderer.pipeline().viewport();
+        out.blend_width = viewport.blend_width;
+        out.rig_tilt = f64::from(viewport.rig_tilt);
+        out.rig_roll = f64::from(viewport.rig_roll);
+        out.sync_offset = self.sync_offset;
+        out.field_roi = self.field_roi.clone();
+        out
+    }
+
+    /// Change the layout through `edit` (the renderer recomputes its
+    /// coverage).
+    fn edit_layout(&mut self, edit: impl FnOnce(&mut PlaneLayout)) {
+        let mut layout = self.renderer.calibration().layout.clone();
+        edit(&mut layout);
+        self.renderer.update_layout(layout);
+    }
+
+    /// The calibration was saved: nothing is unsaved now.
+    pub fn mark_saved(&mut self) {
+        self.dirty = false;
     }
 
     /// Playback, for the worker's tick and transport commands.
@@ -520,5 +638,104 @@ mod tests {
             .render(&target.create_view(&Default::default()))
             .expect("render");
         crate::preview::readback::read_bgra(&gpu, &target, w, h).expect("readback")
+    }
+
+    fn open_fast(size: (u32, u32)) -> Option<PreviewSession> {
+        let (Some((left, right, cal)), Some(gpu)) = (fixtures::fast_set(), gpu()) else {
+            return None;
+        };
+        PreviewSession::open(
+            gpu,
+            &InputPath::Single(left),
+            &InputPath::Single(right),
+            &cal,
+            size,
+        )
+        .ok()
+    }
+
+    #[test]
+    fn tuning_reaches_the_renderer_and_marks_it_changed() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        assert!(!session.values().dirty);
+        session.tune(Tuning::Blend(0.9));
+        session.tune(Tuning::Tilt(4.0));
+        session.tune(Tuning::ColorMatch(false));
+        let viewport = session.renderer.pipeline().viewport();
+        assert_eq!(viewport.blend_width, 0.3, "kept inside its range");
+        assert!((viewport.rig_tilt - 4f32.to_radians()).abs() < 1e-6);
+        assert!(!viewport.color_match);
+        let values = session.values();
+        assert!(values.dirty && values.blend == 0.3 && (values.tilt - 4.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn reset_restores_the_loaded_layout() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let loaded = session.values();
+        session.tune(Tuning::Intersect(0.9));
+        session.tune(Tuning::XTy(-0.05));
+        assert_eq!(session.renderer.calibration().layout.intersect, 0.9);
+        session.tune(Tuning::ResetLayout);
+        let reset = session.values();
+        assert_eq!(
+            (reset.intersect, reset.x_ty),
+            (loaded.intersect, loaded.x_ty)
+        );
+    }
+
+    #[test]
+    fn a_saved_calibration_reloads_with_the_tuned_values() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        session.tune(Tuning::Tilt(3.0));
+        session.tune(Tuning::Blend(0.2));
+        session.tune(Tuning::AxisOffset(0.25));
+        session.set_field_roi(Some(FieldRoi {
+            left: vec![[0.1, 0.2], [0.9, 0.2], [0.5, 0.8]],
+            right: vec![],
+        }));
+        let path = std::env::temp_dir().join(format!("reco-app-tuned-{}.json", std::process::id()));
+        let out = session.calibration_to_save();
+        std::fs::write(&path, out.to_json_pretty()).unwrap();
+        session.mark_saved();
+        assert!(!session.values().dirty);
+        let back = MatchCalibration::from_file(&path).expect("a calibration the preview reads");
+        assert!(
+            (back.rig_tilt - 3f64.to_radians()).abs() < 1e-6,
+            "{}",
+            back.rig_tilt
+        );
+        assert!((back.blend_width - 0.2).abs() < 1e-6);
+        assert_eq!(back.layout.camera_axis_offset, 0.25);
+        assert_eq!(back.field_roi.map(|r| r.left.len()), Some(3));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_sync_offset_moves_the_cameras_within_the_videos() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        session.playback_mut().seek_to_frame(100).unwrap();
+        session.set_sync_offset(30).expect("30 frames fit in 60 s");
+        assert_eq!(session.sync_offset(), 30);
+        assert_eq!(
+            session.playback().frame_index(),
+            101,
+            "the same frame stays on screen"
+        );
+        assert!(session.values().dirty);
+        assert!(session.set_sync_offset(1_000_000).is_err());
+        assert_eq!(
+            session.sync_offset(),
+            30,
+            "a refused offset changes nothing"
+        );
     }
 }
