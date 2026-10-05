@@ -5,6 +5,7 @@
 //! the stitched view into textures a UI can show without a copy.
 
 pub mod preview;
+pub mod project;
 pub mod recording;
 pub mod reveal;
 pub mod settings;
