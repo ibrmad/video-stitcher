@@ -652,6 +652,12 @@ impl MatchEvent for App {
         self.ui
             .menu_button(cx, ids!(recent_menu))
             .set_rows(sample_recent_rows());
+        // A density first, so the size below is in its points.
+        if let Some(dpi) = self.args.dpi {
+            if let Some(window) = self.ui.window(cx, ids!(main_window)).window_id() {
+                cx.set_window_dpi_override(window, Some(dpi));
+            }
+        }
         if let Some((w, h)) = self.args.window_size {
             self.ui
                 .window(cx, ids!(main_window))

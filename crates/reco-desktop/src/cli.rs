@@ -25,6 +25,11 @@ pub struct Args {
     pub toast_demo: bool,
     /// Log how long drawing takes, `--perf-log` (checks).
     pub perf_log: bool,
+    /// Draw at this many pixels a point whatever the display, `--dpi N`
+    /// (checks and design review: 1 is an external monitor, 2 Retina). The
+    /// window keeps its size on the display (`--window-size` is in the
+    /// display's points), so at a higher density it holds fewer points.
+    pub dpi: Option<f64>,
 }
 
 /// Camera files and calibration to open at startup (the Slint app's
@@ -135,6 +140,8 @@ impl Args {
                 out.perf_log = true;
             } else if let Some((_, value)) = flag_value(arg, &mut iter, &["--export-range"])? {
                 out.export_range = Some(parse_range(&value)?);
+            } else if let Some((_, value)) = flag_value(arg, &mut iter, &["--dpi"])? {
+                out.dpi = Some(parse_dpi(&value)?);
             } else if let Some((flag, value)) =
                 flag_value(arg, &mut iter, &["--left", "--right", "--calibration"])?
             {
@@ -212,6 +219,16 @@ fn parse_range(value: &str) -> Result<(f64, f64), String> {
     Ok((start, end))
 }
 
+/// Pixels a point, from 1 to 4.
+fn parse_dpi(value: &str) -> Result<f64, String> {
+    value
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|dpi| (1.0..=4.0).contains(dpi))
+        .ok_or_else(|| format!("--dpi `{value}` is not a pixel density from 1 to 4"))
+}
+
 /// Parse `WxH` (for example `1280x820`) into points.
 fn parse_size(value: &str) -> Result<(f64, f64), String> {
     let (w, h) = value
@@ -246,6 +263,15 @@ mod tests {
         assert_eq!(a.window_size, Some((720.0, 600.0)));
         let b = Args::parse(["--window-size=1920X1200"]).unwrap();
         assert_eq!(b.window_size, Some((1920.0, 1200.0)));
+    }
+
+    #[test]
+    fn parses_a_pixel_density() {
+        assert_eq!(Args::parse(["--dpi", "1"]).unwrap().dpi, Some(1.0));
+        assert_eq!(Args::parse(["--dpi=2"]).unwrap().dpi, Some(2.0));
+        assert_eq!(Args::parse(["--look-preview"]).unwrap().dpi, None);
+        assert!(Args::parse(["--dpi", "0"]).is_err(), "no pixels");
+        assert!(Args::parse(["--dpi", "x"]).is_err());
     }
 
     #[test]
