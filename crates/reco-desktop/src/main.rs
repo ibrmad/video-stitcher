@@ -44,6 +44,8 @@ script_mod! {
     use mod.draw.KeyCode
 
     startup() do #(App::script_component(vm)){
+        play_icon: crate_resource("self:resources/icons/play.svg")
+        pause_icon: crate_resource("self:resources/icons/pause.svg")
         ui: Root{
             main_window := Window{
                 window.title: "Reco"
@@ -174,6 +176,11 @@ pub struct App {
     /// The last input came from the pointer, not the keyboard.
     #[rust]
     pointer_input: bool,
+    /// The play button's two icons.
+    #[live]
+    play_icon: Option<ScriptHandleRef>,
+    #[live]
+    pause_icon: Option<ScriptHandleRef>,
     /// What the app remembers between runs (desktop.json).
     #[rust]
     settings: DesktopSettings,

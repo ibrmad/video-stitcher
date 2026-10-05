@@ -3,9 +3,11 @@
 
 use std::time::{Duration, Instant};
 
+use reco_app::preview::playback::PlayState;
 use reco_app::preview::worker::{PreviewInfo, PreviewWorker};
 
 use crate::cli::FileArgs;
+use crate::time_ruler::clock;
 
 /// One open live preview.
 pub struct Live {
@@ -17,10 +19,44 @@ pub struct Live {
     pub info: Option<PreviewInfo>,
     /// Frames taken so far.
     pub frame: u64,
-    /// Whether playing.
-    pub playing: bool,
+    /// Playing, paused or finished.
+    pub state: PlayState,
+    /// Whether playback has run since opening.
+    pub played: bool,
     /// Frames per second actually shown.
     pub fps: FpsMeter,
+    /// The last frame-rate reading while playing.
+    pub fps_reading: Option<f64>,
+    /// A failure to show in the status line until playback moves on.
+    pub problem: Option<String>,
+}
+
+impl Live {
+    /// A session that has just been asked to open `files`.
+    pub fn new(worker: PreviewWorker, files: FileArgs) -> Self {
+        Self {
+            worker,
+            files,
+            info: None,
+            frame: 0,
+            state: PlayState::Paused,
+            played: false,
+            fps: FpsMeter::default(),
+            fps_reading: None,
+            problem: None,
+        }
+    }
+
+    /// The status line for this session.
+    pub fn status(&self) -> String {
+        status_line(&StatusInputs {
+            state: self.info.as_ref().map(|_| self.state),
+            played: self.played,
+            fps: self.fps_reading,
+            recording: None,
+            problem: self.problem.as_deref(),
+        })
+    }
 }
 
 /// Counts frames and reports their rate once a second.
@@ -43,6 +79,45 @@ impl FpsMeter {
         self.since = Some(now);
         self.frames = 1;
         Some(rate)
+    }
+
+    /// Start over: the next reading waits a full second again.
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// What the status line is made from.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StatusInputs<'a> {
+    /// The play state; `None` before the videos opened.
+    pub state: Option<PlayState>,
+    /// Whether playback has run since opening ("Paused", not "Ready").
+    pub played: bool,
+    /// The last frame-rate reading while playing.
+    pub fps: Option<f64>,
+    /// Seconds recorded, while recording.
+    pub recording: Option<f64>,
+    /// A failure to show until playback moves on.
+    pub problem: Option<&'a str>,
+}
+
+/// The status line: recording, then a problem, then what playback does.
+pub fn status_line(s: &StatusInputs) -> String {
+    if let Some(secs) = s.recording {
+        return format!("Recording · {}", clock(secs));
+    }
+    if let Some(problem) = s.problem {
+        return problem.to_string();
+    }
+    match s.state {
+        Some(PlayState::Playing) => s
+            .fps
+            .map_or_else(|| "Playing".to_string(), |f| format!("{f:.1} fps")),
+        Some(PlayState::Paused) if s.played => "Paused".to_string(),
+        Some(PlayState::Paused) => "Ready".to_string(),
+        Some(PlayState::Finished) => "Finished".to_string(),
+        Some(PlayState::Empty) | None => String::new(),
     }
 }
 
@@ -162,5 +237,53 @@ mod tests {
         }
         let reading = m.tick(t0 + Duration::from_millis(1000)).expect("a reading");
         assert!((reading - 30.0).abs() < 0.5, "{reading}");
+    }
+
+    #[test]
+    fn status_says_what_playback_does() {
+        let s = |state, played, fps| {
+            status_line(&StatusInputs {
+                state: Some(state),
+                played,
+                fps,
+                ..StatusInputs::default()
+            })
+        };
+        assert_eq!(s(PlayState::Paused, false, None), "Ready");
+        assert_eq!(s(PlayState::Playing, true, None), "Playing");
+        assert_eq!(s(PlayState::Playing, true, Some(29.96)), "30.0 fps");
+        assert_eq!(s(PlayState::Paused, true, None), "Paused");
+        assert_eq!(s(PlayState::Finished, true, None), "Finished");
+        assert_eq!(status_line(&StatusInputs::default()), "");
+    }
+
+    #[test]
+    fn recording_and_problems_come_first() {
+        let recording = StatusInputs {
+            state: Some(PlayState::Playing),
+            recording: Some(75.0),
+            problem: Some("x"),
+            ..StatusInputs::default()
+        };
+        assert_eq!(status_line(&recording), "Recording · 1:15");
+        let problem = StatusInputs {
+            state: Some(PlayState::Paused),
+            problem: Some("Couldn't seek"),
+            ..StatusInputs::default()
+        };
+        assert_eq!(status_line(&problem), "Couldn't seek");
+    }
+
+    #[test]
+    fn a_reset_meter_starts_over() {
+        let t0 = Instant::now();
+        let mut m = FpsMeter::default();
+        m.tick(t0);
+        m.reset();
+        assert_eq!(
+            m.tick(t0 + Duration::from_secs(5)),
+            None,
+            "a reset meter waits a second again"
+        );
     }
 }

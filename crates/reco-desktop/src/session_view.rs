@@ -14,7 +14,7 @@ use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
 };
 
-use crate::live::{self, FpsMeter, Live};
+use crate::live::{self, Live};
 use crate::names::middle_ellipsis;
 use crate::time_ruler;
 use crate::ui::preview::{PreviewAction, RecoPreview};
@@ -41,14 +41,7 @@ impl App {
         {
             preview.attach(cx, worker.sender());
         }
-        self.live = Some(Live {
-            worker,
-            files,
-            info: None,
-            frame: 0,
-            playing: false,
-            fps: FpsMeter::default(),
-        });
+        self.live = Some(Live::new(worker, files));
         self.show_opening(cx);
     }
 
@@ -68,9 +61,7 @@ impl App {
                 Some(PreviewEvent::Ready(info)) => self.show_live(cx, info),
                 Some(PreviewEvent::Failed(message)) => self.show_failed(cx, &message),
                 Some(PreviewEvent::Stopped(message)) => self.show_stopped(cx, &message),
-                Some(PreviewEvent::Time { frame, state }) => {
-                    self.show_time(cx, frame, state == PlayState::Playing)
-                }
+                Some(PreviewEvent::Time { frame, state }) => self.show_time(cx, frame, state),
                 // The widget takes frames; nothing else is left.
                 Some(_) | None => {}
             }
@@ -128,6 +119,7 @@ impl App {
             info.gpu
         );
         live.info = Some(info.clone());
+        let status = live.status();
         let (left, right) = live::names(&live.files);
         let counts = (live.files.left.len(), live.files.right.len());
         let calibration = live
@@ -176,7 +168,7 @@ impl App {
             ids!(time_total),
             &time_ruler::clock(live::length_secs(&info)),
         );
-        self.set_label(cx, ids!(status_text), "Ready");
+        self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);
     }
@@ -214,18 +206,49 @@ impl App {
     fn show_stopped(&mut self, cx: &mut Cx, message: &str) {
         error!("preview: {message}");
         let (title, _) = live::failure_text(message);
+        if let Some(live) = self.live.as_mut() {
+            live.problem = Some(title.clone());
+        }
         self.set_label(cx, ids!(status_text), &title);
     }
 
-    /// The playhead moved, or play started or stopped.
-    fn show_time(&mut self, cx: &mut Cx, frame: u64, playing: bool) {
+    /// Show pause while playing, play otherwise. The SVG handle is swapped
+    /// in place; Makepad reloads the icon when the handle changes.
+    pub(crate) fn set_play_icon(&mut self, cx: &mut Cx, playing: bool) {
+        let want = if playing {
+            self.pause_icon.clone()
+        } else {
+            self.play_icon.clone()
+        };
+        let button = self.ui.button(cx, ids!(play_pause));
+        if let Some(mut inner) = button.borrow_mut() {
+            let same = inner.draw_icon.svg.as_ref().map(|h| h.as_handle())
+                == want.as_ref().map(|h| h.as_handle());
+            if !same {
+                inner.draw_icon.svg = want;
+            }
+        }
+        button.redraw(cx);
+    }
+
+    /// The playhead moved, or the play state changed.
+    fn show_time(&mut self, cx: &mut Cx, frame: u64, state: PlayState) {
         let Some(live) = self.live.as_mut() else {
             return;
         };
+        let playing = state == PlayState::Playing;
+        if playing && live.state != PlayState::Playing {
+            live.fps.reset();
+            live.fps_reading = None;
+        }
+        if playing || frame != live.frame {
+            live.problem = None;
+        }
+        live.played |= playing;
         live.frame = frame;
-        live.playing = playing;
-        let reading = if playing {
-            live.fps.tick(Instant::now())
+        live.state = state;
+        live.fps_reading = if playing {
+            live.fps.tick(Instant::now()).or(live.fps_reading)
         } else {
             None
         };
@@ -235,10 +258,10 @@ impl App {
         } else {
             0.0
         };
+        let status = live.status();
         self.set_label(cx, ids!(time_current), &time_ruler::clock(now));
-        if let Some(rate) = reading {
-            self.set_label(cx, ids!(status_text), &format!("{rate:.1} fps"));
-        }
+        self.set_label(cx, ids!(status_text), &status);
+        self.set_play_icon(cx, playing);
         self.update_ruler(cx);
     }
 

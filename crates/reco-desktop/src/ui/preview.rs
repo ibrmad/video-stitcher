@@ -14,7 +14,7 @@ use reco_app::preview::slots::{Retirement, RING_SLOTS};
 use reco_app::preview::view::{fit, render_size, PreviewAspect};
 use reco_app::preview::worker::{PreviewCommand, PreviewEvent};
 
-use crate::keys::{command_for_key, KeyCommand};
+use crate::keys::{command_for_key, repeats, KeyCommand};
 
 script_mod! {
     use mod.prelude.widgets_internal.*
@@ -296,7 +296,9 @@ impl Widget for RecoPreview {
             let focus = cx.key_focus();
             if focus.is_empty() || cx.has_key_focus(self.area) {
                 if let Some(command) = command_for_key(ke.key_code, &ke.modifiers) {
-                    self.key(cx, command);
+                    if !ke.is_repeat || repeats(command) {
+                        self.key(cx, command);
+                    }
                 }
             }
         }

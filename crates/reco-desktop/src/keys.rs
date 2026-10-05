@@ -76,6 +76,15 @@ pub fn command_for_key(key: KeyCode, modifiers: &KeyModifiers) -> Option<KeyComm
     })
 }
 
+/// Whether holding the key repeats the command: moves and seeks do; play,
+/// reset and fullscreen act once per press.
+pub fn repeats(command: KeyCommand) -> bool {
+    matches!(
+        command,
+        KeyCommand::Pan { .. } | KeyCommand::Zoom { .. } | KeyCommand::SeekBy { .. }
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,5 +174,15 @@ mod tests {
             assert_eq!(command_for_key(KeyCode::Equals, &modifiers), None);
             assert_eq!(command_for_key(KeyCode::Space, &modifiers), None);
         }
+    }
+
+    #[test]
+    fn toggles_do_not_repeat() {
+        assert!(!repeats(KeyCommand::TogglePlay));
+        assert!(!repeats(KeyCommand::ResetView));
+        assert!(!repeats(KeyCommand::Fullscreen));
+        assert!(repeats(KeyCommand::Pan { dx: 20.0, dy: 0.0 }));
+        assert!(repeats(KeyCommand::Zoom { degrees: 5.0 }));
+        assert!(repeats(KeyCommand::SeekBy { seconds: 5.0 }));
     }
 }

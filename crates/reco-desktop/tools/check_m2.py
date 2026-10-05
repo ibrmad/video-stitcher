@@ -109,8 +109,66 @@ def check_persist():
         expect(app.errors() == [], "persist: no errors in the app log")
 
 
+def frame_pixels(app, name):
+    """Pixels over the preview's frame, every 6 points: exact, so one video
+    frame can be told from the next."""
+    png = app.grab(os.path.join(OUT, f"{name}.png"))
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    x, y, w, h = app.rect("preview")
+    return [png.pixel(int((x + i) * scale), int((y + j) * scale))[:3]
+            for j in range(2, int(h) - 2, 6) for i in range(2, int(w) - 2, 6)]
+
+
+def widget_pixels(app, widget_id, name):
+    """Every pixel of one widget, for telling an icon from another."""
+    png = app.grab(os.path.join(OUT, f"{name}.png"))
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    x, y, w, h = app.rect(widget_id)
+    return [png.pixel(int((x + i) * scale), int((y + j) * scale))[:3]
+            for j in range(int(h)) for i in range(int(w))]
+
+
+def check_transport():
+    """Step, play and pause; the play button's icon; the status line; the end."""
+    with launch() as app:
+        ready(app)
+        time.sleep(1.0)
+        expect(text_of(app, "status_text") == "Ready", f"transport: Ready after opening ({text_of(app, 'status_text')})")
+        paused_icon = widget_pixels(app, "play_pause", "icon-paused")
+        a = frame_pixels(app, "step-a")
+        app.click_id("step_forward")
+        time.sleep(0.6)
+        b = frame_pixels(app, "step-b")
+        app.click_id("step_back")
+        time.sleep(1.0)
+        c = frame_pixels(app, "step-c")
+        expect(a != b, "transport: step forward shows the next frame")
+        expect(a == c, "transport: step back shows the frame before again")
+        app.key("space")
+        time.sleep(2.5)
+        status = text_of(app, "status_text") or ""
+        expect(status.endswith("fps"), f"transport: the status line shows the frame rate while playing ({status})")
+        expect(widget_pixels(app, "play_pause", "icon-playing") != paused_icon,
+               "transport: the play button shows pause while playing")
+        app.key("space")
+        time.sleep(0.5)
+        expect(text_of(app, "status_text") == "Paused", f"transport: Paused ({text_of(app, 'status_text')})")
+        for _ in range(12):
+            app.key("]")
+        time.sleep(1.5)
+        app.key("space")
+        finished = wait_for(lambda: text_of(app, "status_text") == "Finished", 10)
+        expect(bool(finished), "transport: playback finishes at the end")
+        app.key("space")
+        time.sleep(1.5)
+        t = seconds(text_of(app, "time_current"))
+        expect(t is not None and t < 5, f"transport: Space after the end plays from the start ({t})")
+        expect(app.errors() == [], "transport: no errors in the app log")
+
+
 CHECKS = {
     "persist": check_persist,
+    "transport": check_transport,
 }
 
 
