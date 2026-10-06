@@ -36,23 +36,23 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       unchanged: the title leaves with it", "a toggle mid-slide turns it
       around", "a dragged width comes back"); check_m7 `keys`; the `motion`
       unit tests.
-- [x] Setup panel on the left: default width 260, minimum 200, resizable,
+- [x] Setup panel on the left: default width 290, minimum 220, resizable,
       open at startup. Cameras (the linked pair: Add, then Change; file
       count and length) and Calibration (status, detail, Auto-calibrate or
       Recalibrate, Load file) in section bands; recent files in a menu.
       Evidence: "Setup panel open", "`<id>` shown / hidden" per state,
       "camera link is lit", "dragging the bar widens Setup", "Setup stops
-      at its 200 pt minimum", "menu: `recent_menu` opens a menu".
+      at its 220 pt minimum", "menu: `recent_menu` opens a menu".
 - [x] Viewer: a view bar (Preview, Aspect, Record and its menu) over a black canvas; the
       next step with the panorama frame and stepper until a stitch exists;
       calibration progress in that column; the export card with Cancel; a
       calibration-failed state with Try again. Evidence: "viewport is
       #000000", "empty state shown", "stepper not covered while
       calibrating", "`export_card` shown", "`cal_dot_error` shown".
-- [x] Adjust panel on the right: default width 280, minimum 200,
+- [x] Adjust panel on the right: default width 310, minimum 220,
       resizable. View and Stitch sections of property rows with tooltips,
       Advanced tiers closed. Evidence: "Adjust panel open / closed",
-      "Adjust stops at its 200 pt minimum", "Adjust panel stays closed
+      "Adjust stops at its 220 pt minimum", "Adjust panel stays closed
       before a stitch", `adjust-1280x820.png`.
 - [x] Time panel across the bottom, showing only what exists: step, play
       (the largest of the three) and a status line; the time once there is
@@ -352,8 +352,8 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       `the_editor_carries_both_frames_and_the_calibration`,
       `the_editor_job_reports_its_page`. The outline is pasted into the
       field (⌘V) rather than read from the clipboard by a button.
-- [ ] ROI points drawn over the lens preview. Not done, by ruling (Module
-      5): the outline is drawn on the raw frames (the browser editor), and
+- [x] ROI points drawn over the lens preview. Not done, by ruling (Module
+      5; the owner accepted it, 2026-10-06): the outline is drawn on the raw frames (the browser editor), and
       Reco's lens preview never shows a raw frame (both of its modes
       re-project the picture), so the points would sit in the wrong places,
       as they did in the Slint app. The browser editor shows the outline on
@@ -426,7 +426,9 @@ for the real-pair calibration); and screenshots in
       `figures_come_only_once_the_detector_has_run`. The engine measures
       those only without a lookahead (FRICTION.md); Stats shows them once
       measured. Not shown: a bottleneck line and dropped frames (the
-      preview has no drop count yet).
+      preview has no drop count yet). Module 8: the last export's speed
+      and stages, its slowest stage included, are shown (see there);
+      dropped frames are a ruling.
 
 ## Module 6: export (§2.11, §7)
 
@@ -615,6 +617,141 @@ tests (`cargo test -p reco-app -p reco-desktop`), and screenshots in
 
 ## Module 8: parity sweep
 
-- [ ] Every item above ticked with evidence.
-- [ ] Performance pass against the DESIGN.md speed targets.
-- [ ] Owner sign-off; Slint app removed.
+Evidence for this module: `tools/check_m8.py` (`start`, `perf`, `sheets`,
+`unsaved`, `logfile`), new parts in check_m1, m4, m5, m6 and m7, the unit
+tests, a Linux build and run (OrbStack: Ubuntu 24.04 with CI's packages,
+Xvfb), and screenshots in `target/desktop-checks/m8/`.
+
+The sweep walked the whole inventory (about 450 entries: §1–§9, the 61
+callbacks, the 38 fragile points) and DESIGN.md's issues list against this
+checklist and the app; each finding was checked by hand. What it found
+and what became of it:
+
+- [x] No shortcut fires behind a sheet, and Escape closes every sheet
+      (DESIGN.md Rule 9: ⌘1–⌘3, ⌘S and ⌘, ran behind any sheet, ⌘,
+      stacked Preferences on the export sheet, and the preview took Space
+      behind Report a bug). Evidence: check_m8 `sheets` for Export,
+      Keyboard shortcuts, Report a bug, the lens picker and Preferences
+      ("⌘1 does nothing behind the … sheet", "Space doesn't play behind
+      the … sheet", "⌘, doesn't open Preferences over the … sheet",
+      "Escape closes the … sheet").
+- [x] The export sheet keeps choices made and not exported (Rule 9; it
+      refilled them from the settings at each opening, as Slint did).
+      Evidence: check_m6 `kept` ("the choices are still there").
+- [x] New (owner, 2026-10-06): closing or ⌘Q with unsaved calibration
+      edits asks first: Save saves and quits, Don't Save quits, Cancel
+      stays (Slint saved a pasted outline at once and lost other edits).
+      A termination signal still quits. Evidence: check_m8 `unsaved`
+      ("quitting asks first", "Cancel keeps the app and the edit", "Save
+      wrote the edit", "Don't Save quits", "and leaves the file as it
+      was", "with nothing unsaved, quitting quits at once").
+- [x] Recalibrate keeps the lenses in use, a picked profile or fine-tuning
+      not yet saved (Slint kept its in-memory calibration; this app read
+      the file's). Evidence: `a_recalibration_keeps_the_lenses_in_use`.
+- [x] A log file, as Slint kept: the engine's lines and the app's,
+      timestamped, kept across runs and started afresh over 2 MB,
+      `RUST_LOG` filtering them (default `info,ort=warn`), panics written
+      in; in Slint's places (`~/Library/Logs/reco-desktop.log`, the XDG
+      state folder, beside the .exe); the bug report attaches its tail.
+      Evidence: check_m8 `logfile` ("the engine's lines are in it", "the
+      app's own lines are in it", "a second run adds to it", "RUST_LOG=warn
+      leaves the engine's info lines out"); `the_filter_reads_like_rust_log`,
+      `the_file_lives_where_each_system_keeps_logs`,
+      `the_file_keeps_lines_across_runs_and_starts_afresh_when_large`.
+- [x] Usage data and the bug report say where AI tracking runs and name
+      the GPU's backend (the context sent Slint's no-AI line). Evidence:
+      check_m7 "usage: the context says where AI tracking runs", "and the
+      GPU with its backend", "bug: and its backend", "bug: and where AI
+      tracking runs"; `the_usage_line_says_where_tracking_runs`.
+- [x] Reset layout only when the layout changed (Slint's `cal-dirty`).
+      Evidence: check_m4 "tune: Reset layout waits while the layout is
+      the file's", "a changed overlap enables Reset layout", "and waits
+      again"; `the_layout_differs_by_its_three_values`.
+- [x] Showing one camera opens Fine-tune, as Slint. Evidence: check_m5
+      `fine_tune_opens`.
+- [x] An export says where it starts while it seeks ("Starting at
+      0:30…"; Slint said "Seeking to …"; the engine reports no phases).
+      Evidence: check_m6 `starting`; `the_card_says_where_the_export_starts`.
+- [x] F/F11 on Windows and Linux maximizes and restores (Makepad has no
+      full screen there: FRICTION.md); a Windows release build opens no
+      console window. Evidence: `f_toggles_full_screen_or_the_maximized_window`;
+      check_m1 "F toggles fullscreen" (macOS).
+- [x] The detector backends as reco-gui offers them: ort, load-dynamic
+      (the release builds), cuda, tensorrt, directml (on for Windows),
+      tensorrt-native, ncnn, profiling. Evidence: built here: the default,
+      load-dynamic, coreml, profiling, ncnn without ORT and no default
+      features (tensorrt-native needs the TensorRT SDK).
+- [x] Owner's choice: Stats shows the last export's speed and stages, as
+      Slint's Stats did (fps lately and overall, frame time and slowest 1%,
+      decode and stitch, read-back and encode, the slowest stage).
+      Evidence: check_m6 `export_figures`; `an_export_reports_its_figures`,
+      `export_figures_read_plainly`.
+- [x] Owner's choice: the preview's character keys follow the keyboard's
+      layout: R, F, + = - _ [ ] are matched by what they type, as Slint
+      matched the typed text (on a German keyboard + is the US ] key);
+      Space, the arrows and F11 by place. macOS asks the layout
+      (`UCKeyTranslate`); Windows and Linux use their text events.
+      Evidence: check_m1's key checks; `keys_that_type_follow_the_layout`,
+      `the_sheet_lists_every_key_the_preview_handles`, and
+      `the_layouts_are_read_on_the_main_thread` (the US and German layouts
+      by name).
+- [x] Owner's choice: the benchmark auto-export, in automation builds
+      (`RECO_AUTOLOAD`, `RECO_AUTOEXPORT` with `_MODEL`, `_LOOKAHEAD` and
+      `_REPEAT`, `RECO_VRAM_BUDGET_GB`). Evidence:
+      `the_export_reads_as_slint_read_it`, `autoload_becomes_the_command_line`,
+      `runs_number_their_files`, `the_budget_is_in_gigabytes`,
+      `a_budget_gives_the_zones_its_memory_would`; a run exported twice and
+      quit, and once with AI tracking.
+- [x] Found on the way: the top bar was missing on Linux (the caption bar
+      came out 0 tall); macOS unchanged. Evidence: the Linux run's
+      screenshot; check_m0.
+- [x] Found on the way: a view change sent both frames to the GPU again
+      (5.3K pans redrew about 52 times a second, 38 ms at the slowest);
+      reco-core's additive `render_uploaded_to_view` (owner's OK) draws
+      from the frames already there. Evidence: check_m8 `perf`;
+      `render_uploaded_to_view_draws_the_last_upload`,
+      `a_pan_draws_what_sending_the_frame_again_would`,
+      `a_new_frame_is_sent_before_it_is_drawn`.
+- [x] The decoder's reopen and seek run off the UI thread (a Slint issue):
+      the render worker owns the session. Evidence: the worker's tests
+      (`seek_burst_lands_on_the_sum`); check_m1 "] seeks 5 s".
+
+Rulings for the sign-off (kept as they are, and why):
+
+- Screen readers: Makepad 2 has no accessibility bridge on macOS
+  (DESIGN.md, Decisions); Slint exposed its std widgets to VoiceOver.
+  Every control is reached by the keyboard (Rule 9).
+- The field outline over the lens preview: not drawn (above); the owner
+  accepted it, 2026-10-06.
+- Slint's settings (`gui.json`) aren't read at first start: the owner
+  declined it, 2026-10-06.
+- Match colours is on at every open, not remembered, as in Slint.
+- Usage data's `decoder` says how frames reach the picture (zero-copy or
+  readback), not Slint's fixed "D3D11VA/NVDEC/VT".
+- The paused preview stays loaded during an export (Slint released it), so
+  the position and unsaved tuning stay; the lookahead's zones are measured
+  with it loaded, so they agree.
+- Dropped frames aren't counted (the preview has no drop count); an
+  export's slowest stage is shown.
+- Windows is built only in CI, with the switch: DirectML and the
+  console-less build are unrun here.
+
+- [x] Performance pass against DESIGN.md Rule 8 (check_m8 `start` and
+      `perf`; an M1 Pro, the alfheim pair and the 5.3K match pair):
+      - the first window frame about 300 ms after launch (a fresh build's
+        first launch 0.45–1.7 s: macOS's first look at a new binary);
+      - the zero-copy preview, no CPU copies, on both pairs;
+      - playing: the source rate (30.4 and 30.8 fps), 22% and 76% CPU;
+      - panning: about 84 and 82 redraws a second, 3.2 and 3.4 ms each, 5.6
+        and 6.1 ms at the slowest, inside a 60 Hz frame;
+      - UI draws 0.2–0.4 ms a frame on average;
+      - paused: about 0% CPU.
+- [x] Linux: built, linted and tested in Ubuntu 24.04 (CI's packages plus
+      X11, GLX, xkbcommon, PulseAudio, ALSA, gbm and drm), and run under
+      Xvfb, the preview by readback on Mesa's llvmpipe. Its fonts and
+      icons load only from the source tree until the release packages them
+      beside the binary (FRICTION.md).
+- [ ] Owner sign-off; Slint app removed, with the CI and release workflows
+      moved over, the resources packaged beside the binary and Windows
+      proven in CI (the other session's `main.slint` edits go with it,
+      owner, 2026-10-06).

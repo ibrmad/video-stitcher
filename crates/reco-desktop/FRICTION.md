@@ -322,3 +322,55 @@ Done (owner's OK, 2026-10-06): reco-core has
 taken a new one (`Playback::frame_serial`): 5.3K pans now redraw about
 82 times a second, 3.4 ms each and 6.1 ms at the slowest, and 5.3K
 playback dropped from 87% to 76% CPU (check_m8 `perf`).
+
+## No full screen on Windows and Linux (Module 8, Makepad)
+
+`Window::fullscreen()` pushes an op the Windows and Linux backends don't
+handle, and `maximize()` is `ShowWindow(SW_MAXIMIZE)` there (on macOS it is
+`toggleFullScreen:`), so F maximized once and never came back. F now
+maximizes and restores off macOS (`keys::fullscreen_step`). The ask: full
+screen on every desktop backend.
+
+## A caption bar's filling label is 0 tall off macOS (Module 8, Makepad)
+
+The caption bar fits its content unless window buttons size it (macOS's
+traffic lights do), and its stock label is `height: Fill`: off macOS the
+two make a 0-tall bar, and the app's top bar inside it (the app menu,
+Export, the panel toggles) vanished on Linux. Seen under Xvfb in a Linux
+build; the label now has the bar's height (main.rs). The ask: a caption
+bar that holds app content at the content's height everywhere.
+
+## macOS sends text only to a text field (Module 8, Makepad)
+
+Key events carry only the key's place (`KeyCode`), and on macOS text
+events come only while a text field has the input method (`ime_active`);
+Windows (`WM_CHAR`) and X11 send what a key typed. So the preview's
+character keys couldn't follow the keyboard's layout on macOS: typed.rs
+asks the layout with `UCKeyTranslate` (Carbon's input sources, which abort
+off the main thread). The ask: the typed character on `KeyEvent`.
+
+## Resources load from the build machine's paths (Module 8, Makepad)
+
+`crate_resource("self:…")` resolves to the crate's source folder at build
+time unless the build sets `MAKEPAD_PACKAGE_DIR` (then `package/crate/…`
+beside the executable, or a `<exe>.makepad-package-paths` map), which
+Makepad's own packager does. A plain `cargo build` binary moved to another
+machine draws no text or icons: seen in a Linux container without the
+source tree ("is not packaged with this app, so its text will show as
+boxes"). The release must build with `MAKEPAD_PACKAGE_DIR` and copy each
+crate's resources beside the binary; this comes with the switch from the
+Slint app.
+
+## Small gaps met in Module 8
+
+- Makepad logs `[E] PulseAudio: pa_context_connect failed` where no sound
+  server runs (a container), before falling back to ALSA.
+- Makepad's log has no hook: the app copies its log ring into the log file
+  on each signal and at shutdown (log_view.rs); engine lines go there
+  straight through the `log` crate.
+- reco-detect's `probe_execution_providers` exists only with ORT: a native
+  backend build (ncnn, tensorrt-native) takes AI tracking as ready, and an
+  export that can't start the detector says so.
+- `StitchJob` reports nothing between its start and the first frame
+  (probing, opening, seeking: Slint did those itself and said so): the
+  export card says where it starts.
