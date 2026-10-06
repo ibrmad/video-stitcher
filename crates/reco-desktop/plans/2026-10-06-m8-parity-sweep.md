@@ -78,3 +78,23 @@ Retirement (with the sign-off): the Linux build (OrbStack, done in
 Module 8), resources packaged beside the binary, the CI and release
 workflows moved over (their Linux packages grow by X11, GLX, xkbcommon,
 PulseAudio, ALSA, gbm, drm), Windows proven in CI.
+
+## Packaging (owner, 2026-10-06: "Use cargo-makepad for macOS and write the packaging script")
+
+A plain build finds its fonts and icons only in the source tree. The release
+packages them:
+
+1. `[package.metadata.makepad.desktop]` in reco-desktop's Cargo.toml (name
+   "Reco", identifier).
+2. `tools/package.py` (standard library): on macOS it runs
+   `cargo makepad desktop bundle` (a signed `Reco.app`, from the pinned
+   Makepad revision) and adds extra files (ONNX Runtime) inside, signing
+   again; on Windows and Linux it builds with `MAKEPAD_PACKAGE_DIR=resources`
+   in its own target folder and lays out cargo-makepad's layout beside the
+   binary: `resources/<crate>/resources`, `resources/<crate>/fonts` (only the
+   fonts the binary's manifest names, read from the binary's text, as
+   cargo-makepad can't read a Windows binary), and
+   `<exe>.makepad-package-paths`. Unit tests (`tools/test_package.py`).
+3. Proof: the Linux package runs in a clean container with no source tree
+   (text and icons drawn, nothing "not packaged"); the macOS bundle runs
+   from its own resources. Windows comes with the switch, in CI.
