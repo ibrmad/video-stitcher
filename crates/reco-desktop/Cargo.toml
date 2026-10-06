@@ -30,6 +30,12 @@ automation = []
 name = "reco-desktop"
 path = "src/main.rs"
 
+# The macOS app bundle `cargo makepad desktop bundle` makes (tools/package.py);
+# an icon can go in resources/icon_1024.png.
+[package.metadata.makepad.desktop]
+name = "Reco"
+identifier = "org.reco-project.reco"
+
 [dependencies]
 # Pinned per DESIGN.md Rule 3. The widget families are opt-in; the core
 # has every widget Module 0 uses.

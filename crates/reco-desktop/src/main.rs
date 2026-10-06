@@ -96,7 +96,9 @@ const PROJECT_NAME_CHARS: usize = 44;
 const SAMPLE_LENGTH: f64 = 6300.0;
 const SAMPLE_PLAYHEAD: f64 = 754.0;
 
-app_main!(App);
+// The theme's Inter goes in the font manifest the packagers read
+// (tools/package.py, cargo-makepad), or a packaged app draws no text.
+app_main!(App, font_assets: [INTER_FONT_ASSET]);
 
 script_mod! {
     use mod.prelude.widgets.*

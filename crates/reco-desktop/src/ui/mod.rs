@@ -102,6 +102,34 @@ mod tests {
         files
     }
 
+    /// Every font the app names (a `crate_resource` ending in .ttf or .otf)
+    /// is in the manifest `app_main!` links into the binary, which the
+    /// packagers read
+    /// (tools/package.py, cargo-makepad): an undeclared font ships nowhere,
+    /// and its text shows as boxes. The first packaged app drew no text:
+    /// the theme's Inter wasn't declared.
+    #[test]
+    fn every_font_the_app_names_is_packaged() {
+        let manifest = std::str::from_utf8(&crate::MAKEPAD_FONT_ASSETS_V1).expect("a text manifest");
+        let mut named = Vec::new();
+        for file in rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src")) {
+            let source = std::fs::read_to_string(&file).expect("readable source");
+            for rest in source.split("crate_resource(\"").skip(1) {
+                let path = rest.split('"').next().unwrap_or_default();
+                if path.ends_with(".ttf") || path.ends_with(".otf") {
+                    named.push(path.replacen(':', "/", 1));
+                }
+            }
+        }
+        assert!(!named.is_empty(), "the theme names its fonts");
+        for font in named {
+            assert!(
+                manifest.contains(&format!("asset={font}\n")),
+                "{font} isn't in the font manifest: declare it in app_main!"
+            );
+        }
+    }
+
     #[test]
     fn finds_self_resources() {
         let src = format!(r#"a: {NEEDLE}resources/icons/a.svg") b: {NEEDLE}x/b.png")"#);
