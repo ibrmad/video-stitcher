@@ -126,8 +126,8 @@ script_mod! {
     // row's padding by its own inset, so the icon's ink (not its box) ends
     // on the content edge, in line with text and buttons above and below.
     mod.widgets.RecoRowIcon = mod.widgets.RecoIconButton{
-        width: theme.reco_icon_button height: theme.reco_icon_button
-        margin: Inset{right: (theme.reco_row_icon - theme.reco_icon_button) * 0.5}
+        width: theme.reco_row_icon_button height: theme.reco_row_icon_button
+        margin: Inset{right: (theme.reco_row_icon - theme.reco_row_icon_button) * 0.5}
         icon_walk: Walk{width: theme.reco_row_icon height: theme.reco_row_icon}
     }
     // A text action without a face, for menus and quiet commands.

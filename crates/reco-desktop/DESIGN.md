@@ -282,7 +282,8 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
 - **Geometry**: 28 pt rows and bands, 32 pt title rows and view bar (a
   26 pt control keeps 3 pt above and below); a 14 pt content edge in
   every panel; 10 pt between items, 5 pt between an icon and its text;
-  26 pt buttons and 18 pt icons; 4 pt control corners, 6 pt floating
+  26 pt buttons and 18 pt icons (a row's end icon: 16 pt on a 22 pt hover
+  face); 4 pt control corners, 6 pt floating
   corners. Menus (the app menu, Recent, every dropdown's list) share the
   floating panel and the row height; a dropdown's list opens below it.
 - **Structure**: a title bar with the "Reco" app menu (shortcuts,

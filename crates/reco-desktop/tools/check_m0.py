@@ -260,6 +260,20 @@ def check_state(size, state):
         if adjust and view:
             expect(abs(view[1] - adjust[1] - BAR) <= 0.5,
                    f"{name}: Adjust's title row is {BAR} pt ({view[1] - adjust[1]})")
+        # Row icons: the hover face is drawn whole, with room above and below
+        # (the owner found Recent's tight: 3 pt in its title row and its right
+        # side cut; band icons had 1 pt).
+        recent = app.rect("recent_button")
+        if recent and media:
+            above, below = recent[1] - media[1], media[1] + BAR - (recent[1] + recent[3])
+            expect(min(above, below) >= 4.5,
+                   f"{name}: Recent's face has room above and below in the title row ({above:.1f}, {below:.1f})")
+            expect(abs(recent[2] - recent[3]) <= 0.5, f"{name}: Recent's face is drawn whole ({recent})")
+        for item in app.snap("help_icon") + app.snap("reset_view"):
+            r = item.get("r")
+            if item.get("i") in ("help_icon", "reset_view") and r:
+                expect((ROW - r[3]) / 2 >= 2.5,
+                       f"{name}: a band's `{item['i']}` has room above and below ({r})")
         expect(visible(app, "fold_hint") == (stitched and not inspector),
                f"{name}: fold hint {'shown' if stitched and not inspector else 'hidden'}")
         for wid, want in takes_input(state).items():

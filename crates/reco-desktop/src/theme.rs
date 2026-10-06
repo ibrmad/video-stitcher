@@ -332,8 +332,11 @@ script_mod! {
         reco_icon_button: 26.0
         reco_icon: 18.0
         reco_icon_small: 14.0
-        // Icons at the end of a panel row, title row or section band.
+        // Icons at the end of a panel row, title row or section band, and
+        // their hover face: 3 pt around the icon leaves 5 pt above and below
+        // in a title row and 3 pt in a band.
         reco_row_icon: 16.0
+        reco_row_icon_button: 22.0
         // Record and Stop: Lucide's filled circle and square fill their box,
         // so they are drawn smaller to read as a dot and a square.
         reco_record_icon: 10.0

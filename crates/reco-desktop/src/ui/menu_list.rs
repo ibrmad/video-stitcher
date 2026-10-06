@@ -59,6 +59,9 @@ script_mod! {
     // the panel Reco's sheets and menus share, the rows a `RecoMenuList` in
     // `content`. Escape or a press outside closes it.
     mod.widgets.RecoMenu = PopoverFlat{
+        // The anchor doesn't clip its button: a row icon's face reaches past
+        // its box, so its ink ends on the content edge (Rule 11).
+        clip_x: false clip_y: false
         placement: BottomStart
         trap_focus: true
         offset: theme.reco_gap_xs
