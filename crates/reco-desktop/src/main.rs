@@ -53,6 +53,7 @@ mod theme;
 mod time_ruler;
 mod toast_view;
 mod tune_view;
+mod typed;
 mod ui;
 mod value_text;
 mod value_view;

@@ -14,7 +14,8 @@ use reco_app::preview::slots::{Retirement, RING_SLOTS};
 use reco_app::preview::view::{fit, render_size, PreviewAspect};
 use reco_app::preview::worker::{PreviewCommand, PreviewEvent};
 
-use crate::keys::{command_for_key, repeats, KeyCommand};
+use crate::keys::{command_for_key, command_for_text, repeats, KeyCommand};
+use crate::typed;
 
 script_mod! {
     use mod.prelude.widgets_internal.*
@@ -110,6 +111,10 @@ pub struct RecoPreview {
     #[redraw]
     #[rust]
     area: Area,
+    /// Whether the last key press was a repeat (a text event, which says
+    /// nothing of it, follows its key's press).
+    #[rust]
+    key_repeat: bool,
     #[rust]
     commands: Option<SyncSender<PreviewCommand>>,
     #[rust]
@@ -306,15 +311,37 @@ impl Widget for RecoPreview {
         // Keys reach the preview when nothing else holds focus (a focused
         // button keeps Space and arrows for itself) and no sheet is open.
         let sheet_open = scope.props.get::<SheetOpen>().is_some_and(|open| open.0);
-        if let (Event::KeyDown(ke), false) = (event, sheet_open) {
+        let ours = !sheet_open && {
             let focus = cx.key_focus();
-            if focus.is_empty() || cx.has_key_focus(self.area) {
-                if let Some(command) = command_for_key(ke.key_code, &ke.modifiers) {
+            focus.is_empty() || cx.has_key_focus(self.area)
+        };
+        match event {
+            Event::KeyDown(ke) if ours => {
+                self.key_repeat = ke.is_repeat;
+                // Keys by their place (Space, arrows, F11), then keys by what
+                // they type on the layout (macOS; text events elsewhere).
+                let typed = (!ke.modifiers.logo && !ke.modifiers.control)
+                    .then(|| typed::typed(ke.key_code, &ke.modifiers))
+                    .flatten()
+                    .and_then(|c| command_for_text(&c.to_string()));
+                if let Some(command) = command_for_key(ke.key_code, &ke.modifiers).or(typed) {
                     if !ke.is_repeat || repeats(command) {
                         self.key(cx, command);
                     }
                 }
             }
+            // macOS sends text only to a text field (its keys are typed
+            // above); Windows and Linux send what a key typed.
+            Event::TextInput(te) if ours && !cfg!(target_os = "macos") => {
+                if let (false, None, Some(command)) =
+                    (te.was_paste, &te.composition, command_for_text(&te.input))
+                {
+                    if !self.key_repeat || repeats(command) {
+                        self.key(cx, command);
+                    }
+                }
+            }
+            _ => {}
         }
         match event.hits(cx, self.area) {
             Hit::FingerDown(fe) => {

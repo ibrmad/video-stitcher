@@ -101,16 +101,26 @@ pub fn command_for_key(key: KeyCode, modifiers: &KeyModifiers) -> Option<KeyComm
             dx: 0.0,
             dy: ARROW_PAN,
         },
-        KeyCode::Equals | KeyCode::NumpadAdd => KeyCommand::Zoom { degrees: -KEY_ZOOM },
-        KeyCode::Minus | KeyCode::NumpadSubtract => KeyCommand::Zoom { degrees: KEY_ZOOM },
-        KeyCode::LBracket => KeyCommand::SeekBy {
+        KeyCode::F11 => KeyCommand::Fullscreen,
+        _ => return None,
+    })
+}
+
+/// The preview's command for a typed character: R, F, + = - _ [ ] and
+/// the keypad's + and − are matched by what they type, so they follow the
+/// keyboard's layout (as the Slint app matched the typed text).
+pub fn command_for_text(text: &str) -> Option<KeyCommand> {
+    Some(match text {
+        "+" | "=" => KeyCommand::Zoom { degrees: -KEY_ZOOM },
+        "-" | "_" | "−" => KeyCommand::Zoom { degrees: KEY_ZOOM },
+        "[" => KeyCommand::SeekBy {
             seconds: -BRACKET_SEEK,
         },
-        KeyCode::RBracket => KeyCommand::SeekBy {
+        "]" => KeyCommand::SeekBy {
             seconds: BRACKET_SEEK,
         },
-        KeyCode::KeyR => KeyCommand::ResetView,
-        KeyCode::KeyF | KeyCode::F11 => KeyCommand::Fullscreen,
+        "r" | "R" => KeyCommand::ResetView,
+        "f" | "F" => KeyCommand::Fullscreen,
         _ => return None,
     })
 }
@@ -126,15 +136,24 @@ pub struct Shortcut {
     /// table to the handler.
     #[cfg_attr(not(test), allow(dead_code))]
     pub codes: &'static [KeyCode],
+    /// The typed characters [`command_for_text`] answers for this row.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub texts: &'static [&'static str],
     /// A menu's key (the macOS menu bar's: listed only there).
     pub menu: bool,
 }
 
-const fn key(keys: &'static str, does: &'static str, codes: &'static [KeyCode]) -> Shortcut {
+const fn key(
+    keys: &'static str,
+    does: &'static str,
+    codes: &'static [KeyCode],
+    texts: &'static [&'static str],
+) -> Shortcut {
     Shortcut {
         keys,
         does,
         codes,
+        texts,
         menu: false,
     }
 }
@@ -144,6 +163,7 @@ const fn menu(keys: &'static str, does: &'static str) -> Shortcut {
         keys,
         does,
         codes: &[],
+        texts: &[],
         menu: true,
     }
 }
@@ -151,12 +171,8 @@ const fn menu(keys: &'static str, does: &'static str) -> Shortcut {
 /// Every shortcut, in the sheet's order: the preview's keys (the table the
 /// key handler is tested against), the pointer, then the menus' keys.
 pub const SHORTCUTS: &[Shortcut] = &[
-    key("Space", "Play or pause", &[KeyCode::Space]),
-    key(
-        "[  /  ]",
-        "Back or forward 5 seconds",
-        &[KeyCode::LBracket, KeyCode::RBracket],
-    ),
+    key("Space", "Play or pause", &[KeyCode::Space], &[]),
+    key("[  /  ]", "Back or forward 5 seconds", &[], &["[", "]"]),
     key(
         "← → ↑ ↓",
         "Pan the view",
@@ -166,21 +182,13 @@ pub const SHORTCUTS: &[Shortcut] = &[
             KeyCode::ArrowUp,
             KeyCode::ArrowDown,
         ],
+        &[],
     ),
-    key(
-        "+  /  −",
-        "Zoom in or out",
-        &[
-            KeyCode::Equals,
-            KeyCode::NumpadAdd,
-            KeyCode::Minus,
-            KeyCode::NumpadSubtract,
-        ],
-    ),
-    key("R", "Reset the view", &[KeyCode::KeyR]),
-    key("F  /  F11", "Full screen", &[KeyCode::KeyF, KeyCode::F11]),
-    key("Drag", "Pan the view", &[]),
-    key("Scroll", "Zoom in or out", &[]),
+    key("+  /  −", "Zoom in or out", &[], &["+", "=", "-", "_", "−"]),
+    key("R", "Reset the view", &[], &["r", "R"]),
+    key("F  /  F11", "Full screen", &[KeyCode::F11], &["f", "F"]),
+    key("Drag", "Pan the view", &[], &[]),
+    key("Scroll", "Zoom in or out", &[], &[]),
     menu(
         "⌘1  ⌘2  ⌘3",
         "Show or hide the Setup, Adjust and Time panels",
@@ -263,47 +271,53 @@ mod tests {
             plain(KeyCode::ArrowDown),
             Some(KeyCommand::Pan { dx: 0.0, dy: 20.0 })
         );
+        assert_eq!(plain(KeyCode::F11), Some(KeyCommand::Fullscreen));
+        for zoom_in in ["+", "="] {
+            assert_eq!(
+                command_for_text(zoom_in),
+                Some(KeyCommand::Zoom { degrees: -5.0 })
+            );
+        }
+        for zoom_out in ["-", "_", "−"] {
+            assert_eq!(
+                command_for_text(zoom_out),
+                Some(KeyCommand::Zoom { degrees: 5.0 })
+            );
+        }
         assert_eq!(
-            plain(KeyCode::Equals),
-            Some(KeyCommand::Zoom { degrees: -5.0 })
-        );
-        assert_eq!(
-            plain(KeyCode::NumpadAdd),
-            Some(KeyCommand::Zoom { degrees: -5.0 })
-        );
-        assert_eq!(
-            plain(KeyCode::Minus),
-            Some(KeyCommand::Zoom { degrees: 5.0 })
-        );
-        assert_eq!(
-            plain(KeyCode::LBracket),
+            command_for_text("["),
             Some(KeyCommand::SeekBy { seconds: -5.0 })
         );
         assert_eq!(
-            plain(KeyCode::RBracket),
+            command_for_text("]"),
             Some(KeyCommand::SeekBy { seconds: 5.0 })
         );
-        assert_eq!(plain(KeyCode::KeyR), Some(KeyCommand::ResetView));
-        assert_eq!(plain(KeyCode::KeyF), Some(KeyCommand::Fullscreen));
-        assert_eq!(plain(KeyCode::F11), Some(KeyCommand::Fullscreen));
-        assert_eq!(plain(KeyCode::KeyQ), None);
+        for reset in ["r", "R"] {
+            assert_eq!(command_for_text(reset), Some(KeyCommand::ResetView));
+        }
+        for full in ["f", "F"] {
+            assert_eq!(command_for_text(full), Some(KeyCommand::Fullscreen));
+        }
+        assert_eq!(command_for_text(" "), None, "Space is a key, not text");
+        assert_eq!(command_for_text("ff"), None);
     }
 
     #[test]
-    fn shift_still_counts() {
-        // '+' is Shift+'=' and '_' is Shift+'-'.
-        let shift = KeyModifiers {
-            shift: true,
-            ..Default::default()
-        };
-        assert_eq!(
-            command_for_key(KeyCode::Equals, &shift),
-            Some(KeyCommand::Zoom { degrees: -5.0 })
-        );
-        assert_eq!(
-            command_for_key(KeyCode::Minus, &shift),
-            Some(KeyCommand::Zoom { degrees: 5.0 })
-        );
+    fn keys_that_type_follow_the_layout() {
+        // Their places differ by layout ("+" is the US "]" key on a German
+        // keyboard): the typed character decides, as in Slint.
+        for key in [
+            KeyCode::Equals,
+            KeyCode::Minus,
+            KeyCode::LBracket,
+            KeyCode::RBracket,
+            KeyCode::KeyR,
+            KeyCode::KeyF,
+            KeyCode::NumpadAdd,
+            KeyCode::NumpadSubtract,
+        ] {
+            assert_eq!(plain(key), None, "{key:?}");
+        }
     }
 
     #[test]
@@ -329,6 +343,16 @@ mod tests {
 
     #[test]
     fn the_sheet_lists_every_key_the_preview_handles() {
+        let typed: Vec<&str> = SHORTCUTS.iter().flat_map(|s| s.texts).copied().collect();
+        for c in (' '..='~').chain(['−']) {
+            let text = c.to_string();
+            let handled = command_for_text(&text).is_some();
+            assert_eq!(
+                handled,
+                typed.contains(&text.as_str()),
+                "{text:?}: handled {handled}"
+            );
+        }
         let listed: Vec<KeyCode> = SHORTCUTS.iter().flat_map(|s| s.codes).copied().collect();
         for key in makepad_key_code::KEYCODE_VARIANTS {
             let handled = command_for_key(key, &KeyModifiers::default()).is_some();
