@@ -549,9 +549,12 @@ impl App {
             .find_widget_action(uid)
             .is_some_and(|a| a.cast::<PreviewAction>() == PreviewAction::ToggleFullscreen)
         {
-            // On macOS `maximize` toggles fullscreen; `fullscreen()` is a
-            // no-op there.
-            self.ui.window(cx, ids!(main_window)).maximize(cx);
+            let window = self.ui.window(cx, ids!(main_window));
+            let full = window.is_fullscreen(cx);
+            match crate::keys::fullscreen_step(cfg!(target_os = "macos"), full) {
+                crate::keys::WindowStep::Maximize => window.maximize(cx),
+                crate::keys::WindowStep::Restore => window.restore(cx),
+            }
         }
     }
 }

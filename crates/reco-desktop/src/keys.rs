@@ -199,9 +199,46 @@ pub fn repeats(command: KeyCommand) -> bool {
     )
 }
 
+/// What F (or F11) does to the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowStep {
+    /// Maximize: on macOS this toggles full screen.
+    Maximize,
+    /// Back from maximized.
+    Restore,
+}
+
+/// F's step: on macOS `maximize` toggles full screen (Makepad's
+/// `fullscreen()` does nothing there); Windows and Linux have no full
+/// screen in Makepad (FRICTION.md), so F maximizes the window and then
+/// restores it.
+pub fn fullscreen_step(macos: bool, full: bool) -> WindowStep {
+    if macos || !full {
+        WindowStep::Maximize
+    } else {
+        WindowStep::Restore
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn f_toggles_full_screen_or_the_maximized_window() {
+        assert_eq!(
+            fullscreen_step(true, false),
+            WindowStep::Maximize,
+            "macOS toggles itself"
+        );
+        assert_eq!(fullscreen_step(true, true), WindowStep::Maximize);
+        assert_eq!(fullscreen_step(false, false), WindowStep::Maximize);
+        assert_eq!(
+            fullscreen_step(false, true),
+            WindowStep::Restore,
+            "and back"
+        );
+    }
 
     fn plain(key: KeyCode) -> Option<KeyCommand> {
         command_for_key(key, &KeyModifiers::default())

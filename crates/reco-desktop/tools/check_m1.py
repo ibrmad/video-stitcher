@@ -93,6 +93,12 @@ def changed(a, b, tol=6):
     return sum(1 for p, q in zip(a, b) if abs(p - q) > tol) / len(a)
 
 
+def moved_on(app, before):
+    """The clock in seconds once it has moved 4 s or more past `before`."""
+    now = seconds(text_of(app, "time_current"))
+    return now if before is not None and now is not None and now - before >= 4 else None
+
+
 def drag(app, x, y, dx):
     app.get("/m", k="down", x=x, y=y)
     for step in range(1, 7):
@@ -185,8 +191,8 @@ def check_mode(mode, extra):
         # ] seeks 5 s.
         before = seconds(text_of(app, "time_current"))
         app.key("]")
-        time.sleep(1.0)
-        after = seconds(text_of(app, "time_current"))
+        # A seek decodes: wait for the clock rather than a fixed time.
+        after = wait_for(lambda: moved_on(app, before), 4) or seconds(text_of(app, "time_current"))
         expect(before is not None and after is not None and 4 <= after - before <= 6,
                f"{name}: ] seeks 5 s ({before} -> {after})")
 
@@ -202,8 +208,7 @@ def check_mode(mode, extra):
         time.sleep(0.5)
         before = seconds(text_of(app, "time_current"))
         app.key("]")
-        time.sleep(1.0)
-        after = seconds(text_of(app, "time_current"))
+        after = wait_for(lambda: moved_on(app, before), 4) or seconds(text_of(app, "time_current"))
         expect(before is not None and after is not None and after - before >= 4,
                f"{name}: keys reach the preview after a mouse pick of the aspect ({before} -> {after})")
 

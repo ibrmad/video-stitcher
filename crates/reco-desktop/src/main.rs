@@ -8,6 +8,10 @@
 //! Module 1: `--left/--right/--calibration` open two cameras' videos into
 //! the live stitched preview, rendered by `reco-app`'s worker thread.
 
+// No console window for a Windows release build (as reco-gui); the log
+// file keeps what it would have shown.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 pub use makepad_widgets;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -29,8 +33,8 @@ mod keys;
 mod layout_view;
 mod lens_picker_view;
 mod lens_view;
-mod log_view;
 mod live;
+mod log_view;
 mod motion;
 mod names;
 mod network;
@@ -60,13 +64,13 @@ use live::Live;
 use names::middle_ellipsis;
 use panel_motion::PanelMotions;
 use perf::DrawStats;
-use reco_app::log_file::LogFile;
 use quit_view::Quitting;
 use reco_app::ai::{Availability, AvailabilityProbe, LookaheadZones};
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
 use reco_app::export::ExportRange;
 use reco_app::lens::{Lens, LensDetection, LensInfo, LensProfileSummary, ProfileSearch};
+use reco_app::log_file::LogFile;
 use reco_app::preview::stats::Stats;
 use reco_app::preview::tuning::CalibrationValues;
 use reco_app::project::{Camera, Project, Stage};
