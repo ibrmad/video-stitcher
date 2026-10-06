@@ -11,6 +11,8 @@ The look follows the Rerun viewer, with more room: neutral grey panels,
 viewport and a time panel with camera lanes.
 """
 import os
+import tempfile
+import json
 import sys
 import time
 
@@ -666,9 +668,68 @@ def check_dropdowns():
         expect(app.errors() == [], "dropdown: no errors in the app log")
 
 
+def badge_drawn(app, widget_id, colour, png, scale):
+    """Whether a step badge's colour is drawn inside the rect /snap gives it
+    (left of its digit): a cached view can stay drawn where it was while
+    /snap reports it moved."""
+    r = app.rect(widget_id)
+    if r is None:
+        return False
+    x, y, w, h = r
+    filled = drive.close_to(pixel_at(png, scale, x + w * 0.22, y + h * 0.5), colour, tol=12)
+    # Its digit draws over the fill: ink on a line through the middle.
+    inked = any(not drive.close_to(pixel_at(png, scale, x + w * (0.35 + i * 0.03), y + h * 0.5), colour, tol=12)
+                for i in range(11))
+    return filled and inked
+
+
+def check_stepper():
+    """The next-step stepper's badges are drawn beside their words wherever
+    the empty state is laid out: after a panel slides and after a resize
+    (the owner saw the circles left behind, away from their words)."""
+    def drawn(name):
+        png = app.grab(os.path.join(OUT, f"stepper-{name}.png"))
+        scale = png.width / app.get("/s")["w"][0]["sz"][0]
+        current = badge_drawn(app, "step1_current", "#007541", png, scale)
+        todo = badge_drawn(app, "step2_todo", "#2c2b2b", png, scale)
+        expect(current and todo, f"stepper {name}: the badges are drawn where they are laid out ({current}, {todo})")
+
+    app = launch((1280, 820), None)
+    try:
+        after_slide(app, lambda: app.rect("step1_current"), 10)
+        time.sleep(0.5)
+        drawn("start")
+        app.key("Key1", cmd=1)
+        after_slide(app, lambda: app.rect("setup_header") is None)
+        time.sleep(0.6)
+        drawn("setup-closed")
+        app.key("Key1", cmd=1)
+        after_slide(app, lambda: app.rect("setup_header") is not None)
+        time.sleep(0.6)
+        drawn("setup-open")
+        app.get("/w", k="resize", width=1500, height=900)
+        time.sleep(1.0)
+        drawn("resized")
+        expect(app.errors() == [], f"stepper: no errors in the app log {app.errors()[:3]}")
+    finally:
+        app.quit()
+    # The saved window size, restored at start (no --window-size: the
+    # checks' size skips this path).
+    config = tempfile.mkdtemp(prefix="reco-m0-stepper-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"window_size": [1800, 1100]}, f)
+    app = drive.App.launch(BIN, [], env={"RECO_CONFIG_DIR": config})
+    try:
+        after_slide(app, lambda: app.get("/s")["w"][0]["sz"][0] >= 1700 and app.rect("step1_current"), 10)
+        time.sleep(1.0)
+        drawn("restored")
+    finally:
+        app.quit()
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
-    named = {"motion": check_motion, "toggles": check_toggles}
+    named = {"motion": check_motion, "toggles": check_toggles, "stepper": check_stepper}
     if sys.argv[1:]:
         for name in sys.argv[1:]:
             named[name]()
@@ -687,6 +748,7 @@ def main():
     check_adjust_edges()
     check_toggles()
     check_motion()
+    check_stepper()
     check_menus()
     check_dropdowns()
     if FAILURES:

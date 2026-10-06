@@ -361,7 +361,7 @@ script_mod! {
     mod.widgets.RecoBadge = RoundedView{
         width: theme.reco_badge height: theme.reco_badge
         align: Align{x: 0.5 y: 0.5}
-        show_bg: true new_batch: true
+        show_bg: true
         draw_bg +: {color: theme.reco_badge_idle border_radius: theme.reco_badge_radius}
         label := Label{
             padding: 0
