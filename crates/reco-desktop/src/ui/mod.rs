@@ -110,7 +110,8 @@ mod tests {
     /// the theme's Inter wasn't declared.
     #[test]
     fn every_font_the_app_names_is_packaged() {
-        let manifest = std::str::from_utf8(&crate::MAKEPAD_FONT_ASSETS_V1).expect("a text manifest");
+        let manifest =
+            std::str::from_utf8(&crate::MAKEPAD_FONT_ASSETS_V1).expect("a text manifest");
         let mut named = Vec::new();
         for file in rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src")) {
             let source = std::fs::read_to_string(&file).expect("readable source");
