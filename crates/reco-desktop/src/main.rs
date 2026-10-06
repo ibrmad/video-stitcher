@@ -300,6 +300,10 @@ pub struct App {
     /// The first left video the sheet's file name was made for.
     #[rust]
     export_named_for: Option<PathBuf>,
+    /// The export sheet holds the saved choices (filled at its first
+    /// opening); it keeps what is chosen after that.
+    #[rust]
+    export_sheet_filled: bool,
     /// The latest live calibration values (the Lens section reads them).
     #[rust]
     latest_values: Option<CalibrationValues>,

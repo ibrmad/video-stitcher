@@ -81,8 +81,19 @@ impl App {
         };
         self.codec_probe = None;
         log!("export codecs: {}", codecs.join(", "));
+        let shown = self.shown_codec(cx);
         self.export_codecs = codecs;
-        self.show_codecs(cx);
+        self.show_codecs(cx, shown);
+    }
+
+    /// The codec the sheet shows, once it has been filled in: it stays
+    /// when the list changes.
+    fn shown_codec(&mut self, cx: &mut Cx) -> Option<String> {
+        if !self.export_sheet_filled {
+            return None;
+        }
+        let row = self.ui.drop_down(cx, ids!(export_codec)).selected_item();
+        self.codecs().get(row).cloned()
     }
 
     /// The codecs to offer: the probed ones (H.264 until they are known).
@@ -94,12 +105,15 @@ impl App {
         }
     }
 
-    fn show_codecs(&mut self, cx: &mut Cx) {
+    /// The codecs into the sheet, `shown` chosen (the saved one when
+    /// `None`).
+    fn show_codecs(&mut self, cx: &mut Cx, shown: Option<String>) {
         let codecs = self.codecs();
+        let wanted = shown.unwrap_or_else(|| self.settings.export_codec.clone());
         let dropdown = self.ui.drop_down(cx, ids!(export_codec));
         dropdown.set_labels(cx, codecs.iter().map(|c| export::codec_label(c)).collect());
-        let saved = codecs.iter().position(|c| *c == self.settings.export_codec);
-        dropdown.set_selected_item(cx, saved.unwrap_or(0));
+        let row = codecs.iter().position(|c| *c == wanted);
+        dropdown.set_selected_item(cx, row.unwrap_or(0));
     }
 
     /// Whether an export is starting or running.
@@ -164,6 +178,20 @@ impl App {
                 .set_text(cx, &default.display().to_string());
             self.export_named_for = Some(first_left);
         }
+        // The saved choices the first time; after that the sheet keeps what
+        // was chosen, exported or not (DESIGN.md Rule 9).
+        if !self.export_sheet_filled {
+            self.fill_export_choices(cx);
+            self.export_sheet_filled = true;
+        }
+        self.show_export_error(cx, None);
+        self.refresh_ai_rows(cx);
+        self.show_export_range(cx);
+        self.ui.modal(cx, ids!(export_sheet)).open(cx);
+    }
+
+    /// The saved size, codec, quality, extras and AI choices into the sheet.
+    fn fill_export_choices(&mut self, cx: &mut Cx) {
         let size = self.ui.drop_down(cx, ids!(export_size));
         size.set_labels(
             cx,
@@ -173,7 +201,7 @@ impl App {
                 .collect(),
         );
         size.set_selected_item(cx, export::size_index(&self.settings.export_size));
-        self.show_codecs(cx);
+        self.show_codecs(cx, None);
         let quality = QUALITIES
             .iter()
             .position(|q| *q == self.settings.export_quality)
@@ -188,10 +216,7 @@ impl App {
         self.ui
             .check_box(cx, ids!(export_events))
             .set_active(cx, events, Animate::No);
-        self.show_export_error(cx, None);
-        self.show_ai_sheet(cx);
-        self.show_export_range(cx);
-        self.ui.modal(cx, ids!(export_sheet)).open(cx);
+        self.fill_ai_choices(cx);
     }
 
     /// The range into the sliders, the time fields and the length line,

@@ -627,9 +627,47 @@ def check_ai_fold():
         save_shot(app, "ai-fold")
 
 
+def checked(app, widget_id):
+    """A checkbox's state from the snapshot (None when not on screen)."""
+    for item in app.snap(widget_id):
+        if item.get("i") == widget_id:
+            return item.get("c")
+    return None
+
+
+def check_kept():
+    """DESIGN.md Rule 9: choices made in the sheet and not exported are
+    there when it opens again (until Module 8 the sheet refilled them from
+    the saved settings each time, as Slint did)."""
+    _, files = linked("kept")
+    with launch(files) as app:
+        face = open_sheet(app)
+        if face is None:
+            expect(False, "kept: Export opens the sheet")
+            return
+
+        def choices():
+            return (text_of(app, "export_size"), text_of(app, "export_quality"), checked(app, "export_replay"))
+
+        before = choices()
+        pick_row(app, "export_size", 3)
+        pick_row(app, "export_quality", 2)
+        show_and_click(app, "export_replay")
+        time.sleep(0.3)
+        chosen = choices()
+        expect(all(a != b for a, b in zip(before, chosen)), f"kept: the choices changed ({before} -> {chosen})")
+        app.key("escape")
+        expect(bool(wait_for(lambda: not sheet_shows(app, face), 3)), "kept: Escape closes the sheet")
+        click(app, "export_button")
+        expect(bool(wait_for(lambda: sheet_shows(app, face), 5)), "kept: Export opens it again")
+        time.sleep(0.3)
+        expect(choices() == chosen, f"kept: the choices are still there ({choices()})")
+        expect(not app.errors(), f"kept: no errors in the app log {app.errors()[:3]}")
+
+
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
           "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
-          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold}
+          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept}
 
 
 def main():

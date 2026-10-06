@@ -294,9 +294,8 @@ impl App {
         self.set_visible(cx, ids!(ai_lookahead_warning), warns);
     }
 
-    /// Fill the AI rows from the settings and the open match (the sheet is
-    /// opening).
-    pub(crate) fn show_ai_sheet(&mut self, cx: &mut Cx) {
+    /// Fill the AI rows from the settings (the sheet's first opening).
+    pub(crate) fn fill_ai_choices(&mut self, cx: &mut Cx) {
         let saved = self.settings.clone();
         let on = saved.ai_enabled && self.ai_available();
         self.ui
@@ -325,14 +324,27 @@ impl App {
             ..PannerKnobs::of_preset(&saved.ai_preset)
         };
         self.show_ai_knobs(cx, &knobs);
-        // The lookahead's zones: the GPU's memory at open, and the source's
-        // size and rate.
+        self.ui
+            .slider(cx, ids!(ai_lookahead))
+            .set_value(cx, saved.ai_lookahead);
+    }
+
+    /// What in the AI rows follows the open match, each time the sheet
+    /// opens: the lookahead's zones (the GPU's memory at open, and the
+    /// source's size and rate), the lookahead inside them, and whether
+    /// tracking can run.
+    pub(crate) fn refresh_ai_rows(&mut self, cx: &mut Cx) {
         self.ai_zones = self
             .live
             .as_ref()
             .and_then(|l| l.info.as_ref())
             .and_then(|info| ai::lookahead_zones(info.vram, (info.width, info.height), info.fps));
-        let lookahead = ai::fitted_lookahead(saved.ai_lookahead, self.ai_zones);
+        let chosen = self
+            .ui
+            .slider(cx, ids!(ai_lookahead))
+            .value()
+            .unwrap_or(self.settings.ai_lookahead);
+        let lookahead = ai::fitted_lookahead(chosen, self.ai_zones);
         self.ui
             .slider(cx, ids!(ai_lookahead))
             .set_value(cx, lookahead);
