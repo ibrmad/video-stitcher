@@ -416,11 +416,14 @@ def check_adjust_edges():
             check_box_edge(app, wid, edge, name)
         for wid in ("fov_slider", "seam_blend"):
             check_box_edge(app, wid, edge + LABEL_WIDTH + GAP, name)
+        # A value field's box ends on the content edge, its digits inside
+        # the box's padding.
         for wid in ("fov_value", "seam_value"):
             x, y, w, h = app.rect(wid)
+            expect(abs(x + w - right) <= 0.5, f"{name}: `{wid}`'s box ends on the content edge {right} ({x + w})")
             ink = ink_right(png, scale, (right - 60, y, right + 6, y + h), PANEL)
-            expect(ink is not None and right - 2 <= ink <= right + 0.5,
-                   f"{name}: `{wid}` ends on the content edge {right} (ink at {ink})")
+            expect(ink is not None and right - 9 <= ink <= right - 4,
+                   f"{name}: `{wid}`'s digits end inside its box (ink at {ink}, edge {right})")
         vx, vy, vw, vh = app.rect("view_section")
         check_icon_right(app, png, scale, (vx, vy, vw, ROW), right, BAND, "View band icons", name)
         expect(app.errors() == [], f"{name}: no errors in the app log")
