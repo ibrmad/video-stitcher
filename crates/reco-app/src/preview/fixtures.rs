@@ -2,6 +2,22 @@
 //! message when it is missing.
 
 use std::path::PathBuf;
+use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+
+/// Heavy GPU tests (exports) share this; a test that counts frames against
+/// the clock takes it alone, so an export beside it can't starve it.
+static GPU_LOAD: RwLock<()> = RwLock::new(());
+
+/// Held by a heavy GPU test (others like it may run beside it).
+pub fn heavy() -> RwLockReadGuard<'static, ()> {
+    GPU_LOAD.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Held by a test that counts frames against the clock (nothing heavy
+/// runs beside it).
+pub fn timed() -> RwLockWriteGuard<'static, ()> {
+    GPU_LOAD.write().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Left video, right video and calibration: the `RECO_FIXTURE_*` variables,
 /// else the alfheim set under `~/dev/pitchcam-data`.
@@ -25,6 +41,7 @@ pub fn fast_set() -> Option<(PathBuf, PathBuf, PathBuf)> {
 
 /// A YOLO model for AI tracking (`RECO_FIXTURE_MODEL`, else the one beside
 /// the alfheim set).
+#[cfg(feature = "ai")]
 pub fn model() -> Option<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
     let path = std::env::var_os("RECO_FIXTURE_MODEL")

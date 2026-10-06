@@ -11,6 +11,7 @@ runs the named checks (all by default); exits non-zero if any failed.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -608,6 +609,35 @@ def check_ai_figures():
         os.remove(written)
 
 
+def check_export_figures():
+    """As Slint's Stats: an export's speed and where its time goes, kept
+    after it ends."""
+    folder, files = linked("export-figures")
+    with launch(files, ["--export-range", "0-2"]) as app:
+        expect(open_sheet(app) is not None, "stages: Export opens the sheet")
+        expect(app.rect("stats_export") is None, "stages: Stats has none before an export")
+        click(app, "sheet_export")
+        expect(bool(wait_for(lambda: logged(app, "export: done"), 120)), "stages: the export finishes")
+        open_advanced(app, "stats_section")
+        r = app.rect("stats_section")
+        if r:
+            app.scroll(r[0] + r[2] / 2, r[1] + 10, 200)
+        speed = wait_for(lambda: re.fullmatch(r"\d+ · \d+ fps", text_of(app, "stats_export_speed") or "")
+                         and text_of(app, "stats_export_speed"), 5)
+        expect(bool(speed), f"stages: Stats has the export's speed ({text_of(app, 'stats_export_speed')})")
+        frame = text_of(app, "stats_export_frame") or ""
+        expect(re.fullmatch(r"[\d.]+ · [\d.]+ ms", frame) is not None, f"stages: its frame time and slowest ({frame})")
+        stages = text_of(app, "stats_export_stages") or ""
+        handoff = text_of(app, "stats_export_handoff") or ""
+        expect(stages.endswith(" ms") and handoff.endswith(" ms"), f"stages: where the time goes ({stages}; {handoff})")
+        expect(text_of(app, "stats_export_held") not in (None, ""), f"stages: what held it back ({text_of(app, 'stats_export_held')})")
+        save_shot(app, "export-figures")
+        expect(not app.errors(), f"stages: no errors in the app log {app.errors()[:3]}")
+    written = os.path.join(folder, "cam0_stitched.mp4")
+    if os.path.exists(written):
+        os.remove(written)
+
+
 def check_ai_fold():
     """The closed Advanced tier looks closed when the sheet opens with AI
     tracking on. (A fold's first draw shows its body whole, Makepad
@@ -680,7 +710,7 @@ def check_kept():
 
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
           "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
-          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept, "starting": check_starting}
+          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept, "starting": check_starting, "export_figures": check_export_figures}
 
 
 def main():

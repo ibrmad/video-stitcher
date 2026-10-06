@@ -250,7 +250,7 @@ script_mod! {
                 header +: {
                     fold_button +: {animator +: {active: {default: @off}}}
                     title +: {text: "Stats"}
-                    help +: {text: "How fast the preview runs, how well the cameras were calibrated, and how AI tracking did in the last export."}
+                    help +: {text: "How fast the preview runs, how well the cameras were calibrated, and how the last export went."}
                 }
                 body +: {
                     RecoRow{
@@ -294,6 +294,41 @@ script_mod! {
                             RecoLabelCell{RecoSubdued{text: "Calibration"}}
                         }
                         stats_calibration := RecoMeta{text: "—"}
+                    }
+                    // The last export's speed and stages, as Slint's Stats.
+                    stats_export := View{
+                        visible: false
+                        width: Fill height: Fit flow: Down
+                        RecoRow{
+                            Tip{text: "The last export's frames a second: lately · since its first frame."
+                                RecoLabelCell{RecoSubdued{text: "Export speed"}}
+                            }
+                            stats_export_speed := RecoMeta{text: "—"}
+                        }
+                        RecoRow{
+                            Tip{text: "The last export's time a frame: on average · its slowest frame in a hundred."
+                                RecoLabelCell{RecoSubdued{text: "Export frame"}}
+                            }
+                            stats_export_frame := RecoMeta{text: "—"}
+                        }
+                        RecoRow{
+                            Tip{text: "A frame in the last export, on average: decoding the two frames · stitching them."
+                                RecoLabelCell{RecoSubdued{text: "Decode · stitch"}}
+                            }
+                            stats_export_stages := RecoMeta{text: "—"}
+                        }
+                        RecoRow{
+                            Tip{text: "A frame in the last export, on average: reading the picture back · handing it to the encoder (long when the encoder can't keep up)."
+                                RecoLabelCell{RecoSubdued{text: "Read · encode"}}
+                            }
+                            stats_export_handoff := RecoMeta{text: "—"}
+                        }
+                        RecoRow{
+                            Tip{text: "The stage that held the last export back."
+                                RecoLabelCell{RecoSubdued{text: "Slowest stage"}}
+                            }
+                            stats_export_held := RecoMeta{text: "—"}
+                        }
                     }
                     // AI tracking's figures, once an export has measured them.
                     stats_ai := View{

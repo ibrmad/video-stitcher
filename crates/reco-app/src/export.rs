@@ -81,6 +81,49 @@ pub enum ExportEvent {
     Tracking(Result<(), String>),
     /// How the tracking is doing (every half second or so).
     AiFigures(AiFigures),
+    /// How the export is doing: its speed and where the time goes (every
+    /// half second or so; the Slint app's Stats showed these).
+    Figures(ExportFigures),
+}
+
+/// An export's speed and where its time goes, from the engine's telemetry.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportFigures {
+    /// Frames a second, lately.
+    pub fps: f64,
+    /// Frames a second since the first frame.
+    pub fps_average: f64,
+    /// Decoding a frame pair, ms.
+    pub decode_ms: f64,
+    /// Stitching, ms.
+    pub stitch_ms: f64,
+    /// Reading the picture back for the encoder, ms.
+    pub readback_ms: f64,
+    /// Handing it to the encoder, ms (long when the encoder can't keep up).
+    pub submit_ms: f64,
+    /// A frame in all, ms.
+    pub frame_ms: f64,
+    /// The slowest frame in a hundred, ms.
+    pub p99_ms: f64,
+    /// The stage holding the export back, in the engine's words.
+    pub bottleneck: Option<String>,
+}
+
+impl ExportFigures {
+    /// The figures in `snapshot`, once frames have been timed.
+    fn of(snapshot: &reco_core::telemetry::TelemetrySnapshot) -> Option<Self> {
+        (snapshot.avg_total_ms > 0.0).then(|| Self {
+            fps: f64::from(snapshot.fps_recent),
+            fps_average: f64::from(snapshot.fps_average),
+            decode_ms: f64::from(snapshot.avg_decode_ms),
+            stitch_ms: f64::from(snapshot.avg_stitch_ms),
+            readback_ms: f64::from(snapshot.avg_readback_ms),
+            submit_ms: f64::from(snapshot.avg_submit_ms),
+            frame_ms: f64::from(snapshot.avg_total_ms),
+            p99_ms: f64::from(snapshot.p99_total_ms),
+            bottleneck: snapshot.bottleneck.map(|stage| stage.to_string()),
+        })
+    }
 }
 
 /// A tracked export's detector and tracker figures, from the engine's
@@ -116,26 +159,35 @@ fn ai_figures(
     })
 }
 
-/// Frames between the AI figures an export sends.
-#[cfg(feature = "ai")]
-const AI_FIGURES_EVERY: u64 = 15;
+/// Frames between the figures an export sends.
+const FIGURES_EVERY: u64 = 15;
 
-/// Hands the engine's telemetry to the UI as AI figures.
-#[cfg(feature = "ai")]
-struct AiFiguresSink(Outbox);
+/// Hands the engine's telemetry to the UI: the export's figures, and with
+/// `ai` (tracking started) the detector's.
+struct FiguresSink {
+    out: Outbox,
+    /// Only read with the AI engine in the build.
+    #[cfg_attr(not(feature = "ai"), allow(dead_code))]
+    ai: bool,
+}
 
-#[cfg(feature = "ai")]
-impl reco_core::telemetry::TelemetrySink for AiFiguresSink {
+impl reco_core::telemetry::TelemetrySink for FiguresSink {
     fn on_snapshot(&mut self, snapshot: &reco_core::telemetry::TelemetrySnapshot) {
-        let figures = ai_figures(
-            f64::from(snapshot.avg_detection_ms),
-            snapshot.total_detections,
-            f64::from(snapshot.detections_per_frame),
-            snapshot.active_tracks,
-            f64::from(snapshot.ball_presence_pct),
-        );
-        if let Some(figures) = figures {
-            self.0.send(ExportEvent::AiFigures(figures));
+        if let Some(figures) = ExportFigures::of(snapshot) {
+            self.out.send(ExportEvent::Figures(figures));
+        }
+        #[cfg(feature = "ai")]
+        if self.ai {
+            let figures = ai_figures(
+                f64::from(snapshot.avg_detection_ms),
+                snapshot.total_detections,
+                f64::from(snapshot.detections_per_frame),
+                snapshot.active_tracks,
+                f64::from(snapshot.ball_presence_pct),
+            );
+            if let Some(figures) = figures {
+                self.out.send(ExportEvent::AiFigures(figures));
+            }
         }
     }
 }
@@ -418,6 +470,16 @@ fn run(
     if options.events {
         job = job.events(output.with_extension("events.jsonl"));
     }
+    let figures = out.clone();
+    job = job.on_session(move |session, _| {
+        session.telemetry_mut().set_sink(
+            Box::new(FiguresSink {
+                out: figures,
+                ai: false,
+            }),
+            FIGURES_EVERY,
+        );
+    });
     if let Some(tracking) = options.tracking.clone() {
         job = with_tracking(job, tracking, field_roi, out.clone());
     }
@@ -489,9 +551,13 @@ fn with_tracking(
             Err(why) => log::warn!("export: AI tracking not active: {why}"),
         }
         if status.is_ok() {
-            session
-                .telemetry_mut()
-                .set_sink(Box::new(AiFiguresSink(out.clone())), AI_FIGURES_EVERY);
+            session.telemetry_mut().set_sink(
+                Box::new(FiguresSink {
+                    out: out.clone(),
+                    ai: true,
+                }),
+                FIGURES_EVERY,
+            );
         }
         out.send(ExportEvent::Tracking(status));
     })
@@ -763,6 +829,7 @@ mod tests {
 
     #[test]
     fn exporting_two_seconds_writes_a_playable_file() {
+        let _heavy = fixtures::heavy();
         let Some((left, right, cal)) = fixtures::fast_set() else {
             return;
         };
@@ -815,6 +882,7 @@ mod tests {
     )]
     #[test]
     fn an_export_tracks_with_the_model() {
+        let _heavy = fixtures::heavy();
         let (Some((left, right, cal)), Some(model)) = (fixtures::fast_set(), fixtures::model())
         else {
             return;
@@ -855,6 +923,7 @@ mod tests {
     )]
     #[test]
     fn a_tracked_export_reports_the_detectors_figures() {
+        let _heavy = fixtures::heavy();
         let (Some((left, right, cal)), Some(model)) = (fixtures::fast_set(), fixtures::model())
         else {
             return;
@@ -891,6 +960,41 @@ mod tests {
     }
 
     #[test]
+    fn an_export_reports_its_figures() {
+        let _heavy = fixtures::heavy();
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let output =
+            std::env::temp_dir().join(format!("reco-app-export-stages-{}", std::process::id()));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            MatchCalibration::from_file(&cal).unwrap(),
+            options(output, (0.0, 2.0)),
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 180, false);
+        let figures: Vec<&ExportFigures> = events
+            .iter()
+            .filter_map(|e| match e {
+                ExportEvent::Figures(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            !figures.is_empty(),
+            "figures arrive while exporting: {events:?}"
+        );
+        let last = figures.last().unwrap();
+        assert!(last.fps > 0.0 && last.frame_ms > 0.0, "{last:?}");
+        assert!(last.p99_ms >= last.frame_ms * 0.5, "{last:?}");
+        if let Some(ExportEvent::Done { path, .. }) = events.last() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[test]
     fn figures_come_only_once_the_detector_has_run() {
         assert_eq!(ai_figures(0.0, 0, 0.0, 0, 0.0), None, "nothing measured");
         assert_eq!(
@@ -910,6 +1014,7 @@ mod tests {
 
     #[test]
     fn tracking_without_its_model_fails_before_writing() {
+        let _heavy = fixtures::heavy();
         let Some((left, right, cal)) = fixtures::fast_set() else {
             return;
         };
@@ -938,6 +1043,7 @@ mod tests {
 
     #[test]
     fn cancelling_an_export_stops_it() {
+        let _heavy = fixtures::heavy();
         let Some((left, right, cal)) = fixtures::fast_set() else {
             return;
         };
@@ -1006,6 +1112,7 @@ mod tests {
 
     #[test]
     fn an_empty_range_fails_at_once() {
+        let _heavy = fixtures::heavy();
         let output =
             std::env::temp_dir().join(format!("reco-app-export-empty-{}.mp4", std::process::id()));
         let job = ExportJob::start(
@@ -1025,6 +1132,7 @@ mod tests {
 
     #[test]
     fn the_replay_and_events_files_go_beside_the_export() {
+        let _heavy = fixtures::heavy();
         let Some((left, right, cal)) = fixtures::fast_set() else {
             return;
         };

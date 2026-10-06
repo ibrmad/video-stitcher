@@ -1439,6 +1439,7 @@ mod tests {
 
     #[test]
     fn records_while_playing() {
+        let _timed = fixtures::timed();
         let worker = readback_worker();
         if !open_fast(&worker) {
             return;
