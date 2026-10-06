@@ -916,7 +916,7 @@ impl AppMain for App {
             Event::Shutdown => {
                 self.finish_recording_on_quit();
                 self.save_layout(cx);
-                self.log_tail(0);
+                self.flush_log();
             }
             // Unsaved edits hold a quit or the window's close while the sheet
             // asks; a termination signal still quits.

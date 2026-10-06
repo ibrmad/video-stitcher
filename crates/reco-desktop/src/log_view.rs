@@ -37,15 +37,21 @@ impl App {
         }
     }
 
+    /// Copy the app's newest lines in and wait until the file has them all
+    /// (at shutdown, and before reading it).
+    pub(crate) fn flush_log(&mut self) {
+        self.write_log();
+        if let Some(file) = self.log_file.as_ref() {
+            file.flush();
+        }
+    }
+
     /// The log's newest `n` lines, everything so far written first (the
     /// app's own lines when there is no file).
     pub(crate) fn log_tail(&mut self, n: usize) -> Vec<String> {
-        self.write_log();
+        self.flush_log();
         match self.log_file.as_ref() {
-            Some(file) => {
-                file.flush();
-                file.tail(n)
-            }
+            Some(file) => file.tail(n),
             None => log_ring::read_since(0, n)
                 .1
                 .into_iter()
