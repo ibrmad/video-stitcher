@@ -505,7 +505,18 @@ impl StitchPipeline {
             .upload_left_yuv(&self.gpu, left.y, left.u, left.v)?;
         self.renderer
             .upload_right_yuv(&self.gpu, right.y, right.u, right.v)?;
+        self.render_uploaded_to_view(yaw, pitch, target_view);
+        Ok(())
+    }
 
+    /// Render the frames uploaded last (by [`Self::render_to_view`] or
+    /// [`Self::render_nv12_to_view`]) to a texture view at a new yaw/pitch,
+    /// without uploading them again.
+    ///
+    /// For a view change on a frame that hasn't changed (a pan or a zoom
+    /// while paused): the upload is most of a render's cost for large
+    /// inputs.
+    pub fn render_uploaded_to_view(&self, yaw: f32, pitch: f32, target_view: &wgpu::TextureView) {
         let viewport = ResolvedViewport {
             config: self.viewport.clone(),
             position: ViewportPosition {
@@ -523,7 +534,6 @@ impl StitchPipeline {
             self.viewport.blend_width,
             target_view,
         );
-        Ok(())
     }
 
     /// Render NV12 frames directly to a texture view (for window display).
@@ -542,24 +552,7 @@ impl StitchPipeline {
         self.renderer.upload_left_nv12(&self.gpu, left.y, left.uv)?;
         self.renderer
             .upload_right_nv12(&self.gpu, right.y, right.uv)?;
-
-        let viewport = ResolvedViewport {
-            config: self.viewport.clone(),
-            position: ViewportPosition {
-                yaw,
-                pitch,
-                fov_degrees: None,
-            },
-        };
-
-        self.renderer.render_to_view(
-            &self.gpu,
-            &self.scene,
-            &self.calibration,
-            &viewport,
-            self.viewport.blend_width,
-            target_view,
-        );
+        self.render_uploaded_to_view(yaw, pitch, target_view);
         Ok(())
     }
 
@@ -952,5 +945,161 @@ mod tests {
         let mut dst = vec![0; 32];
         copy_plane_tight(&src, &mut dst);
         assert_eq!(dst.as_slice(), data.as_slice());
+    }
+
+    /// Output and input size for the GPU tests: small, to keep them quick.
+    const SIDE: u32 = 64;
+
+    /// Two 64×64 cameras side by side (as `session/tests.rs`).
+    fn gpu_test_calibration() -> MatchCalibration {
+        let cam = crate::calibration::CameraParams {
+            width: SIDE,
+            height: SIDE,
+            fx: 32.0,
+            fy: 32.0,
+            cx: 32.0,
+            cy: 32.0,
+            d: [0.0; 4],
+        };
+        MatchCalibration {
+            left: cam.clone(),
+            right: cam,
+            layout: crate::calibration::PlaneLayout {
+                camera_axis_offset: 0.25,
+                intersect: 0.5,
+                x_ty: 0.0,
+                x_rz: 0.0,
+                z_rx: 0.0,
+                x_rx: 0.0,
+                z_rz: 0.0,
+            },
+            rig_tilt: 0.0,
+            rig_roll: 0.0,
+            sync_offset: 0,
+            field_roi: None,
+            lens_correction_amount: 1.0,
+            blend_width: 0.05,
+        }
+    }
+
+    /// A YUV420P frame whose luma rises left to right from `base`, so a
+    /// pan or a new frame changes the picture.
+    fn ramp(base: u8) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let y = (0..SIDE * SIDE)
+            .map(|i| base.wrapping_add((i % SIDE * 2) as u8))
+            .collect();
+        let chroma = vec![128; (SIDE / 2 * SIDE / 2) as usize];
+        (y, chroma.clone(), chroma)
+    }
+
+    fn planes(frame: &(Vec<u8>, Vec<u8>, Vec<u8>)) -> YuvPlanes<'_> {
+        YuvPlanes {
+            y: &frame.0,
+            u: &frame.1,
+            v: &frame.2,
+        }
+    }
+
+    /// A render target the tests can read back.
+    fn target(gpu: &GpuContext) -> wgpu::Texture {
+        gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test target"),
+            size: wgpu::Extent3d {
+                width: SIDE,
+                height: SIDE,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+    }
+
+    /// Render with `draw` into a new target and read its pixels back.
+    fn drawn(gpu: &GpuContext, draw: impl FnOnce(&wgpu::TextureView)) -> Vec<u8> {
+        let texture = target(gpu);
+        draw(&texture.create_view(&Default::default()));
+        // 64 px × 4 bytes is 256 bytes: rows need no padding.
+        let row = SIDE * 4;
+        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test readback"),
+            size: u64::from(row * SIDE),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(SIDE),
+                },
+            },
+            wgpu::Extent3d {
+                width: SIDE,
+                height: SIDE,
+                depth_or_array_layers: 1,
+            },
+        );
+        gpu.queue.submit(Some(encoder.finish()));
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("GPU poll");
+        buffer.slice(..).get_mapped_range().to_vec()
+    }
+
+    #[test]
+    #[ignore = "requires a GPU (wgpu adapter init)"]
+    fn render_uploaded_to_view_draws_the_last_upload() {
+        let gpu = GpuContext::new_blocking().expect("GPU init");
+        let pipeline = StitchPipeline::with_gpu(
+            gpu.clone(),
+            gpu_test_calibration(),
+            ViewportConfig {
+                width: SIDE,
+                height: SIDE,
+                ..ViewportConfig::default()
+            },
+            SIDE,
+            SIDE,
+            wgpu::TextureFormat::Bgra8Unorm,
+            InputFormat::Yuv420p,
+        )
+        .expect("pipeline");
+        let (first, second) = (ramp(0), ramp(90));
+        let uploaded = drawn(&gpu, |view| {
+            pipeline
+                .render_to_view(&planes(&first), &planes(&first), 0.0, 0.0, view)
+                .expect("render");
+        });
+        let again = drawn(&gpu, |view| {
+            pipeline.render_uploaded_to_view(0.0, 0.0, view)
+        });
+        assert_eq!(
+            again, uploaded,
+            "the same frame and pose, without an upload"
+        );
+        let panned = drawn(&gpu, |view| {
+            pipeline.render_uploaded_to_view(0.2, 0.0, view)
+        });
+        assert_ne!(panned, uploaded, "a new pose draws the picture again");
+
+        let next = drawn(&gpu, |view| {
+            pipeline
+                .render_to_view(&planes(&second), &planes(&second), 0.2, 0.0, view)
+                .expect("render");
+        });
+        assert_ne!(next, panned, "the second frame differs from the first");
+        let next_again = drawn(&gpu, |view| {
+            pipeline.render_uploaded_to_view(0.2, 0.0, view)
+        });
+        assert_eq!(next_again, next, "it draws the frame uploaded last");
     }
 }
