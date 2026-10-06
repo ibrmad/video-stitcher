@@ -112,7 +112,7 @@ script_mod! {
                         visible: false
                         width: Fill height: Fit flow: Down
                         RecoRow{
-                            Tip{text: "The detector: an .onnx file. Choosing one here also makes it the default in Preferences."
+                            Tip{text: "The detector: an .onnx file. The one chosen stays for the next export."
                                 RecoLabelCell{RecoSubdued{text: "Model"}}
                             }
                             ai_model := TextInput{

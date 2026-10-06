@@ -104,7 +104,7 @@ pub struct Tracking {
 
 impl Tracking {
     /// Why the tracking can't run as chosen, if it can't. The model is an
-    /// .onnx file that exists, as Preferences takes it.
+    /// .onnx file that exists.
     pub fn problem(&self) -> Option<String> {
         if self.mode == "sweep" || self.usable_model().is_some() {
             return None;
@@ -119,8 +119,7 @@ impl Tracking {
         }
     }
 
-    /// The model, when it is one Preferences would take: an .onnx file
-    /// that exists.
+    /// The model, when it is usable: an .onnx file that exists.
     pub fn usable_model(&self) -> Option<&PathBuf> {
         self.model
             .as_ref()
@@ -404,7 +403,7 @@ mod tests {
         let model = temp_file("yolo.onnx");
         assert_eq!(tracking(Some(model.clone()), "field").problem(), None);
         let _ = std::fs::remove_file(model);
-        // As Preferences has it: an .onnx file, whatever else exists there.
+        // An .onnx file, whatever else exists there.
         let notes = temp_file("notes.txt");
         assert_eq!(
             tracking(Some(notes.clone()), "field").problem().as_deref(),

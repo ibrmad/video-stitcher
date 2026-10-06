@@ -397,8 +397,7 @@ impl App {
         }
     }
 
-    /// Choose…'s answer: the sheet's model, and the default from now on
-    /// (Preferences shows it).
+    /// Choose…'s answer: the sheet's model, and the next export's too.
     pub(crate) fn export_model_picked(&mut self, cx: &mut Cx, path: &Path) {
         self.ui
             .text_input(cx, ids!(ai_model))
@@ -409,8 +408,8 @@ impl App {
     }
 
     /// The sheet's AI choices are the next export's: kept with the others,
-    /// and a usable model typed in becomes the default (Sweep takes any
-    /// text there; Preferences wouldn't).
+    /// and a model typed in is kept when it is usable (Sweep takes any
+    /// text there).
     pub(crate) fn remember_ai(&mut self, tracking: Option<&Tracking>) {
         self.settings.ai_enabled = tracking.is_some();
         let Some(tracking) = tracking else {

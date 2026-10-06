@@ -315,7 +315,7 @@ def check_shortcuts():
         keys, does = texts(app, "keys"), texts(app, "does")
         expect(list(zip(keys, does))[:2] == [("Space", "Play or pause"), ("[  /  ]", "Back or forward 5 seconds")],
                f"shortcuts: the keys and what they do ({list(zip(keys, does))[:2]})")
-        expect(len(keys) == 11 and "⌘," in keys and "Scroll" in keys,
+        expect(len(keys) == 12 and "⌘S" in keys and "⌘," in keys and "Scroll" in keys,
                f"shortcuts: every key, the pointer and the menu keys ({len(keys)} rows)")
         save_shot(app, "shortcuts")
         click(app, "shortcuts_website")

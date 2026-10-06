@@ -134,7 +134,7 @@ Stitching and calibration (Module 4):
   the same frame and measures the lanes again; `SetFieldRoi` sets the
   outline; `SaveCalibration` writes it (atomically) with the live values
   folded in. After each, `Calibration(values)` reports them with `dirty`,
-  and the Adjust panel and Save follow it.
+  and the Adjust panel and its title row's Save follow it.
 - Straight ahead, the render pitch cancels the rig tilt
   (`rig_correction::render_pitch`); the tilt levels the horizon as the
   view turns.
@@ -185,8 +185,9 @@ AI tracking (Module 6b):
   less the band, the buttons and a margin: `reco_sheet_rows_max`). The AI
   rows show while tracking is on; the panner's finer knobs are a closed
   Advanced tier (Rule 9).
-- The model is the one Preferences names. Choose… also makes it the
-  default; a model typed in becomes the default at Export. Tracking
+- The model is the last one used: Choose… keeps it at once, and a usable
+  model typed in is kept at Export (only the sheet shows it since the UI
+  pass). Tracking
   without a usable model (an .onnx file that exists, Preferences' rule)
   says why under the model, and Export waits; Sweep needs none.
 - A style preset sets the knobs it covers. On open, the Advanced tier
@@ -203,6 +204,28 @@ AI tracking (Module 6b):
   the calibration's field outline). It says whether tracking started (the
   card's line; the notice adds "tracked with AI") and sends the engine's
   AI figures to Stats once measured.
+
+One home per setting (UI pass, owner-approved 2026-10-06):
+
+- Preferences holds the app-wide settings only: the recording codec and
+  folder, and usage data. The rest live where they are used: the export
+  sheet remembers its codec, quality and AI model; Record's menu has the
+  recording quality; Adjust has the seam blend. There is no separate
+  seam blend default: a recalibration keeps its blend, a first one starts
+  at 0.05, and an old saved `default_blend` is ignored.
+- The view bar reads `Aspect [Auto] … [Record][▾]`. Record keeps one
+  width whether it says "Record" or shows the time with a stop square
+  (`reco_record_width`), and its menu is off rather than hidden while
+  recording, so nothing in the bar moves. The menu is a `RecoMenu` with
+  `MenuEntry::Choice` rows: the ✓ sits at the content edge, so no row
+  keeps an empty mark column. Its last row, Codec and folder…, opens
+  Preferences.
+- Save lives in the Adjust panel's title row (`Unsaved [Save]`), for
+  edits from Stitch, Lens or the field outline. ⌘S saves through the
+  macOS menu bar (File → Save Calibration) and through the window's key
+  (`keys::is_save_shortcut`: injected keys and systems without a menu
+  bar, where it is Ctrl+S). The row goes as soon as a save is sent, and
+  a failed save brings it back with the next values.
 
 Camera and lens (Module 5):
 
@@ -266,7 +289,8 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   toggles. Setup (left) and Adjust (right) are flat panels: a title row,
   then collapsible section bands over rows. Adjust rows are property rows
   (label, control, value) whose labels explain themselves in tooltips. The
-  viewer has a view bar (name, preview aspect, Record) over a black canvas.
+  viewer has a view bar (name, Aspect, Record and its menu) over a black
+  canvas.
   The time panel spans the bottom and shows only what exists: a control
   row (step, play, and a status line; the time once there is a stitch to
   play), then, once a camera has video, a ruler and one lane per camera: its

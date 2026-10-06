@@ -34,7 +34,7 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       Evidence: "Setup panel open", "`<id>` shown / hidden" per state,
       "camera link is lit", "dragging the bar widens Setup", "Setup stops
       at its 200 pt minimum", "menu: `recent_menu` opens a menu".
-- [x] Viewer: a view bar (Preview, aspect, Record) over a black canvas; the
+- [x] Viewer: a view bar (Preview, Aspect, Record and its menu) over a black canvas; the
       next step with the panorama frame and stepper until a stitch exists;
       calibration progress in that column; the export card with Cancel; a
       calibration-failed state with Try again. Evidence: "viewport is
@@ -167,14 +167,27 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       and one past the real end fails and keeps the frame
       (`seek_past_the_end_is_an_error`).
 - [x] Record / Stop with recording state colours; quality (fast, balanced,
-      high) hidden while recording. Evidence: "record: the quality shows
-      before recording", "record: the badge shows while recording", "record:
-      the quality hides while recording", "record: 1920x1080 for Auto",
+      high) hidden while recording. Changed (UI pass, owner-approved
+      2026-10-06): Record is one button, which shows the time and a stop
+      square while recording at the same width, with a ▾ menu beside it:
+      the quality (a ✓ on the one in use) and Codec and folder… (Preferences),
+      off while recording, so nothing in the bar moves. Evidence: "record:
+      the button says Record", "record: the menu has the qualities and Codec
+      and folder…", "record: ✓ on the current quality", "record: the quality
+      is remembered", "record: the ✓ moves to it", "record: Codec and
+      folder… opens Preferences", "record: the toast names the file, not its
+      path", "record: while recording the button shows the time", "record:
+      the menu is off while recording", "record: nothing in the view bar
+      moves when recording starts", "record: the button's time counts",
+      "record: 1920x1080 for Auto",
       "record: about 3 s at 30 fps, one frame per frame played", "record:
       quitting while recording leaves a file", "record: and it plays"
       (`recording.png`); `recording_has_one_frame_per_source_frame`,
       `recording_keeps_its_size_when_the_preview_resizes`,
-      `pausing_adds_no_frames`, `quitting_while_recording_finishes_the_file`.
+      `pausing_adds_no_frames`, `quitting_while_recording_finishes_the_file`,
+      `the_record_menu_marks_the_quality_in_use`,
+      `a_picked_row_names_its_quality`,
+      `a_choice_is_picked_like_an_item_and_marks_the_chosen_one`.
       (New: the whole picture at 1080 rows and the preview aspect, one frame
       per source frame; the Slint app cropped a 1080p render and recorded per
       render.)
@@ -288,7 +301,12 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       tilt", "tune: the tilt comes back after a reopen";
       `a_saved_calibration_reloads_with_the_tuned_values`,
       `saving_writes_the_file_and_clears_the_change`. Lens edits arrive
-      with Module 5 and take the same path.
+      with Module 5 and take the same path. Changed (UI pass): Save sits in
+      the Adjust panel's title row (`Unsaved [Save]`), not in Setup, beside
+      the sliders that make the edits, and ⌘S saves (File → Save
+      Calibration). Evidence: "tune: in the Adjust panel's title row,
+      beside the tuning", "tune: the title row says Unsaved", "tune: ⌘S
+      saves it, and a toast says so"; `command_s_saves_the_calibration`.
 - [x] Intersect −1..1, camera axis offset −0.6..0.6, `x_ty` −0.1..0.1,
       Reset. Evidence: "tune: the overlap follows its slider", "tune: Reset
       layout restores the file's overlap"; `reset_restores_the_loaded_layout`.
@@ -449,8 +467,8 @@ detector. reco-app's tracked exports run in optimized builds only
       `the_zones_end_where_the_track_says`. Labels in plain words ("Follow":
       Players and ball, Ball only, Sweep (no AI); "Tilt": hold it level).
       (New: Sweep needs no model, "ai: Sweep needs no model"; the model
-      follows Preferences' rule, an .onnx file that exists, and Choose…
-      makes it the default; every choice but the Advanced tier is
+      is an .onnx file that exists, and the last one used (chosen, or
+      typed in and exported) stays for the next export; every choice but the Advanced tier is
       remembered, "ai: the choices are remembered, the model as the
       default", `tracking_choices_default_as_the_slint_app`; the lookahead
       fills in its zone's colour, with a line saying whether it fits; the
@@ -485,21 +503,25 @@ is a log line, and the payloads are kept for the check to read), the unit
 tests (`cargo test -p reco-app -p reco-desktop`), and screenshots in
 `target/desktop-checks/m7/`.
 
-- [x] Preferences (the app menu, and ⌘, in the macOS menu bar): export
-      codec and quality, recording codec, quality and folder with Choose…,
-      the seam blend new calibrations start with, the AI model with
-      Choose…, the usage-data opt-in; Save keeps and applies them (the view
-      bar's quality follows). New: Cancel, Escape or a press outside keeps
-      nothing; a missing folder or a model that isn't an `.onnx` file is
-      refused with the reason. Evidence: "prefs: the app menu opens
-      Preferences", "Cancel keeps nothing", "Escape keeps nothing (Balanced)",
-      "a missing folder is refused (That recording folder doesn't exist.)",
-      "a model that isn't .onnx is refused", "Choose… sets the folder",
-      "Choose… sets the model", "export defaults kept (hevc, high)",
-      "recording codec and quality kept (av1, fast)", "the seam blend is
-      kept", "the view bar shows the recording quality (Fast)", "a new
-      launch shows the folder and the model"; "blend: Auto-calibrate starts
-      with the saved seam blend"; `checked_folder`/`checked_model` tests,
+- [x] Preferences (the app menu, and ⌘, in the macOS menu bar). Changed
+      (UI pass, owner-approved 2026-10-06): app-wide settings only, the
+      recording codec and folder with Choose…, and the usage-data opt-in.
+      The Slint app's other defaults live where they are used: export codec
+      and quality (the export sheet remembers its own), recording quality
+      (Record's menu), the AI model (the export sheet). The seam blend
+      default is dropped: a first calibration starts at 0.05, a
+      recalibration keeps its blend, and an old saved default is ignored.
+      Save keeps and applies them. New: Cancel, Escape or a press outside
+      keeps nothing; a missing folder is refused with the reason. Evidence:
+      "prefs: the app menu opens Preferences", "prefs: only app-wide
+      settings, the rest live where they are used", "the recording codec
+      shows H.264", "Cancel keeps nothing", "Escape keeps nothing", "a
+      missing folder is refused (That recording folder doesn't exist.)",
+      "Choose… sets the folder", "the recording codec is kept", "the folder
+      is kept", "a new launch shows the codec and the folder"; "blend:
+      Auto-calibrate starts at 0.05, whatever an old saved default said";
+      `the_recording_folder_must_exist`,
+      `a_file_from_before_loads_and_drops_the_blend_default`,
       `a_new_calibration_takes_the_default_blend` (a recalibration keeps
       the seam its calibration had), `recording_uses_the_chosen_codec`.
       Ruling: dark mode is not offered; the app has one look, the Rerun
@@ -509,7 +531,7 @@ tests (`cargo test -p reco-app -p reco-desktop`), and screenshots in
 - [x] Keyboard shortcuts, listing exactly the keys the app answers (the
       sheet and the key handler share one table), with Website and Forum.
       Evidence: "shortcuts: the keys and what they do", "every key, the
-      pointer and the menu keys (11 rows)", "Website opens the project's
+      pointer and the menu keys (12 rows, ⌘S among them)", "Website opens the project's
       page", "Forum opens the forum", "Close closes it", "Escape closes
       it"; `the_sheet_lists_every_key_the_preview_handles` (every key
       Makepad knows: handled ⇔ listed),

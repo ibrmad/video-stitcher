@@ -312,7 +312,7 @@ pub struct App {
     profile_search: ProfileSearch,
     #[rust]
     profiles: Vec<LensProfileSummary>,
-    /// The codecs Preferences' dropdowns list, in order.
+    /// The codecs Preferences' codec dropdown lists, in order.
     #[rust]
     prefs_codec_list: Vec<String>,
     /// The preview's GPU, once named, and whether usage data has had the
