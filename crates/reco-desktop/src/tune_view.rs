@@ -7,27 +7,15 @@ use reco_app::preview::tuning::{CalibrationValues, Tuning};
 use reco_app::preview::worker::PreviewCommand;
 use reco_app::toasts::Severity;
 
+use crate::value_text::Reading;
 use crate::App;
 
-/// A slider, its value label, the change it sends, and how its value reads.
-type TuneRow<'a> = (
-    &'a [LiveId],
-    &'a [LiveId],
-    fn(f64) -> Tuning,
-    fn(f64) -> String,
-);
+/// A slider, its value field, the change it sends, and how its value reads.
+type TuneRow<'a> = (&'a [LiveId], &'a [LiveId], fn(f64) -> Tuning, Reading);
 
-fn degrees(v: f64) -> String {
-    format!("{v:.1}°")
-}
-
-fn two(v: f64) -> String {
-    format!("{v:.2}")
-}
-
-fn three(v: f64) -> String {
-    format!("{v:.3}")
-}
+const DEGREES: Reading = Reading::number(1, "°");
+const TWO: Reading = Reading::number(2, "");
+const THREE: Reading = Reading::number(3, "");
 
 /// Every tuning slider.
 fn rows() -> [TuneRow<'static>; 6] {
@@ -36,33 +24,33 @@ fn rows() -> [TuneRow<'static>; 6] {
             ids!(seam_blend),
             ids!(seam_value),
             |v| Tuning::Blend(v as f32),
-            two,
+            TWO,
         ),
         (
             ids!(rig_tilt),
             ids!(tilt_value),
             |v| Tuning::Tilt(v as f32),
-            degrees,
+            DEGREES,
         ),
         (
             ids!(rig_roll),
             ids!(roll_value),
             |v| Tuning::Roll(v as f32),
-            degrees,
+            DEGREES,
         ),
         (
             ids!(intersect),
             ids!(intersect_value),
             Tuning::Intersect,
-            three,
+            THREE,
         ),
         (
             ids!(axis_offset),
             ids!(axis_value),
             Tuning::AxisOffset,
-            three,
+            THREE,
         ),
-        (ids!(x_ty), ids!(x_ty_value), Tuning::XTy, three),
+        (ids!(x_ty), ids!(x_ty_value), Tuning::XTy, THREE),
     ]
 }
 
@@ -91,9 +79,9 @@ impl App {
         if adopt {
             self.adopted_open = values.opened;
             self.send_source_info(cx, values.sync_offset);
-            for ((slider, label, _, show), value) in rows().into_iter().zip(numbers) {
+            for ((slider, field, _, reading), value) in rows().into_iter().zip(numbers) {
                 self.ui.slider(cx, slider).set_value(cx, value);
-                self.set_label(cx, label, &show(value));
+                self.set_label(cx, field, &reading.text(value));
             }
             self.ui.check_box(cx, ids!(match_colours)).set_active(
                 cx,
@@ -115,10 +103,8 @@ impl App {
 
     /// The Adjust panel's sliders, switch, Reset and Apply; Save.
     pub(crate) fn tune_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        for (slider, label, tuning, show) in rows() {
-            let slider = self.ui.slider(cx, slider);
-            if let Some(value) = slider.slided(actions).or(slider.end_slide(actions)) {
-                self.set_label(cx, label, &show(value));
+        for (slider, field, tuning, reading) in rows() {
+            if let Some(value) = self.slider_input(cx, actions, slider, field, reading) {
                 self.send_preview(PreviewCommand::Tune(tuning(value)));
             }
         }
@@ -130,9 +116,10 @@ impl App {
             // worker does the same to the picture.
             if let Some(loaded) = self.loaded_values.clone() {
                 let layout = [loaded.intersect, loaded.axis_offset, loaded.x_ty];
-                for ((slider, label, _, show), value) in rows()[3..].iter().copied().zip(layout) {
+                for ((slider, field, _, reading), value) in rows()[3..].iter().copied().zip(layout)
+                {
                     self.ui.slider(cx, slider).set_value(cx, value);
-                    self.set_label(cx, label, &show(value));
+                    self.set_label(cx, field, &reading.text(value));
                 }
             }
             self.send_preview(PreviewCommand::Tune(Tuning::ResetLayout));

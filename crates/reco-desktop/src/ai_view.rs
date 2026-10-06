@@ -14,6 +14,7 @@ use reco_app::ai::{
 
 use crate::project_view::Pick;
 use crate::ui::zones::RecoZones;
+use crate::value_text::Reading;
 use crate::App;
 
 /// A reason the detector can't run, standing in for the machine's answer
@@ -28,14 +29,12 @@ fn rounded_lookahead(secs: f64) -> f64 {
     ((secs * 10.0).round() / 10.0).clamp(0.0, MAX_LOOKAHEAD)
 }
 
+/// How the lookahead reads: tenths of a second, "Off" at none.
+const LOOKAHEAD: Reading = Reading::or_word(1, " s", "Off");
+
 /// The lookahead as its value reads.
 fn lookahead_text(secs: f64) -> String {
-    let secs = rounded_lookahead(secs);
-    if secs <= 0.0 {
-        "Off".into()
-    } else {
-        format!("{secs:.1} s")
-    }
+    LOOKAHEAD.text(rounded_lookahead(secs))
 }
 
 /// The line under the lookahead, and whether it warns: nothing without a
@@ -92,31 +91,23 @@ fn interval_row(interval: u32) -> usize {
 }
 
 /// A knob's value as its row shows it.
-fn knob_text(value: f64) -> String {
-    format!("{value:.2}")
-}
+const KNOB: Reading = Reading::number(2, "");
 
 /// A field of view as its row shows it.
-fn degrees_text(value: f64) -> String {
-    format!("{value:.0}°")
-}
+const DEGREES: Reading = Reading::number(0, "°");
 
-/// An Advanced tier slider: the slider, its value, and how it reads.
-type KnobSlider = (&'static [LiveId], &'static [LiveId], fn(f64) -> String);
+/// An Advanced tier slider: the slider, its value field, and how it reads.
+type KnobSlider = (&'static [LiveId], &'static [LiveId], Reading);
 
 /// The Advanced tier's sliders, in `show_ai_knobs`' order.
 fn knob_sliders() -> [KnobSlider; 6] {
     [
-        (ids!(ai_ball_weight), ids!(ai_ball_weight_value), knob_text),
-        (ids!(ai_bandwidth), ids!(ai_bandwidth_value), knob_text),
-        (ids!(ai_dead_zone), ids!(ai_dead_zone_value), knob_text),
-        (ids!(ai_fov_tight), ids!(ai_fov_tight_value), degrees_text),
-        (
-            ids!(ai_fov_default),
-            ids!(ai_fov_default_value),
-            degrees_text,
-        ),
-        (ids!(ai_fov_wide), ids!(ai_fov_wide_value), degrees_text),
+        (ids!(ai_ball_weight), ids!(ai_ball_weight_value), KNOB),
+        (ids!(ai_bandwidth), ids!(ai_bandwidth_value), KNOB),
+        (ids!(ai_dead_zone), ids!(ai_dead_zone_value), KNOB),
+        (ids!(ai_fov_tight), ids!(ai_fov_tight_value), DEGREES),
+        (ids!(ai_fov_default), ids!(ai_fov_default_value), DEGREES),
+        (ids!(ai_fov_wide), ids!(ai_fov_wide_value), DEGREES),
     ]
 }
 
@@ -275,10 +266,10 @@ impl App {
             knobs.fov_default,
             knobs.fov_wide,
         ];
-        for ((slider, label, text), value) in knob_sliders().into_iter().zip(values) {
+        for ((slider, field, reading), value) in knob_sliders().into_iter().zip(values) {
             let value = f64::from(value);
             self.ui.slider(cx, slider).set_value(cx, value);
-            self.set_label(cx, label, &text(value));
+            self.set_label(cx, field, &reading.text(value));
         }
     }
 
@@ -385,14 +376,17 @@ impl App {
             let knobs = PannerKnobs::of_preset(PRESETS[row.min(PRESETS.len() - 1)]);
             self.show_ai_knobs(cx, &knobs);
         }
-        for (slider, label, text) in knob_sliders() {
-            let slider = self.ui.slider(cx, slider);
-            if let Some(value) = slider.slided(actions).or(slider.end_slide(actions)) {
-                self.set_label(cx, label, &text(value));
-            }
+        // Read when an export starts; nothing to send now.
+        for (slider, field, reading) in knob_sliders() {
+            self.slider_input(cx, actions, slider, field, reading);
         }
-        let lookahead = self.ui.slider(cx, ids!(ai_lookahead));
-        if let Some(secs) = lookahead.slided(actions).or(lookahead.end_slide(actions)) {
+        if let Some(secs) = self.slider_input(
+            cx,
+            actions,
+            ids!(ai_lookahead),
+            ids!(ai_lookahead_value),
+            LOOKAHEAD,
+        ) {
             self.show_lookahead(cx, secs);
         }
     }
@@ -500,7 +494,7 @@ mod tests {
 
     #[test]
     fn knobs_read_as_numbers() {
-        assert_eq!(knob_text(0.6), "0.60");
-        assert_eq!(degrees_text(22.0), "22°");
+        assert_eq!(KNOB.text(0.6), "0.60");
+        assert_eq!(DEGREES.text(22.0), "22°");
     }
 }

@@ -202,6 +202,22 @@ def check_lens():
         expect(before != after, "lens: the picture follows")
         expect(wait_for(lambda: app.enabled("reset_lens"), 5) is True, "lens: Reset lens can go back")
         expect(bool(wait_for(lambda: app.rect("save_calibration"), 5)), "lens: Save appears")
+        # A typed focal length, and one past the range's end, which stops there.
+        typed = str(int(fx) + 20)
+        click(app, "lens_fx_value")
+        time.sleep(0.3)
+        app.get("/k", t=typed)
+        app.key("return")
+        time.sleep(0.5)
+        expect(text_of(app, "lens_fx_value") == typed, f"lens: a typed focal length ({text_of(app, 'lens_fx_value')} vs {typed})")
+        click(app, "lens_fx_value")
+        time.sleep(0.3)
+        app.get("/k", t="99999")
+        app.key("return")
+        time.sleep(0.5)
+        end = text_of(app, "lens_fx_value") or ""
+        expect(end.isdigit() and int(typed) < int(end) < 99999,
+               f"lens: past the range, its end ({end})")
         click(app, "reset_lens")
         time.sleep(0.8)
         expect(text_of(app, "lens_fx_value") == fx, f"lens: Reset lens restores the file's lens ({text_of(app, 'lens_fx_value')})")

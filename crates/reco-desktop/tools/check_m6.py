@@ -438,9 +438,12 @@ def check_ai():
         reveal(app, "ai_advanced")
         open_advanced(app, "ai_advanced")
         expect(bool(wait_for(lambda: app.rect("ai_dead_zone"), 3)), "ai: Advanced opens")
+        # Rows out of the sheet's view aren't drawn: reveal each value read.
         reveal(app, "ai_dead_zone_value")
-        expect(text_of(app, "ai_dead_zone_value") == "0.03" and text_of(app, "ai_fov_tight_value") == "22°",
-               f"ai: Broadcast's knobs ({text_of(app, 'ai_dead_zone_value')}, {text_of(app, 'ai_fov_tight_value')})")
+        dead = text_of(app, "ai_dead_zone_value")
+        reveal(app, "ai_fov_tight_value")
+        tight = text_of(app, "ai_fov_tight_value")
+        expect(dead == "0.03" and tight == "22°", f"ai: Broadcast's knobs ({dead}, {tight})")
         reveal(app, "ai_preset")
         pick_row(app, "ai_preset", 1)
         expect(text_of(app, "ai_dead_zone_value") == "0.02",
@@ -465,6 +468,28 @@ def check_ai():
         drag(app, "ai_lookahead", -0.6)
         value = text_of(app, "ai_lookahead_value")
         expect(value not in (None, "2.5 s"), f"ai: dragging the lookahead shows its value ({value})")
+        # Typed values: the lookahead's Off, a knob, and Escape, which puts the
+        # value back and leaves the sheet open.
+        reveal(app, "ai_lookahead_value")
+        type_into(app, "ai_lookahead_value", "off")
+        app.key("return")
+        expect(text_of(app, "ai_lookahead_value") == "Off",
+               f"ai: a typed off turns the lookahead off ({text_of(app, 'ai_lookahead_value')})")
+        type_into(app, "ai_lookahead_value", "1,2")
+        app.key("return")
+        expect(text_of(app, "ai_lookahead_value") == "1.2 s",
+               f"ai: a typed lookahead ({text_of(app, 'ai_lookahead_value')})")
+        reveal(app, "ai_ball_weight_value")
+        type_into(app, "ai_ball_weight_value", "0.8")
+        app.key("return")
+        expect(text_of(app, "ai_ball_weight_value") == "0.80",
+               f"ai: a typed ball weight ({text_of(app, 'ai_ball_weight_value')})")
+        type_into(app, "ai_ball_weight_value", "0.5")
+        app.key("escape")
+        time.sleep(0.5)
+        expect(text_of(app, "ai_ball_weight_value") == "0.80",
+               f"ai: Escape in a field puts its value back ({text_of(app, 'ai_ball_weight_value')})")
+        expect(sheet_shows(app, face), "ai: and leaves the sheet open")
         save_shot(app, "ai-on")
         # Events on, so the detections can be read back.
         show_and_click(app, "export_events")

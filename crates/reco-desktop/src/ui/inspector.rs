@@ -10,7 +10,8 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    let Value = RecoText{width: theme.reco_value_width align: Align{x: 1.0}}
+    // A slider's number, typed into.
+    let Value = RecoValueField{}
     // A checkbox starts where a slider's track does, after the knob's room.
     let Check = RecoCheckBox{margin: Inset{left: theme.reco_slider_knob}}
 

@@ -11,8 +11,8 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    let TimeInput = TextInput{width: theme.reco_time_input height: theme.reco_button margin: 0 empty_text: "0:00"}
-    let Value = RecoText{width: theme.reco_value_width align: Align{x: 1.0}}
+    // A slider's number (or time), typed into.
+    let Value = RecoValueField{}
     // A line of text in the control column that wraps when long.
     let NoteRow = RecoRow{height: Fit{min: theme.reco_row}}
 
@@ -64,14 +64,14 @@ script_mod! {
                             RecoLabelCell{RecoSubdued{text: "Start"}}
                         }
                         range_start := RecoSlider{min: 0.0 max: 1.0 default: 0.0}
-                        range_start_text := TimeInput{}
+                        range_start_text := Value{text: "0:00"}
                     }
                     RecoRow{
                         Tip{text: "Where the export ends on the timeline."
                             RecoLabelCell{RecoSubdued{text: "End"}}
                         }
                         range_end := RecoSlider{min: 0.0 max: 1.0 default: 1.0}
-                        range_end_text := TimeInput{}
+                        range_end_text := Value{text: "0:00"}
                     }
                     RecoRow{
                         RecoLabelCell{}

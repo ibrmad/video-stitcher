@@ -25,7 +25,8 @@ script_mod! {
         body: View{width: Fill height: Fit flow: Down}
     }
     // A property row's value and switch, as in the Adjust panel.
-    let Value = RecoText{width: theme.reco_value_width align: Align{x: 1.0}}
+    // A slider's number, typed into.
+    let Value = RecoValueField{}
     let Check = RecoCheckBox{margin: Inset{left: theme.reco_slider_knob}}
     // The camera's file count and length, right-aligned into a column.
     let CameraFiles = RecoMeta{align: Align{x: 1.0}}

@@ -261,13 +261,25 @@ def check_calibrate():
         if advanced:
             app.get("/click", x=advanced[0] + 18, y=advanced[1] + 12, wait=1)
         wait_for(lambda: app.enabled("cal_frames") is not None, 3)
+        # Their values can be typed, as every slider's.
+        click(app, "cal_skip_end_value")
+        time.sleep(0.3)
+        app.get("/k", t="12")
+        app.key("return")
+        time.sleep(0.4)
+        expect(text_of(app, "cal_skip_end_value") == "12 s",
+               f"calibrate: a typed time to skip ({text_of(app, 'cal_skip_end_value')})")
         app.click_id("auto_calibrate")
         locked = wait_for(lambda: app.enabled("cal_frames") is False, 5)
         expect(bool(locked), f"calibrate: the Advanced options lock while it runs ({app.enabled('cal_frames')})")
+        expect(app.enabled("cal_skip_end_value") is False,
+               f"calibrate: their value fields too ({app.enabled('cal_skip_end_value')})")
         expect(click(app, "cancel_calibration"), "calibrate: the Setup panel offers Cancel")
         stopped = wait_for(lambda: text_of(app, "calibration_status") == "Not calibrated", 30)
         expect(bool(stopped), f"calibrate: the Setup panel's Cancel stops it ({text_of(app, 'calibration_status')})")
         expect(app.enabled("cal_frames") is True, f"calibrate: and unlocks them ({app.enabled('cal_frames')})")
+        expect(app.enabled("cal_skip_end_value") is True,
+               f"calibrate: the value fields too ({app.enabled('cal_skip_end_value')})")
         app.click_id("auto_calibrate")
         failed = wait_for(lambda: text_of(app, "next_title") == "Calibration didn't work", 180)
         expect(bool(failed), f"calibrate: footage with no matches fails plainly ({text_of(app, 'next_title')})")

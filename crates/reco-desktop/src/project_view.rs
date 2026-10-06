@@ -526,9 +526,13 @@ impl App {
             ids!(cal_frames),
             ids!(cal_imu),
             ids!(cal_akaze),
+            ids!(cal_akaze_value),
             ids!(cal_y_min),
+            ids!(cal_y_min_value),
             ids!(cal_y_max),
+            ids!(cal_y_max_value),
             ids!(cal_skip_end),
+            ids!(cal_skip_end_value),
         ] {
             self.ui.widget(cx, id).set_disabled(cx, running);
         }

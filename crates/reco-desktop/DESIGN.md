@@ -293,6 +293,15 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   (label, control, value) whose labels explain themselves in tooltips. The
   viewer has a view bar (name, Aspect, Record and its menu) over a black
   canvas.
+- **Value fields**: every slider's number is a field (`RecoValueField`), a
+  quiet box with the digits on the right: a shade lighter on hover, a green
+  ring while typing. A click selects the digits; Return or a click away
+  applies the value through the slider (which keeps it in range) and gives
+  the keyboard back to the preview; Escape puts the value back (and holds
+  Escape, so a sheet stays open); ↑/↓ step the last digit shown (⇧: ten).
+  The unit is optional and a decimal comma reads (`value_text::Reading`).
+  A field typed in keeps its text while the value moves under it; a field
+  left as it was changes nothing. Plan: `plans/2026-10-06-value-fields.md`.
   The time panel spans the bottom and shows only what exists: a control
   row (step, play, and a status line; the time once there is a stitch to
   play), then, once a camera has video, a ruler and one lane per camera: its
@@ -358,7 +367,13 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
 - `Slider` and `SliderMinimal` sit 4 pt in and 8 pt down from their row,
   and `SliderMinimal` draws its track at the bottom of its box (room for a
   label). `RecoSlider` drops the margin and draws its own centred track and
-  knob; a property row shows the value in its own label.
+  knob; a property row shows the value in its own field.
+- `TextInput` lays a single line out at its natural width, so neither
+  `label_align` nor a fixed width's `align` moves it: `RecoValueField` is
+  Fit, held to one width by `min` and `max`, and its layout aligns the text
+  right. A press inside a selection keeps it, then drops it as the press
+  ends, so the field clears its selection when typing ends (the next click
+  would leave the caret where it landed instead of the digits selected).
 - `Slider` sets the grab hand over itself and the closed hand while pressed,
   in code, and its number field shows the text cursor over the track and
   takes the keyboard on a press even when hidden. `RecoSlider` sizes the

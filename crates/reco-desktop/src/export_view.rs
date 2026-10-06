@@ -22,8 +22,9 @@ use reco_app::toasts::Severity;
 
 use crate::export_text::{grouped, percent, progress_detail, size_label, time_left, tracking_note};
 use crate::project_view::Pick;
-use crate::time_ruler::{clock, parse_clock};
+use crate::time_ruler::clock;
 use crate::ui::preview::RecoPreview;
+use crate::value_text::Reading;
 use crate::{live, App};
 
 /// An export, from the click on Export to its end.
@@ -70,16 +71,6 @@ fn slider_seconds(fraction: f64, length: f64) -> f64 {
     } else {
         (fraction * length).round().min(length)
     }
-}
-
-/// The time typed in a field showing `shown`: `None` when the text is
-/// still what the field showed (its whole seconds would cut a fraction off
-/// the end) or doesn't read as a time.
-fn typed_seconds(text: &str, shown: f64) -> Option<f64> {
-    if text.trim() == clock(shown) {
-        return None;
-    }
-    parse_clock(text)
 }
 
 impl App {
@@ -212,12 +203,8 @@ impl App {
         let (from, to) = range.fractions();
         self.ui.slider(cx, ids!(range_start)).set_value(cx, from);
         self.ui.slider(cx, ids!(range_end)).set_value(cx, to);
-        self.ui
-            .text_input(cx, ids!(range_start_text))
-            .set_text(cx, &clock(range.start()));
-        self.ui
-            .text_input(cx, ids!(range_end_text))
-            .set_text(cx, &clock(range.end()));
+        self.set_label(cx, ids!(range_start_text), &clock(range.start()));
+        self.set_label(cx, ids!(range_end_text), &clock(range.end()));
         let length = format!("{} of {}", clock(range.duration()), clock(range.length()));
         self.set_label(cx, ids!(range_length), &length);
         self.set_visible(cx, ids!(range_length), !range.is_empty());
@@ -287,16 +274,17 @@ impl App {
             }
         }
         // A time applies on Return or when the field loses the keyboard (a
-        // click anywhere else, Export included, takes it).
+        // click anywhere else, Export included, takes it); ↑/↓ step seconds.
         for (field, start) in [
             (ids!(range_start_text), true),
             (ids!(range_end_text), false),
         ] {
-            let input = self.ui.text_input(cx, field);
-            if input.returned(actions).is_some() || input.key_focus_lost(actions) {
+            if let Some(input) = self.field_input(cx, actions, field) {
                 if let Some(range) = self.export_range.as_mut() {
+                    // The shown time is whole seconds: left as it was, it
+                    // would cut a fraction off the end.
                     let shown = if start { range.start() } else { range.end() };
-                    match typed_seconds(&input.text(), shown) {
+                    match input.value(Reading::Clock, shown) {
                         Some(seconds) if start => range.set_start(seconds),
                         Some(seconds) => range.set_end(seconds),
                         None => {}
@@ -628,14 +616,6 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_field_left_unchanged_changes_nothing() {
-        assert_eq!(typed_seconds("1:00", 60.4), None, "still what it showed");
-        assert_eq!(typed_seconds(" 1:00 ", 60.4), None);
-        assert_eq!(typed_seconds("0:59", 60.4), Some(59.0));
-        assert_eq!(typed_seconds("soon", 60.4), None);
-    }
 
     #[test]
     fn range_sliders_give_whole_seconds_and_reach_the_end() {

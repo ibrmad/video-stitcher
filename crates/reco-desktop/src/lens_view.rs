@@ -12,24 +12,35 @@ use reco_app::preview::tuning::{CalibrationValues, Tuning};
 use reco_app::preview::worker::{PreviewCommand, PreviewInfo};
 use reco_app::project::Camera;
 
+use crate::value_text::Reading;
 use crate::App;
 
-/// One fine-tune slider: its id, its value label, how to read and set its
+/// The field of view as its field shows it.
+const FOV: Reading = Reading::number(0, "°");
+
+/// One fine-tune slider: its id, its value field, how to read and set its
 /// field of a lens, its range, and how its value reads.
 struct LensField {
     slider: &'static [LiveId],
-    label: &'static [LiveId],
+    value: &'static [LiveId],
     get: fn(&Lens) -> f64,
     set: fn(&mut Lens, f64),
     range: fn(&FineTuneRanges) -> (f64, f64),
     digits: usize,
 }
 
+impl LensField {
+    /// How the value reads in its field.
+    fn reading(&self) -> Reading {
+        Reading::number(self.digits, "")
+    }
+}
+
 fn fields() -> [LensField; 8] {
     [
         LensField {
             slider: ids!(lens_fx),
-            label: ids!(lens_fx_value),
+            value: ids!(lens_fx_value),
             get: |l| l.fx,
             set: |l, v| l.fx = v,
             range: |r| r.fx,
@@ -37,7 +48,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_fy),
-            label: ids!(lens_fy_value),
+            value: ids!(lens_fy_value),
             get: |l| l.fy,
             set: |l, v| l.fy = v,
             range: |r| r.fy,
@@ -45,7 +56,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_cx),
-            label: ids!(lens_cx_value),
+            value: ids!(lens_cx_value),
             get: |l| l.cx,
             set: |l, v| l.cx = v,
             range: |r| r.cx,
@@ -53,7 +64,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_cy),
-            label: ids!(lens_cy_value),
+            value: ids!(lens_cy_value),
             get: |l| l.cy,
             set: |l, v| l.cy = v,
             range: |r| r.cy,
@@ -61,7 +72,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_k1),
-            label: ids!(lens_k1_value),
+            value: ids!(lens_k1_value),
             get: |l| l.k[0],
             set: |l, v| l.k[0] = v,
             range: |r| r.k[0],
@@ -69,7 +80,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_k2),
-            label: ids!(lens_k2_value),
+            value: ids!(lens_k2_value),
             get: |l| l.k[1],
             set: |l, v| l.k[1] = v,
             range: |r| r.k[1],
@@ -77,7 +88,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_k3),
-            label: ids!(lens_k3_value),
+            value: ids!(lens_k3_value),
             get: |l| l.k[2],
             set: |l, v| l.k[2] = v,
             range: |r| r.k[2],
@@ -85,7 +96,7 @@ fn fields() -> [LensField; 8] {
         },
         LensField {
             slider: ids!(lens_k4),
-            label: ids!(lens_k4_value),
+            value: ids!(lens_k4_value),
             get: |l| l.k[3],
             set: |l, v| l.k[3] = v,
             range: |r| r.k[3],
@@ -147,8 +158,9 @@ impl App {
         if fov.start_slide(actions) {
             self.fov_dragging = true;
         }
-        if let Some(degrees) = fov.slided(actions).or(fov.end_slide(actions)) {
-            self.set_label(cx, ids!(fov_value), &format!("{degrees:.0}°"));
+        if let Some(degrees) =
+            self.slider_input(cx, actions, ids!(fov_slider), ids!(fov_value), FOV)
+        {
             self.send_preview(PreviewCommand::SetFov {
                 degrees: degrees as f32,
             });
@@ -177,7 +189,7 @@ impl App {
         self.ui
             .slider(cx, ids!(fov_slider))
             .set_value(cx, f64::from(degrees));
-        self.set_label(cx, ids!(fov_value), &format!("{degrees:.0}°"));
+        self.set_label(cx, ids!(fov_value), &FOV.text(f64::from(degrees)));
     }
 
     /// Look up both cameras' lenses for the open videos.
@@ -276,7 +288,7 @@ impl App {
             self.ui
                 .slider(cx, field.slider)
                 .set_value(cx, fraction_of(value, (field.range)(&ranges)));
-            self.set_label(cx, field.label, &format!("{value:.*}", field.digits));
+            self.set_label(cx, field.value, &field.reading().text(value));
         }
     }
 
@@ -308,11 +320,30 @@ impl App {
         let ranges = FineTuneRanges::around(&self.lens_base, size.0, size.1);
         let cameras = cameras_at(self.ui.drop_down(cx, ids!(lens_camera)).selected_item());
         for field in fields() {
+            let range = (field.range)(&ranges);
+            let reading = field.reading();
             let slider = self.ui.slider(cx, field.slider);
-            if let Some(fraction) = slider.slided(actions).or(slider.end_slide(actions)) {
-                let value = value_at(fraction, (field.range)(&ranges));
+            let value = if let Some(fraction) = slider.slided(actions).or(slider.end_slide(actions))
+            {
+                Some(value_at(fraction, range))
+            } else if let Some(input) = self.field_input(cx, actions, field.value) {
+                // Typed or stepped: kept in the slider's range here, the
+                // slider running from 0 to 1.
+                let current = (field.get)(&self.fine_lens);
+                let value = input
+                    .value(reading, current)
+                    .map(|v| v.max(range.0).min(range.1));
+                match value {
+                    Some(value) => slider.set_value(cx, fraction_of(value, range)),
+                    None => self.set_label(cx, field.value, &reading.text(current)),
+                }
+                value
+            } else {
+                None
+            };
+            if let Some(value) = value {
                 (field.set)(&mut self.fine_lens, value);
-                self.set_label(cx, field.label, &format!("{value:.*}", field.digits));
+                self.set_label(cx, field.value, &reading.text(value));
                 self.send_preview(PreviewCommand::Tune(Tuning::Lens {
                     cameras,
                     lens: self.fine_lens,

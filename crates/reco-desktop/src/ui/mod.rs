@@ -20,16 +20,31 @@ mod shortcuts_sheet;
 pub mod time_panel;
 mod toasts;
 mod top_bar;
+pub mod value_field;
 mod viewer;
 pub mod zones;
 
 use makepad_widgets::*;
+
+/// Where a pointer event happened, if it is one (for widgets that keep
+/// pointer events from parts they don't show or that are locked).
+fn pointer_at(event: &Event) -> Option<DVec2> {
+    match event {
+        Event::MouseDown(e) => Some(e.abs),
+        Event::MouseMove(e) => Some(e.abs),
+        Event::MouseUp(e) => Some(e.abs),
+        Event::Scroll(e) => Some(e.abs),
+        Event::TouchUpdate(e) => e.touches.first().map(|t| t.abs),
+        _ => None,
+    }
+}
 
 /// Register every shell widget. Call after `makepad_widgets::widgets_mod`
 /// and before the app's own script module.
 pub fn script_mod(vm: &mut ScriptVm) {
     fold::script_mod(vm);
     controls::script_mod(vm);
+    value_field::script_mod(vm);
     menu_list::script_mod(vm);
     file_list::script_mod(vm);
     toasts::script_mod(vm);

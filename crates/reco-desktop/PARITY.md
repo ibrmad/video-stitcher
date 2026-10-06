@@ -295,6 +295,22 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       cancels the tilt (`rig_correction::render_pitch`), so the tilt shows
       once the view turns (`tilt_and_layout_change_the_picture`). (New: the
       sliders show the calibration's own values from the start.)
+- [x] New (owner, 2026-10-06): every slider's value can be typed. A click
+      selects the digits; Return or a click away applies the value through
+      the slider (kept in its range) and gives the keyboard back; Escape
+      puts it back; the unit is optional and a decimal comma reads; ↑/↓
+      step the last digit (⇧: ten). The Adjust panel's 15, Setup's
+      calibration options, the export sheet's AI rows and Start/End alike.
+      Evidence: check_m4 `values` ("values: Field of view takes a typed 25",
+      "values: past the end, the slider's end", "values: Escape puts the
+      value back", "values: ↑ steps the typed number's last digit", "values:
+      ⇧↑ takes ten steps", "values: after Return, Space plays", "values: a
+      field clicked and left changes nothing", "values: the typed tilt is
+      saved", "values: the digits are on the right of the box"); "lens: a
+      typed focal length", "lens: past the range, its end"; "ai: a typed off
+      turns the lookahead off", "ai: Escape in a field puts its value back",
+      "ai: and leaves the sheet open"; "calibrate: a typed time to skip",
+      "calibrate: their value fields too"; the `value_text` unit tests.
 - [x] Save Calibration shown when calibration or lens is dirty. Evidence:
       "tune: nothing to save yet", "tune: Save appears once something
       changed", "tune: Save goes once saved", "tune: the file has the new

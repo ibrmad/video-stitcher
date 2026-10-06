@@ -16,6 +16,8 @@
 
 use makepad_widgets::*;
 
+use super::pointer_at;
+
 script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
@@ -26,18 +28,6 @@ script_mod! {
     mod.widgets.RecoFold = set_type_default() do mod.widgets.RecoFoldBase{
         ..mod.widgets.FoldHeader
         header_height: theme.reco_row
-    }
-}
-
-/// Where a pointer event happened, if it is one.
-fn pointer_at(event: &Event) -> Option<DVec2> {
-    match event {
-        Event::MouseDown(e) => Some(e.abs),
-        Event::MouseMove(e) => Some(e.abs),
-        Event::MouseUp(e) => Some(e.abs),
-        Event::Scroll(e) => Some(e.abs),
-        Event::TouchUpdate(e) => e.touches.first().map(|t| t.abs),
-        _ => None,
     }
 }
 

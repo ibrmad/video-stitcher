@@ -213,6 +213,108 @@ def check_sync():
         save_shot(app, "sync")
 
 
+def type_value(app, field_id, text, key="return"):
+    """Click a slider's value field, type `text` over the digits a click
+    selects, then press `key` (none: stay in the field)."""
+    click(app, field_id)
+    time.sleep(0.3)
+    app.get("/k", t=text)
+    if key:
+        app.key(key)
+    time.sleep(0.4)
+
+
+def ink_columns(app, widget_id, name):
+    """The window-point x span of a widget's light ink (its text) along its
+    middle, from a screenshot; None if there is none."""
+    png = app.grab(os.path.join(OUT, f"{name}.png"), scale=1.0)
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    x, y, w, h = app.rect(widget_id)
+    xs = [i for i in range(int(x * scale), int((x + w) * scale))
+          for j in range(int((y + h / 2 - 3) * scale), int((y + h / 2 + 3) * scale))
+          if sum(png.pixel(i, j)[:3]) > 3 * 128]
+    return (min(xs) / scale, max(xs) / scale) if xs else None
+
+
+def check_values():
+    """Every slider's number can be typed (plans/2026-10-06-value-fields.md):
+    a click selects the digits; Return applies it as a drag would and gives
+    the keyboard back; Escape puts the value back; the unit is optional and a
+    decimal comma reads; a value past an end goes to that end; text that
+    isn't a number is put back; ↑/↓ step the last digit (⇧: ten); a field
+    left as it was changes nothing."""
+    files = calibration_copy()
+    loaded = json.load(open(files[2]))
+    with launch(files) as app:
+        expect(ready(app) is not None, "values: the preview opens")
+        time.sleep(1.0)
+        fov = lambda: text_of(app, "fov_value")
+        blend = lambda: text_of(app, "seam_value")
+        # The digits sit on the right of their box, as numbers do.
+        x, _, w, _ = app.rect("fov_value")
+        ink = ink_columns(app, "fov_value", "values-ink")
+        expect(ink is not None and ink[1] >= x + w - 9 and ink[0] > x + w / 3,
+               f"values: the digits are on the right of the box ({ink} in {x:.0f}..{x + w:.0f})")
+        # Stay inside caps this pair's field of view at its opening 29°.
+        before = frame_pixels(app, "values-before")
+        type_value(app, "fov_value", "25")
+        expect(fov() == "25°", f"values: Field of view takes a typed 25 ({fov()})")
+        time.sleep(0.6)
+        expect(frame_pixels(app, "values-typed") != before, "values: the typed field of view zooms the picture")
+        type_value(app, "fov_value", "22°")
+        expect(fov() == "22°", f"values: the unit may be typed too ({fov()})")
+        type_value(app, "fov_value", "27", key="escape")
+        expect(fov() == "22°", f"values: Escape puts the value back ({fov()})")
+        type_value(app, "fov_value", "5")
+        expect(fov() == "20°", f"values: past the end, the slider's end ({fov()})")
+        type_value(app, "fov_value", "wide")
+        expect(fov() == "20°", f"values: text that isn't a number is put back ({fov()})")
+        type_value(app, "fov_value", "24", key=None)
+        app.key("ArrowUp")
+        time.sleep(0.3)
+        expect(fov() == "25°", f"values: ↑ steps the typed number's last digit ({fov()})")
+        app.key("ArrowDown")
+        time.sleep(0.3)
+        expect(fov() == "24°", f"values: ↓ steps back ({fov()})")
+        app.key("return")
+        time.sleep(0.3)
+        # The keyboard is the preview's again: Space plays.
+        t0 = text_of(app, "time_current")
+        app.key("space")
+        time.sleep(1.5)
+        app.key("space")
+        expect(text_of(app, "time_current") != t0,
+               f"values: after Return, Space plays ({t0} -> {text_of(app, 'time_current')})")
+        # A field clicked and left changes nothing: no Save for a rounding.
+        click(app, "seam_value")
+        time.sleep(0.3)
+        click(app, "adjust_header")
+        time.sleep(0.6)
+        expect(app.rect("save_calibration") is None, "values: a field clicked and left changes nothing")
+        type_value(app, "seam_value", "0,1")
+        expect(blend() == "0.10", f"values: a decimal comma reads ({blend()})")
+        expect(bool(wait_for(lambda: app.rect("save_calibration"), 5)), "values: a typed blend is a change to save")
+        click(app, "seam_value")
+        time.sleep(0.3)
+        app.key("ArrowUp", shift=1)
+        time.sleep(0.3)
+        expect(blend() == "0.20", f"values: ⇧↑ takes ten steps ({blend()})")
+        app.key("return")
+        time.sleep(0.3)
+        open_advanced(app, "stitch_advanced")
+        type_value(app, "tilt_value", "-3")
+        expect(text_of(app, "tilt_value") == "-3.0°", f"values: Tilt takes a typed -3 ({text_of(app, 'tilt_value')})")
+        app.key("KeyS", cmd=1)
+        wait_for(lambda: title_rect(app, "Calibration saved"), 10)
+        written = json.load(open(files[2]))
+        expect(abs(math.degrees(written["rig_tilt"]) + 3.0) < 0.01,
+               f"values: the typed tilt is saved ({math.degrees(written['rig_tilt']):.2f}°)")
+        expect(abs(written.get("blend_width", 0) - 0.2) < 1e-6,
+               f"values: the stepped blend is saved ({written.get('blend_width')}, was {loaded.get('blend_width')})")
+        save_shot(app, "values")
+        expect(app.errors() == [], "values: no errors in the app log")
+
+
 OUTLINE = '{"left": [[0.1, 0.4], [0.9, 0.4], [0.95, 0.95], [0.05, 0.95]], "right": [[0.1, 0.4], [0.9, 0.4], [0.5, 0.95]]}'
 
 
@@ -260,6 +362,7 @@ CHECKS = {
     "tune": check_tune,
     "sync": check_sync,
     "roi": check_roi,
+    "values": check_values,
 }
 
 

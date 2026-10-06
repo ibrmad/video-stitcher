@@ -16,6 +16,7 @@ use reco_app::project::Camera;
 use reco_app::telemetry::UsageEvent;
 use reco_app::toasts::Severity;
 
+use crate::value_text::Reading;
 use crate::App;
 
 /// Where a calibration stands while it runs.
@@ -29,8 +30,8 @@ pub(crate) struct Calibrating {
     pub cancelling: bool,
 }
 
-/// An Advanced slider, its value label, and how the value reads.
-type ValueRow<'a> = (&'a [LiveId], &'a [LiveId], fn(f64) -> String);
+/// An Advanced slider, its value field, and how the value reads.
+type ValueRow<'a> = (&'a [LiveId], &'a [LiveId], Reading);
 
 /// A calibration failure in plain words: the common one says what to do.
 pub(crate) fn failure_words(reason: &str) -> String {
@@ -313,23 +314,30 @@ impl App {
             self.project_changed(cx);
         }
         let rows: [ValueRow; 4] = [
-            (ids!(cal_akaze), ids!(cal_akaze_value), |v| {
-                format!("{v:.4}")
-            }),
-            (ids!(cal_y_min), ids!(cal_y_min_value), |v| {
-                format!("{v:.2}")
-            }),
-            (ids!(cal_y_max), ids!(cal_y_max_value), |v| {
-                format!("{v:.2}")
-            }),
-            (ids!(cal_skip_end), ids!(cal_skip_end_value), |v| {
-                format!("{v:.0} s")
-            }),
+            (
+                ids!(cal_akaze),
+                ids!(cal_akaze_value),
+                Reading::number(4, ""),
+            ),
+            (
+                ids!(cal_y_min),
+                ids!(cal_y_min_value),
+                Reading::number(2, ""),
+            ),
+            (
+                ids!(cal_y_max),
+                ids!(cal_y_max_value),
+                Reading::number(2, ""),
+            ),
+            (
+                ids!(cal_skip_end),
+                ids!(cal_skip_end_value),
+                Reading::number(0, " s"),
+            ),
         ];
-        for (slider, label, show) in rows {
-            if let Some(value) = self.ui.slider(cx, slider).slided(actions) {
-                self.set_label(cx, label, &show(value));
-            }
+        // Read when a calibration starts; nothing to send now.
+        for (slider, field, reading) in rows {
+            self.slider_input(cx, actions, slider, field, reading);
         }
     }
 

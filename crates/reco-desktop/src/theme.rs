@@ -358,7 +358,10 @@ script_mod! {
         reco_dot_radius: 3.5
         reco_link_width: 1.0
         reco_link_height: 10.0
-        reco_value_width: 50.0
+        // A slider's value field: room for "0.0001", "-30.0°" or "1:32:10";
+        // 3 pt above and below in a 28 pt row.
+        reco_value_field: 56.0
+        reco_value_field_height: 22.0
         reco_label_width: 124.0
         reco_aspect_width: 80.0
         reco_quality_width: 92.0
@@ -371,7 +374,6 @@ script_mod! {
         // A sheet's rows scroll past this height: room for its band, its
         // buttons and a margin above and below in a short window.
         reco_sheet_rows_max: "calc(100vh - 160px)"
-        reco_time_input: 80.0
         // The lens picker's results: ten rows, then it scrolls.
         reco_picker_list: 280.0
         // A few lines of writing (the bug report's description).
@@ -437,9 +439,19 @@ mod tests {
     #[test]
     fn theme_tokens_are_set_once() {
         let names = tokens(include_str!("theme.rs"));
-        assert!(names.len() > 100, "the token list was read ({})", names.len());
+        assert!(
+            names.len() > 100,
+            "the token list was read ({})",
+            names.len()
+        );
         let mut seen = HashSet::new();
-        let twice: Vec<&str> = names.into_iter().filter(|name| !seen.insert(*name)).collect();
-        assert!(twice.is_empty(), "theme tokens set more than once: {twice:?}");
+        let twice: Vec<&str> = names
+            .into_iter()
+            .filter(|name| !seen.insert(*name))
+            .collect();
+        assert!(
+            twice.is_empty(),
+            "theme tokens set more than once: {twice:?}"
+        );
     }
 }

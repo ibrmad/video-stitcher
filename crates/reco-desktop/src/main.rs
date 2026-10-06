@@ -46,6 +46,8 @@ mod time_ruler;
 mod toast_view;
 mod tune_view;
 mod ui;
+mod value_text;
+mod value_view;
 
 use calibrate_view::Calibrating;
 use cli::{Args, LookPreview};
@@ -600,7 +602,8 @@ impl App {
     }
 
     fn set_label(&self, cx: &mut Cx, id: &[LiveId], text: &str) {
-        self.ui.label(cx, id).set_text(cx, text);
+        // Through the widget, so a value field takes it as a label does.
+        self.ui.widget(cx, id).set_text(cx, text);
     }
 
     fn set_visible(&self, cx: &mut Cx, id: &[LiveId], visible: bool) {
