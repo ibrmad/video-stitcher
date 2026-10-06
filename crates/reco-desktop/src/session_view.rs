@@ -216,6 +216,8 @@ impl App {
         }
         self.set_label(cx, ids!(status_text), &title);
         self.toast(cx, Severity::Error, &title, &detail);
+        // A refused sync offset leaves the one in use.
+        self.show_sync_in_use(cx);
     }
 
     /// Show pause while playing, play otherwise. The SVG handle is swapped

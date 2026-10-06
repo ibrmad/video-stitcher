@@ -363,8 +363,8 @@ def check_rules():
         app.key("escape")
         wait_for(lambda: not sheet_shows(app, face), 5)
         open_advanced(app, "stitch_advanced")
-        type_into(app, "sync_input", "30")
-        click(app, "sync_apply")
+        type_into(app, "sync_value", "30")
+        app.key("return")
         expect(bool(wait_for(lambda: text_of(app, "time_total") == "0:59", 20)),
                f"rules: a sync offset shortens the match ({text_of(app, 'time_total')})")
         click(app, "export_button")

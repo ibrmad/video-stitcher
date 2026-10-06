@@ -330,6 +330,9 @@ script_mod! {
         reco_button: 26.0
         reco_button_pad_x: 10.0
         reco_icon_button: 26.0
+        // The top bar's controls: 5 pt above and below in its 32 pt (the
+        // macOS window buttons fix the bar's height).
+        reco_top_control: 22.0
         reco_icon: 18.0
         reco_icon_small: 14.0
         // Icons at the end of a panel row, title row or section band, and
@@ -340,9 +343,11 @@ script_mod! {
         // Record and Stop: Lucide's filled circle and square fill their box,
         // so they are drawn smaller to read as a dot and a square.
         reco_record_icon: 10.0
-        // Lucide's step-back sits this far inside its 18 pt box (its tip at
+        // The step buttons' icons: drawn smaller than play's, so play leads.
+        reco_step_icon: 16.0
+        // Lucide's step-back sits this far inside its 16 pt box (its tip at
         // 4 of 24, less half the stroke).
-        reco_glyph_inset: 1.69
+        reco_glyph_inset: 1.5
         reco_icon_tiny: 11.0
         reco_chevron: 14.0
         // The chevron's drawing inside its box, stroke included (drawn at a

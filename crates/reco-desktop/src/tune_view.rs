@@ -5,7 +5,6 @@
 use makepad_widgets::*;
 use reco_app::preview::tuning::{CalibrationValues, Tuning};
 use reco_app::preview::worker::PreviewCommand;
-use reco_app::toasts::Severity;
 
 use crate::value_text::Reading;
 use crate::App;
@@ -16,6 +15,8 @@ type TuneRow<'a> = (&'a [LiveId], &'a [LiveId], fn(f64) -> Tuning, Reading);
 const DEGREES: Reading = Reading::number(1, "°");
 const TWO: Reading = Reading::number(2, "");
 const THREE: Reading = Reading::number(3, "");
+/// The sync offset, in whole frames.
+const FRAMES: Reading = Reading::number(0, "");
 
 /// Every tuning slider.
 fn rows() -> [TuneRow<'static>; 6] {
@@ -90,10 +91,11 @@ impl App {
             );
             self.loaded_values = Some(values.clone());
         }
-        let sync = self.ui.text_input(cx, ids!(sync_input));
-        if !sync.key_focus(cx) {
-            sync.set_text(cx, &values.sync_offset.to_string());
-        }
+        self.set_label(
+            cx,
+            ids!(sync_value),
+            &FRAMES.text(values.sync_offset as f64),
+        );
         self.show_lens_values(cx, &values, adopt);
         self.show_outline(cx, values.roi_points);
         let unsaved = values.dirty && self.project.calibration.is_some();
@@ -124,22 +126,34 @@ impl App {
             }
             self.send_preview(PreviewCommand::Tune(Tuning::ResetLayout));
         }
-        let sync = self.ui.text_input(cx, ids!(sync_input));
-        if sync.returned(actions).is_some() || self.ui.button(cx, ids!(sync_apply)).clicked(actions)
-        {
-            match sync.text().trim().parse::<i64>() {
-                Ok(frames) => self.send_preview(PreviewCommand::SetSyncOffset { frames }),
-                Err(_) => self.toast(
-                    cx,
-                    Severity::Warn,
-                    "Sync offset",
-                    "Enter a whole number of frames, such as 12 or -30.",
-                ),
+        // The sync offset: whole frames, sent to the worker, which refuses an
+        // offset as long as the videos (`show_stopped` puts the one in use
+        // back).
+        if let Some(input) = self.field_input(cx, actions, ids!(sync_value)) {
+            let in_use = self.sync_in_use();
+            match input.value(FRAMES, in_use as f64) {
+                Some(frames) => {
+                    let frames = frames.round() as i64;
+                    self.set_label(cx, ids!(sync_value), &FRAMES.text(frames as f64));
+                    self.send_preview(PreviewCommand::SetSyncOffset { frames });
+                }
+                None => self.show_sync_in_use(cx),
             }
         }
         if self.ui.button(cx, ids!(save_calibration)).clicked(actions) {
             self.save_calibration(cx);
         }
+    }
+
+    /// The sync offset the preview uses (0 before it answers).
+    fn sync_in_use(&self) -> i64 {
+        self.latest_values.as_ref().map_or(0, |v| v.sync_offset)
+    }
+
+    /// The sync field back to the offset in use.
+    pub(crate) fn show_sync_in_use(&mut self, cx: &mut Cx) {
+        let frames = self.sync_in_use() as f64;
+        self.set_label(cx, ids!(sync_value), &FRAMES.text(frames));
     }
 
     /// Save the adjusted calibration to its file, when something is

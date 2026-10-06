@@ -8,7 +8,10 @@ script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*
 
-    let PanelToggle = RecoIconButton{}
+    let PanelToggle = RecoIconButton{
+        width: theme.reco_top_control height: theme.reco_top_control
+        icon_walk: Walk{width: theme.reco_row_icon height: theme.reco_row_icon}
+    }
 
     mod.widgets.RecoTopBar = View{
         width: Fill height: Fill flow: Right spacing: theme.reco_gap_s
@@ -19,6 +22,7 @@ script_mod! {
         // bug report and the version.
         app_menu := RecoMenu{
             app_menu_button := RecoFlatButton{
+                height: theme.reco_top_control
                 text: "Reco"
                 padding: Inset{left: theme.reco_gap_s right: theme.reco_gap_s}
                 spacing: theme.reco_gap_xs
@@ -33,6 +37,7 @@ script_mod! {
         // Starts disabled (no flash at startup); enabled once there is a
         // stitched preview to export.
         export_button := RecoPrimaryButton{
+            height: theme.reco_top_control
             animator +: {disabled: {default: @on}}
             text: "Export"
             margin: Inset{right: theme.reco_gap}

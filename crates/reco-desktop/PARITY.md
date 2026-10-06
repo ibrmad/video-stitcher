@@ -283,11 +283,13 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
 `target/desktop-checks/m4/`.
 
 - [x] Seam blend 0–0.3; Match colours; rig tilt −30..30°; rig roll
-      −15..15°; sync offset in frames with Apply. Evidence: "tune: the seam
+      −15..15°; sync offset in frames (a value field since the owner's
+      2026-10-06 ask: Return applies, no Apply button). Evidence: "tune: the seam
       blend shows the calibration's value", "tune: the tilt follows the
       slider", "tune: tilting changes the picture", "sync: 30 frames apart,
       the pair plays a second less", "sync: an offset as long as the videos
-      is refused", "sync: text that is not a number says so";
+      is refused", "sync: text that isn't a number is put back", "sync: ↑
+      steps a frame";
       `tuning_reaches_the_renderer_and_marks_it_changed`,
       `changes_stay_inside_their_sliders`,
       `the_sync_offset_moves_the_cameras_within_the_videos`,

@@ -260,6 +260,15 @@ def check_state(size, state):
         if adjust and view:
             expect(abs(view[1] - adjust[1] - BAR) <= 0.5,
                    f"{name}: Adjust's title row is {BAR} pt ({view[1] - adjust[1]})")
+        # The top bar's controls keep room above and below (the owner found
+        # Export tight at 3 pt).
+        top = app.rect("top_bar")
+        for wid in ("app_menu_button", "export_button", "toggle_media", "toggle_timeline", "toggle_inspector"):
+            r = app.rect(wid)
+            if r and top:
+                above, below = r[1] - top[1], top[1] + top[3] - (r[1] + r[3])
+                expect(min(above, below) >= 4.5,
+                       f"{name}: `{wid}` has room above and below in the top bar ({above:.1f}, {below:.1f})")
         # Row icons: the hover face is drawn whole, with room above and below
         # (the owner found Recent's tight: 3 pt in its title row and its right
         # side cut; band icons had 1 pt).

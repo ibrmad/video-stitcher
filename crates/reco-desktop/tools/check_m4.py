@@ -185,31 +185,31 @@ def check_tune():
 
 
 def check_sync():
-    """The sync offset in frames: Apply moves the right camera and the
-    length follows; a value as long as the videos is refused."""
+    """The sync offset in frames, a value field: Return moves the right
+    camera and the length follows; a value as long as the videos is refused;
+    text that isn't a number is put back; ↑ steps a frame."""
     files = calibration_copy()
     with launch(files) as app:
         expect(ready(app) is not None, "sync: the preview opens")
         wait_for(lambda: text_of(app, "time_total") == "1:00", 15)
         open_advanced(app, "stitch_advanced")
-        click(app, "sync_input")
-        app.key("KeyA", cmd=1)
-        app.get("/k", t="30")
-        click(app, "sync_apply")
+        type_value(app, "sync_value", "30")
         shorter = wait_for(lambda: text_of(app, "time_total") == "0:59", 20)
         expect(bool(shorter), f"sync: 30 frames apart, the pair plays a second less ({text_of(app, 'time_total')})")
         expect(bool(wait_for(lambda: app.rect("save_calibration"), 5)), "sync: Save appears")
-        click(app, "sync_input")
-        app.key("KeyA", cmd=1)
-        app.get("/k", t="999999")
-        click(app, "sync_apply")
+        expect(app.rect("sync_apply") is None, "sync: a value field, no Apply button")
+        type_value(app, "sync_value", "999999")
         refused = wait_for(lambda: title_rect(app, "Couldn't change the sync offset"), 10)
         expect(bool(refused), "sync: an offset as long as the videos is refused")
-        click(app, "sync_input")
-        app.key("KeyA", cmd=1)
-        app.get("/k", t="soon")
-        click(app, "sync_apply")
-        expect(bool(wait_for(lambda: title_rect(app, "Sync offset"), 5)), "sync: text that is not a number says so")
+        expect(bool(wait_for(lambda: text_of(app, "sync_value") == "30", 5)),
+               f"sync: the field shows the offset in use ({text_of(app, 'sync_value')})")
+        type_value(app, "sync_value", "soon")
+        expect(text_of(app, "sync_value") == "30", f"sync: text that isn't a number is put back ({text_of(app, 'sync_value')})")
+        type_value(app, "sync_value", "30", key=None)
+        app.key("ArrowUp")
+        expect(bool(wait_for(lambda: text_of(app, "sync_value") == "31", 5)),
+               f"sync: ↑ steps a frame ({text_of(app, 'sync_value')})")
+        app.key("return")
         save_shot(app, "sync")
 
 

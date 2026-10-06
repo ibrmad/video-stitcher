@@ -82,11 +82,12 @@ script_mod! {
             align: Align{y: 0.5}
             // The first glyph's ink starts on the content edge, above the
             // lane badges: less the button's inset and the glyph's own.
-            padding: Inset{left: theme.reco_pad - (theme.reco_icon_button - theme.reco_icon) * 0.5 - theme.reco_glyph_inset right: theme.reco_pad}
+            padding: Inset{left: theme.reco_pad - (theme.reco_icon_button - theme.reco_step_icon) * 0.5 - theme.reco_glyph_inset right: theme.reco_pad}
             // Everything starts disabled (no flash at startup); the app
             // enables it once a stitched preview exists.
             Tip{text: "Back one frame"
                 step_back := RecoIconButton{
+                    icon_walk: Walk{width: theme.reco_step_icon height: theme.reco_step_icon}
                     animator +: {disabled: {default: @on}}
                     draw_icon +: {svg: crate_resource("self:resources/icons/step_back.svg")}
                 }
@@ -99,6 +100,7 @@ script_mod! {
             }
             Tip{text: "Forward one frame"
                 step_forward := RecoIconButton{
+                    icon_walk: Walk{width: theme.reco_step_icon height: theme.reco_step_icon}
                     animator +: {disabled: {default: @on}}
                     draw_icon +: {svg: crate_resource("self:resources/icons/step_forward.svg")}
                 }

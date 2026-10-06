@@ -105,11 +105,8 @@ script_mod! {
                                 Tip{text: "Frames between the cameras: positive when the right camera started first."
                                     RecoLabelCell{RecoSubdued{text: "Sync (frames)"}}
                                 }
-                                sync_input := TextInput{
-                                    width: Fill height: theme.reco_button margin: 0
-                                    empty_text: "0"
-                                }
-                                sync_apply := RecoButton{text: "Apply"}
+                                View{width: Fill height: Fit}
+                                sync_value := Value{text: "0"}
                             }
                             RecoRow{
                                 Tip{text: "How far the two cameras' pictures overlap."
