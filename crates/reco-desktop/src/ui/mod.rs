@@ -21,6 +21,7 @@ mod shortcuts_sheet;
 pub mod time_panel;
 mod toasts;
 mod top_bar;
+mod unsaved_sheet;
 pub mod value_field;
 mod viewer;
 pub mod zones;
@@ -64,6 +65,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
     key_table::script_mod(vm);
     shortcuts_sheet::script_mod(vm);
     bug_sheet::script_mod(vm);
+    unsaved_sheet::script_mod(vm);
     time_panel::script_mod(vm);
     shell::script_mod(vm);
 }

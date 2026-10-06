@@ -79,9 +79,11 @@ impl App {
                         .map(|n| n.to_string_lossy().into_owned())
                         .unwrap_or_default();
                     self.toast(cx, Severity::Info, "Calibration saved", &name);
+                    self.quit_saved(cx, true);
                 }
                 Some(PreviewEvent::CalibrationSaveFailed(why)) => {
-                    self.toast(cx, Severity::Error, "Couldn't save the calibration", &why)
+                    self.toast(cx, Severity::Error, "Couldn't save the calibration", &why);
+                    self.quit_saved(cx, false);
                 }
                 Some(PreviewEvent::Snapshot {
                     calibration,

@@ -10,9 +10,11 @@ control. Each launch gets its own settings folder (drive.launch_env).
 Screenshots go to target/desktop-checks/m8/. `check_m8.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed.
 """
+import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -57,8 +59,9 @@ def calibration_copy(files):
     return (files[0], files[1], cal)
 
 
-def launch(files, extra=()):
-    left, right, cal = calibration_copy(files)
+def launch(files, extra=(), copied=False):
+    """The app on a pair, with a copy of its calibration unless `copied`."""
+    left, right, cal = files if copied else calibration_copy(files)
     return drive.App.launch(BIN, ["--window-size", "1280x980", "--left", left, "--right", right,
                                   "--calibration", cal, *extra])
 
@@ -281,10 +284,89 @@ def check_sheets():
         expect(app.errors() == [], f"sheets: no errors in the app log {app.errors()[:3]}")
 
 
+def blend_saved(path):
+    with open(path) as f:
+        return json.load(f).get("blend_width")
+
+
+def edit_blend(app, value):
+    """Type a seam blend; whether the Adjust panel then says Unsaved."""
+    click(app, "seam_value")
+    time.sleep(0.3)
+    app.get("/k", t=value)
+    app.key("return")
+    return bool(wait_for(lambda: app.rect("calibration_unsaved"), 3))
+
+
+def quits(app, secs):
+    try:
+        app.proc.wait(timeout=secs)
+        return True
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def asks(app):
+    """Quit as ⌘Q does; whether the app stays, asking about unsaved edits
+    (False when it quit)."""
+    app.get("/quit")
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        if app.proc.poll() is not None:
+            return False
+        try:
+            if app.rect("unsaved_save"):
+                return True
+        except OSError:
+            return False
+        time.sleep(0.2)
+    return False
+
+
+def check_unsaved():
+    """Quitting with unsaved calibration edits asks first (owner,
+    2026-10-06): Cancel stays, Save saves and quits, Don't Save quits and
+    leaves the file; with nothing unsaved it quits at once."""
+    with launch(FAST) as app:
+        wait_for(lambda: app.rect("preview"), 30)
+        app.get("/quit")
+        expect(quits(app, 5), "unsaved: with nothing unsaved, quitting quits at once")
+
+    files = calibration_copy(FAST)
+    before = blend_saved(files[2])
+    with launch(files, copied=True) as app:
+        wait_for(lambda: app.rect("preview"), 30)
+        expect(edit_blend(app, "0.08"), "unsaved: a typed seam blend is unsaved")
+        asked = asks(app)
+        expect(asked, "unsaved: quitting asks first")
+        if not asked:
+            return
+        save_shot(app, "unsaved")
+        click(app, "unsaved_cancel")
+        time.sleep(0.8)
+        expect(app.proc.poll() is None and app.rect("calibration_unsaved") is not None,
+               "unsaved: Cancel keeps the app and the edit")
+        expect(asks(app), "unsaved: quitting asks again")
+        click(app, "unsaved_save")
+        expect(quits(app, 10), "unsaved: Save quits once it has saved")
+    saved = blend_saved(files[2])
+    expect(saved is not None and abs(saved - 0.08) < 1e-6, f"unsaved: Save wrote the edit ({before} -> {saved})")
+
+    files = calibration_copy(FAST)
+    with launch(files, copied=True) as app:
+        wait_for(lambda: app.rect("preview"), 30)
+        edit_blend(app, "0.12")
+        expect(asks(app), "unsaved: quitting asks (Don't Save)")
+        click(app, "unsaved_discard")
+        expect(quits(app, 10), "unsaved: Don't Save quits")
+    expect(blend_saved(files[2]) == before, f"unsaved: and leaves the file as it was ({blend_saved(files[2])})")
+
+
 CHECKS = {
     "start": check_start,
     "perf": check_perf,
     "sheets": check_sheets,
+    "unsaved": check_unsaved,
 }
 
 

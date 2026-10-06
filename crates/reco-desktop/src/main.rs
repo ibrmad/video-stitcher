@@ -37,6 +37,7 @@ mod panel_motion;
 mod perf;
 mod prefs_view;
 mod project_view;
+mod quit_view;
 mod recent_view;
 mod record_view;
 mod roi_view;
@@ -58,6 +59,7 @@ use live::Live;
 use names::middle_ellipsis;
 use panel_motion::PanelMotions;
 use perf::DrawStats;
+use quit_view::Quitting;
 use reco_app::ai::{Availability, AvailabilityProbe, LookaheadZones};
 use reco_app::calibrate::CalibrationJob;
 use reco_app::durations::DurationProbe;
@@ -133,6 +135,7 @@ script_mod! {
                     prefs_sheet := RecoPrefsSheet{}
                     shortcuts_sheet := RecoShortcutsSheet{}
                     bug_sheet := RecoBugSheet{}
+                    unsaved_sheet := RecoUnsavedSheet{}
                     tip_layer := TipLayer{}
                     // Menus as Rerun's: a dark floating panel, a grey row
                     // under the pointer, Inter at the app's one size.
@@ -304,6 +307,9 @@ pub struct App {
     /// opening); it keeps what is chosen after that.
     #[rust]
     export_sheet_filled: bool,
+    /// A quit held while edits are unsaved (quit_view.rs).
+    #[rust]
+    quitting: Option<Quitting>,
     /// The latest live calibration values (the Lens section reads them).
     #[rust]
     latest_values: Option<CalibrationValues>,
@@ -750,7 +756,7 @@ impl App {
     }
 
     /// One of the sheets (Export, the lens picker, Preferences, Keyboard
-    /// shortcuts, Report a bug) is open.
+    /// shortcuts, Report a bug, unsaved edits) is open.
     fn sheet_open(&mut self, cx: &mut Cx) -> bool {
         [
             ids!(export_sheet),
@@ -758,6 +764,7 @@ impl App {
             ids!(prefs_sheet),
             ids!(shortcuts_sheet),
             ids!(bug_sheet),
+            ids!(unsaved_sheet),
         ]
         .into_iter()
         .any(|sheet| self.ui.modal(cx, sheet).is_open())
@@ -838,6 +845,7 @@ impl MatchEvent for App {
         self.layout_actions(cx, actions);
         self.prefs_actions(cx, actions);
         self.bug_actions(cx, actions);
+        self.quit_actions(cx, actions);
         self.preview_actions(cx, actions);
         self.ruler_actions(cx, actions);
         self.toast_actions(cx, actions);
@@ -879,6 +887,18 @@ impl AppMain for App {
             Event::Shutdown => {
                 self.finish_recording_on_quit();
                 self.save_layout(cx);
+            }
+            // Unsaved edits hold a quit or the window's close while the sheet
+            // asks; a termination signal still quits.
+            Event::QuitRequested(request)
+                if !matches!(request.reason, QuitReason::Signal) && self.hold_quit(cx) =>
+            {
+                request.handle();
+            }
+            Event::WindowCloseRequested(request)
+                if request.accept_close.get() && self.hold_quit(cx) =>
+            {
+                request.accept_close.set(false);
             }
             Event::WindowGeomChange(ge) => self.window_changed(cx, &ge.new_geom),
             _ => {}

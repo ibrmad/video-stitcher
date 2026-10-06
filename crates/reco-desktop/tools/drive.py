@@ -309,6 +309,15 @@ class App:
         lines = self.get("/log", n=500)["l"]
         return [line for line in lines if line.startswith("[E]") or line.startswith("[!]")]
 
+    def _dont_save(self):
+        """Answer the unsaved-edits sheet with Don't Save, if it shows."""
+        try:
+            r = self.rect("unsaved_discard")
+            if r:
+                self.get("/click", x=r[0] + r[2] / 2, y=r[1] + r[3] / 2, wait=1, timeout=5)
+        except (DriveError, OSError):
+            pass
+
     def quit(self):
         """Grab-and-quit, then make sure the process is gone."""
         if self.proc.poll() is None:
@@ -317,7 +326,12 @@ class App:
             except (DriveError, OSError):
                 pass
             try:
-                self.proc.wait(timeout=15)
+                self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                # Unsaved calibration edits: the app asks first.
+                self._dont_save()
+            try:
+                self.proc.wait(timeout=12)
             except subprocess.TimeoutExpired:
                 self.proc.terminate()
                 self.proc.wait(timeout=5)
