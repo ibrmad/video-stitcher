@@ -237,7 +237,7 @@ def check_focus(app, name):
 
     # Space after clicking a panel toggle plays, and does not click it again.
     app.click_id("toggle_media")
-    folded = app.rect("setup_header") is None
+    folded = wait_for(lambda: app.rect("setup_header") is None, 2)
     t0 = text_of(app, "time_current")
     app.key("space")
     time.sleep(1.5)

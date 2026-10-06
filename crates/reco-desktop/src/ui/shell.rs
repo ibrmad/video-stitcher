@@ -37,9 +37,16 @@ script_mod! {
         main_split := RecoSplitter{
             axis: SplitterAxis.Horizontal
             align: SplitterAlign.FromA(theme.reco_media_width)
+            // A slide relaxes these floors and panel_motion.rs puts them
+            // back: change both together.
             min_vertical: theme.reco_media_min max_vertical: theme.reco_viewer_min
             min_horizontal: theme.reco_media_min max_horizontal: theme.reco_viewer_min
-            a: View{width: Fill height: Fill new_batch: true media_panel := RecoMediaPanel{}}
+            // Each side panel sits in a box that holds its width while it
+            // slides (panel_motion.rs).
+            a: View{
+                width: Fill height: Fill new_batch: true
+                setup_box := RecoPanelBox{anchor_end: true media_panel := RecoMediaPanel{}}
+            }
             b: View{
                 width: Fill height: Fill
                 inner_split := RecoSplitter{
@@ -50,7 +57,10 @@ script_mod! {
                     min_vertical: theme.reco_viewer_min max_vertical: theme.reco_inspector_floor
                     min_horizontal: theme.reco_viewer_min max_horizontal: theme.reco_inspector_floor
                     a: View{width: Fill height: Fill viewer := RecoViewer{}}
-                    b: View{width: Fill height: Fill new_batch: true inspector := RecoInspector{}}
+                    b: View{
+                        width: Fill height: Fill new_batch: true
+                        adjust_box := RecoPanelBox{inspector := RecoInspector{}}
+                    }
                 }
             }
         }

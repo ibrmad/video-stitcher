@@ -117,7 +117,8 @@ script_mod! {
             // After a recording: the file in Finder.
             show_in_folder := RecoFlatButton{visible: false text: "Show in folder"}
         }
-        lanes := View{
+        // Its height is set while it slides (panel_motion.rs).
+        lanes := RecoPanelBox{
             width: Fill height: Fit flow: Right
             padding: Inset{right: theme.reco_pad bottom: theme.reco_gap_s}
             View{

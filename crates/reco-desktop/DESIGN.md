@@ -294,6 +294,11 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   (label, control, value) whose labels explain themselves in tooltips. The
   viewer has a view bar (name, Aspect, Record and its menu) over a black
   canvas.
+- **Panels slide**: a toggle (button, ⌘1/⌘2/⌘3, View menu) slides Setup,
+  Adjust or the time panel's lanes out past the window's edge, or back in,
+  in 0.2 s easing out; the panel's rows keep their width (`RecoPanelBox`
+  holds them) and the picture gives way smoothly. A window resize ends a
+  slide at once and folds as before. Plan: `plans/2026-10-06-panel-motion.md`.
 - **Value fields**: every slider's number is a field (`RecoValueField`), a
   quiet box with the digits on the right: a shade lighter on hover, a green
   ring while typing. A click selects the digits; Return or a click away
@@ -369,6 +374,11 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   and `SliderMinimal` draws its track at the bottom of its box (room for a
   label). `RecoSlider` drops the margin and draws its own centred track and
   knob; a property row shows the value in its own field.
+- `Splitter` keeps an open pane at its floor and has no setter for the
+  floors; a script apply (`script_apply_eval!`) can set them, but puts the
+  widget's other runtime values back to its DSL. A slide relaxes the floors,
+  then sets them back from the theme and sets the bar and the fold again
+  (panel_motion.rs). FRICTION.md.
 - `TextInput` lays a single line out at its natural width, so neither
   `label_align` nor a fixed width's `align` moves it: `RecoValueField` is
   Fit, held to one width by `min` and `max`, and its layout aligns the text

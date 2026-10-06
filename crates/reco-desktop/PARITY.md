@@ -27,6 +27,15 @@ exporting; at 720×600, 1280×820 and 1920×1200), the unit tests
       `app_menu` opens a menu", "Export face is green / grey", "disabled
       Export has no green ink"; `ready-app_menu.png`. Every icon file
       exists: `every_self_resource_exists`.
+- [x] New (owner, 2026-10-06): the panels slide open and closed in 0.2 s,
+      their rows unchanged, the picture giving way smoothly; the menu
+      shortcuts ⌘1/⌘2/⌘3/⌘, also work as keys. Evidence: check_m0 `motion`
+      ("motion: the picture's edge slides as Setup closes", "… as Setup
+      opens", "the picture's right edge slides as Adjust closes", "the time
+      panel's top slides as the lanes fold", "Setup slides out, its rows
+      unchanged: the title leaves with it", "a toggle mid-slide turns it
+      around", "a dragged width comes back"); check_m7 `keys`; the `motion`
+      unit tests.
 - [x] Setup panel on the left: default width 260, minimum 200, resizable,
       open at startup. Cameras (the linked pair: Add, then Change; file
       count and length) and Calibration (status, detail, Auto-calibrate or

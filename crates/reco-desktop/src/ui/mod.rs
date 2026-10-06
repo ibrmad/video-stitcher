@@ -11,6 +11,7 @@ pub mod key_table;
 mod lens_picker;
 mod media_panel;
 pub mod menu_list;
+pub mod panel_box;
 pub mod panorama;
 pub mod pick_list;
 mod prefs_sheet;
@@ -45,6 +46,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
     fold::script_mod(vm);
     controls::script_mod(vm);
     value_field::script_mod(vm);
+    panel_box::script_mod(vm);
     menu_list::script_mod(vm);
     file_list::script_mod(vm);
     toasts::script_mod(vm);

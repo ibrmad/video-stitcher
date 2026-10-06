@@ -30,8 +30,10 @@ mod layout_view;
 mod lens_picker_view;
 mod lens_view;
 mod live;
+mod motion;
 mod names;
 mod network;
+mod panel_motion;
 mod perf;
 mod prefs_view;
 mod project_view;
@@ -54,6 +56,7 @@ use cli::{Args, LookPreview};
 use export_view::{CodecProbe, Exporting};
 use live::Live;
 use names::middle_ellipsis;
+use panel_motion::PanelMotions;
 use perf::DrawStats;
 use reco_app::ai::{Availability, AvailabilityProbe, LookaheadZones};
 use reco_app::calibrate::CalibrationJob;
@@ -351,6 +354,9 @@ pub struct App {
     /// Every slider, for `slider_arrow`.
     #[rust]
     sliders: Vec<WidgetRef>,
+    /// The panels sliding open or closed.
+    #[rust]
+    motions: PanelMotions,
 }
 
 impl App {
@@ -362,20 +368,27 @@ impl App {
         } else {
             SplitterCollapse::A
         };
-        self.ui
-            .splitter(cx, ids!(main_split))
-            .set_collapse(cx, media);
+        // A sliding panel is the slide's to fold (panel_motion.rs).
+        if !self.motions.moving(panel_motion::Slide::Setup) {
+            self.ui
+                .splitter(cx, ids!(main_split))
+                .set_collapse(cx, media);
+        }
         let inspector = if self.shell.is_open(Panel::Inspector) {
             SplitterCollapse::None
         } else {
             SplitterCollapse::B
         };
-        self.ui
-            .splitter(cx, ids!(inner_split))
-            .set_collapse(cx, inspector);
+        if !self.motions.moving(panel_motion::Slide::Adjust) {
+            self.ui
+                .splitter(cx, ids!(inner_split))
+                .set_collapse(cx, inspector);
+        }
         // Lanes once a camera has video, unless folded away.
-        let has_video = self.preview.is_some() || self.project.stage() != Stage::NoVideos;
-        self.set_visible(cx, ids!(lanes), has_video && !self.timeline_folded);
+        if !self.motions.moving(panel_motion::Slide::Lanes) {
+            let shown = self.has_video() && !self.timeline_folded;
+            self.set_visible(cx, ids!(lanes), shown);
+        }
 
         let loaded = self.shell.files_loaded();
         let exporting = self.preview == Some(LookPreview::Exporting) || self.exporting();
@@ -662,7 +675,10 @@ impl App {
     }
 
     fn toggle(&mut self, cx: &mut Cx, panel: Panel) {
+        let was_open = self.shell.is_open(panel);
         if self.shell.toggle(panel) {
+            let open = self.shell.is_open(panel);
+            self.start_slide(cx, panel_motion::Slide::of(panel), was_open, open);
             self.apply_shell(cx);
         }
     }
@@ -703,8 +719,22 @@ impl App {
     }
 
     fn toggle_timeline(&mut self, cx: &mut Cx) {
+        let was_open = !self.timeline_folded;
         self.timeline_folded = !self.timeline_folded;
+        if self.has_video() {
+            self.start_slide(
+                cx,
+                panel_motion::Slide::Lanes,
+                was_open,
+                !self.timeline_folded,
+            );
+        }
         self.apply_shell(cx);
+    }
+
+    /// A camera has video, so the time panel shows its lanes.
+    fn has_video(&self) -> bool {
+        self.preview.is_some() || self.project.stage() != Stage::NoVideos
     }
 }
 
@@ -819,6 +849,8 @@ impl AppMain for App {
             // Only a width change can fold or unfold a panel; moves and
             // height changes skip the work.
             Event::WindowGeomChange(ge) if ge.old_geom.inner_size.x != ge.new_geom.inner_size.x => {
+                // Slides end at once: the window's width decides now.
+                self.end_slides(cx);
                 self.shell.fit_width(ge.new_geom.inner_size.x);
                 self.apply_shell(cx);
             }
@@ -867,6 +899,7 @@ impl AppMain for App {
                 log!("{line}");
             }
         }
+        self.slide_frame(cx, event);
         self.slider_arrow(cx, event);
         if self.log_cursor && matches!(event, Event::MouseMove(_)) {
             let cursor = cx.mouse_cursor();

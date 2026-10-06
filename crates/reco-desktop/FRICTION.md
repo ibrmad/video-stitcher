@@ -268,3 +268,14 @@ shortcuts as keys (`keys::app_shortcut`), as ⌘S already was; a press the
 menu takes never reaches the window, so nothing runs twice. check_m7
 `keys` presses each. The ask: a way to drive menu key equivalents from the
 remote, so a check covers the AppKit path.
+
+## A splitter can't slide a pane past its floor (UI pass, Makepad)
+
+`Splitter` clamps an open pane to its floors, folds a pane only at once
+(`set_collapse`), and has no setter for the floors, so a panel couldn't
+slide closed: its width stopped at the floor. A script apply
+(`script_apply_eval!`) sets the floors, but puts the widget's other runtime
+values (its align and fold) back to its DSL. The app's slides relax the
+floors for their 0.2 s, set them back from the theme after, and set the bar
+and the fold again each time (panel_motion.rs). The ask: a floor setter,
+or a collapse that animates.

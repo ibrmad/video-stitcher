@@ -452,23 +452,136 @@ def click(app, rect):
     app.get("/m", k="up", x=x + w / 2, y=y + h / 2, wait=1)
 
 
+def after_slide(app, probe, secs=2.0):
+    """Wait out a panel's slide: `probe` once it holds, or None."""
+    deadline = time.monotonic() + secs
+    while time.monotonic() < deadline:
+        if probe():
+            return True
+        time.sleep(0.05)
+    return None
+
+
+def edge_samples(app, read, secs=0.6):
+    """`read()` as fast as the remote answers, for `secs`."""
+    out = []
+    deadline = time.monotonic() + secs
+    while time.monotonic() < deadline:
+        out.append(read())
+    return out
+
+
+def distinct(samples):
+    """The samples' values in order, each once (for messages)."""
+    out = []
+    for s in samples:
+        if not out or out[-1] != s:
+            out.append(s)
+    return out
+
+
+def between(samples, a, b):
+    """The samples strictly between a and b (a margin of 3 pt)."""
+    lo, hi = min(a, b) + 3, max(a, b) - 3
+    return [s for s in samples if s is not None and lo < s < hi]
+
+
+def check_motion():
+    """Panels slide (plans/2026-10-06-panel-motion.md): the picture's edge
+    passes through points between open and closed; the moving panel keeps
+    its width (nothing re-wraps); a toggle mid-slide turns it around; a
+    dragged width comes back."""
+    with launch((1280, 820), "ready") as app:
+        open_x = app.rect("viewer")[0]
+        left = lambda: (app.rect("viewer") or [None])[0]
+        # A rect is its visible part, so the title's place tells a slide
+        # (it moves left with the panel) from a squeeze (it stays).
+        title_x = app.rect("setup_header")[0]
+        partly = []
+        def read_left():
+            edge = left()
+            t = app.rect("setup_header")
+            if edge is not None and 80 < edge < open_x - 10:
+                partly.append(t[0] if t and t[2] > 0 else None)
+            return edge
+        app.key("Key1", cmd=1)
+        closing = edge_samples(app, read_left)
+        closed_x = left()
+        expect(closed_x is not None and closed_x < open_x - 200, f"motion: Setup closes ({open_x} -> {closed_x})")
+        expect(len(between(closing, open_x, closed_x)) >= 1,
+               f"motion: the picture's edge slides as Setup closes ({distinct(closing)})")
+        expect(bool(partly) and all(t is None or t < title_x - 10 for t in partly),
+               f"motion: Setup slides out, its rows unchanged: the title leaves with it ({distinct(partly)})")
+        app.key("Key1", cmd=1)
+        opening = edge_samples(app, left)
+        expect(abs((left() or 0) - open_x) <= 1, f"motion: Setup opens to where it was ({left()} vs {open_x})")
+        expect(len(between(opening, open_x, closed_x)) >= 1,
+               f"motion: the picture's edge slides as Setup opens ({distinct(opening)})")
+        # Adjust slides on the right: the picture's right edge.
+        right = lambda: (lambda v: v and v[0] + v[2])(app.rect("viewer"))
+        open_r = right()
+        app.key("Key2", cmd=1)
+        closing = edge_samples(app, right)
+        closed_r = right()
+        expect(closed_r is not None and closed_r > open_r + 200, f"motion: Adjust closes ({open_r} -> {closed_r})")
+        expect(len(between(closing, open_r, closed_r)) >= 1,
+               f"motion: the picture's right edge slides as Adjust closes ({distinct(closing)})")
+        app.key("Key2", cmd=1)
+        after_slide(app, lambda: abs((right() or 0) - open_r) <= 1)
+        # The lanes slide down: the time panel's top.
+        top = lambda: (app.rect("time_panel") or [None, None])[1]
+        open_t = top()
+        app.key("Key3", cmd=1)
+        folding = edge_samples(app, top)
+        folded_t = top()
+        expect(folded_t is not None and open_t is not None and folded_t > open_t + 20,
+               f"motion: the lanes fold ({open_t} -> {folded_t})")
+        expect(len(between(folding, open_t, folded_t)) >= 1,
+               f"motion: the time panel's top slides as the lanes fold ({distinct(folding)})")
+        app.key("Key3", cmd=1)
+        after_slide(app, lambda: abs((top() or 0) - open_t) <= 1)
+        # A second toggle mid-slide turns it around: Setup ends open, and
+        # never got all the way closed.
+        app.key("Key1", cmd=1)
+        time.sleep(0.06)
+        app.key("Key1", cmd=1)
+        turned = edge_samples(app, left)
+        expect(abs((left() or 0) - open_x) <= 1 and len(between(turned, open_x, closed_x)) >= 1
+               and min(s for s in turned if s is not None) > closed_x + 3,
+               f"motion: a toggle mid-slide turns it around ({distinct(turned)})")
+        # A dragged width comes back after a slide out and in.
+        mx, my, mw, mh = app.rect("media_panel")
+        drag(app, mx + mw + 3, my + mh / 2, mx + mw + 63)
+        dragged = app.rect("media_panel")[2]
+        app.key("Key1", cmd=1)
+        after_slide(app, lambda: not visible(app, "media_panel"))
+        app.key("Key1", cmd=1)
+        after_slide(app, lambda: visible(app, "media_panel"))
+        time.sleep(0.4)
+        back = app.rect("media_panel")[2]
+        expect(abs(back - dragged) <= 1 and dragged > mw + 40,
+               f"motion: a dragged width comes back ({mw} -> {dragged} -> {back})")
+        expect(app.errors() == [], "motion: no errors in the app log")
+
+
 def check_toggles():
     with launch((1280, 820), "ready") as app:
         app.click_id("toggle_media")
-        expect(not visible(app, "media_panel"), "toggle: Setup panel folds")
+        expect(after_slide(app, lambda: not visible(app, "media_panel")), "toggle: Setup panel folds")
         app.grab(os.path.join(OUT, "ready-setup-folded.png"))
         app.click_id("toggle_media")
-        expect(visible(app, "media_panel"), "toggle: Setup panel reopens")
+        expect(after_slide(app, lambda: visible(app, "media_panel")), "toggle: Setup panel reopens")
         app.click_id("toggle_inspector")
-        expect(not visible(app, "inspector"), "toggle: Adjust panel folds")
+        expect(after_slide(app, lambda: not visible(app, "inspector")), "toggle: Adjust panel folds")
         app.click_id("toggle_inspector")
-        expect(visible(app, "inspector"), "toggle: Adjust panel reopens")
+        expect(after_slide(app, lambda: visible(app, "inspector")), "toggle: Adjust panel reopens")
         app.click_id("toggle_timeline")
-        expect(not visible(app, "lanes") and visible(app, "play_pause"),
+        expect(after_slide(app, lambda: not visible(app, "lanes") and visible(app, "play_pause")),
                "toggle: time panel folds to its control row")
         app.grab(os.path.join(OUT, "ready-time-folded.png"))
         app.click_id("toggle_timeline")
-        expect(visible(app, "lanes"), "toggle: time panel reopens")
+        expect(after_slide(app, lambda: visible(app, "lanes")), "toggle: time panel reopens")
+        time.sleep(0.4)
         mx, my, mw, mh = app.rect("media_panel")
         bar_x, bar_y = mx + mw + 3, my + mh / 2
         app.get("/m", k="down", x=bar_x, y=bar_y)
@@ -490,6 +603,7 @@ def check_toggles():
         expect(app.errors() == [], "toggle: no errors in the app log")
     with launch((1280, 820), None) as app:
         app.click_id("toggle_inspector")
+        time.sleep(0.4)
         expect(not visible(app, "inspector"), "toggle: Adjust panel stays closed before a stitch")
     # The app menu and the recent-files menu open as menus.
     with launch((1280, 820), "ready") as app:
@@ -554,6 +668,17 @@ def check_dropdowns():
 
 def main():
     os.makedirs(OUT, exist_ok=True)
+    named = {"motion": check_motion, "toggles": check_toggles}
+    if sys.argv[1:]:
+        for name in sys.argv[1:]:
+            named[name]()
+        if FAILURES:
+            print(f"\nModule 0 check FAILED: {len(FAILURES)} failure(s):")
+            for message in FAILURES:
+                print(f"  - {message}")
+            sys.exit(1)
+        print("Module 0 check passed.")
+        return
     for state in STATES:
         check_state((1280, 820), state)
     for size in ((720, 600), (1920, 1200)):
@@ -561,6 +686,7 @@ def main():
             check_state(size, state)
     check_adjust_edges()
     check_toggles()
+    check_motion()
     check_menus()
     check_dropdowns()
     if FAILURES:
