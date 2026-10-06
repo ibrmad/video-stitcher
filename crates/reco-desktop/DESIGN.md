@@ -474,6 +474,12 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   slice is wanted.
 - A cached panel (`new_batch`) keeps its own draw list, and a redraw of the
   window doesn't reach it: only a redraw of one of its own areas does.
+  Nor does a change of its parent's size: a toast card stayed drawn where it
+  was when a panel opened over it, while `/snap` reported it moved (checks
+  of such widgets look at pixels). A redraw asked for while drawing is
+  dropped, and a cached view's `area()` lies in its parent's list, so
+  `RecoToasts` notes its room as it draws and redraws its cards on the next
+  frame when the room changes.
   Showing or hiding a widget asks for no redraw at all, so `App::set_visible`
   redraws the side panels when visibility changes.
 - A fold (`FoldHeader`) opens from its chevron only, not from its title.

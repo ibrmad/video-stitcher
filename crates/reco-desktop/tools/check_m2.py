@@ -33,6 +33,9 @@ REAL = (
     f"{HOME}/Downloads/match_recording/left/GX010120_calibration.json",
 )
 
+# A toast card's fill (theme.reco_band).
+CARD = "#212121"
+
 FAILURES = []
 
 
@@ -240,6 +243,21 @@ def title_rect(app, text):
     return None
 
 
+def drawn(app, cards):
+    """Whether each card is on screen where the snapshot puts it: its own
+    fill inside its bottom right corner. The snapshot gives where a card is
+    laid out, which a card kept in its own draw list may not be drawn at."""
+    png = app.grab(os.path.join(OUT, "toasts-drawn.png"), scale=0.5)
+    scale = png.width / app.get("/s")["w"][0]["sz"][0]
+    for r in cards:
+        if not r:
+            return False
+        x, y = r[0] + r[2] - 10, r[1] + r[3] - 6
+        if not drive.close_to(png.pixel(int(x * scale), int(y * scale)), CARD, tol=4):
+            return False
+    return True
+
+
 def check_toasts():
     """At most four, newest at the bottom, inside the viewer; close and
     expiry; the status line keeps its own text; a failed open raises one."""
@@ -268,6 +286,48 @@ def check_toasts():
     with launch(("/nonexistent/left.mp4", right, cal)) as app:
         failed = wait_for(lambda: title_rect(app, "Couldn't open the videos"), 15)
         expect(bool(failed), "toasts: a failed open raises an error toast")
+    check_toasts_follow()
+
+
+def follows(app, gap, state):
+    """The toasts still up keep `gap` to the viewer's right edge, and are
+    drawn there."""
+    cx_, cy_, cw_, ch_ = app.rect("canvas")
+    now = [r for r in (app.rect(f"toast_{i}") for i in range(4)) if r]
+    kept = bool(now) and all(abs(cx_ + cw_ - (r[0] + r[2]) - gap) <= 1 for r in now) and drawn(app, now)
+    expect(kept, f"toasts: with Adjust {state}, they keep to the viewer's right edge and are drawn there "
+                 f"({[r[0] + r[2] for r in now]} vs {cx_ + cw_ - gap})")
+
+
+def check_toasts_follow():
+    """Toasts keep to the viewer's edge, on screen and not only in the
+    layout, whatever moves it: a panel's slide, a dragged edge, a narrow
+    window (the owner saw one left under the Adjust panel after a
+    calibration opened it)."""
+    with launch(extra=("--toast-demo",)) as app:
+        ready(app)
+        x, y, w, h = app.rect("canvas")
+        first = app.rect("toast_0")
+        gap = x + w - (first[0] + first[2])
+        expect(drawn(app, [first]), "toasts: drawn where they are laid out to start")
+        app.key("Key2", cmd=1)
+        time.sleep(0.6)
+        follows(app, gap, "closed")
+        app.key("Key2", cmd=1)
+        time.sleep(0.6)
+        follows(app, gap, "open")
+        ix, iy, iw, ih = app.rect("inspector")
+        bar_x, bar_y = ix - 3, iy + ih / 2
+        app.get("/m", k="down", x=bar_x, y=bar_y)
+        app.get("/m", k="move", x=bar_x - 50, y=bar_y)
+        app.get("/m", k="move", x=bar_x - 100, y=bar_y)
+        app.get("/m", k="up", x=bar_x - 100, y=bar_y, wait=1)
+        time.sleep(0.3)
+        follows(app, gap, "dragged wider")
+        for size, state in (((900, 820), "folded by a narrow window"), ((1280, 820), "back")):
+            app.get("/w", k="resize", width=size[0], height=size[1], wait=1)
+            time.sleep(0.6)
+            follows(app, gap, state)
 
 
 def ffprobe(path):

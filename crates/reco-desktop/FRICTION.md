@@ -279,3 +279,18 @@ values (its align and fold) back to its DSL. The app's slides relax the
 floors for their 0.2 s, set them back from the theme after, and set the bar
 and the fold again each time (panel_motion.rs). The ask: a floor setter,
 or a collapse that animates.
+
+## A cached view isn't redrawn when its room changes (UI pass, Makepad)
+
+A view with its own draw list (`new_batch`) is skipped while clean, and a
+change of its parent's size doesn't mark it: after a calibration opened
+the Adjust panel, the "Calibrated" toast stayed drawn where the wider
+viewer had put it, under the panel, until a new toast redrew it (the owner
+saw it). `/snap` reported the card at its new place all along, so only
+pixels showed it. A redraw asked for while drawing is dropped (`redraw_list`
+returns in a draw), and the view's `area()` lies in its parent's list.
+`RecoToasts` notes its room as it draws and redraws its cards on the next
+frame when the room changes; check_m2 `toasts` looks at their pixels after
+a slide, a drag and a resize. The ask: redraw a cached view whose turtle
+moved, and let `/snap` report what was drawn.
+

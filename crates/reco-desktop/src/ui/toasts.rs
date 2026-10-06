@@ -47,7 +47,10 @@ script_mod! {
         }
     }
 
-    mod.widgets.RecoToasts = View{
+    mod.widgets.RecoToastsBase = #(RecoToasts::register_widget(vm))
+
+    mod.widgets.RecoToasts = set_type_default() do mod.widgets.RecoToastsBase{
+        ..mod.widgets.View
         width: Fill height: Fill flow: Down spacing: theme.reco_gap
         align: Align{x: 1.0 y: 1.0}
         padding: Inset{right: theme.reco_pad bottom: theme.reco_pad}
@@ -55,5 +58,46 @@ script_mod! {
         toast_1 := mod.widgets.RecoToastCard{}
         toast_2 := mod.widgets.RecoToastCard{}
         toast_3 := mod.widgets.RecoToastCard{}
+    }
+}
+
+/// The layer the cards sit in. Each card keeps its own draw list, so it
+/// draws over the picture; a change of the viewer's size doesn't reach those
+/// lists, and a card stayed drawn where it was, under a panel that opened
+/// (the owner saw it after a calibration). The layer notes its room as it
+/// draws and, when it changes, asks its cards to draw again on the next frame
+/// (a redraw asked for mid-draw is dropped, and a card's area is in the
+/// layer's list, not its own).
+#[derive(Script, ScriptHook, Widget)]
+pub struct RecoToasts {
+    #[source]
+    source: ScriptObjectRef,
+    #[deref]
+    view: View,
+    /// The room the cards were last drawn in.
+    #[rust]
+    room: Rect,
+    /// The frame on which they draw again in a new room.
+    #[rust]
+    moved: NextFrame,
+}
+
+impl Widget for RecoToasts {
+    fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
+        if self.moved.is_event(event).is_some() {
+            for id in [ids!(toast_0), ids!(toast_1), ids!(toast_2), ids!(toast_3)] {
+                self.view.widget(cx, id).redraw(cx);
+            }
+        }
+        self.view.handle_event(cx, event, scope);
+    }
+
+    fn draw_walk(&mut self, cx: &mut Cx2d, scope: &mut Scope, walk: Walk) -> DrawStep {
+        let room = cx.turtle().inner_rect();
+        if room != self.room {
+            self.room = room;
+            self.moved = cx.new_next_frame();
+        }
+        self.view.draw_walk(cx, scope, walk)
     }
 }
