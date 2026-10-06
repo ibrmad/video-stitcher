@@ -294,3 +294,22 @@ frame when the room changes; check_m2 `toasts` looks at their pixels after
 a slide, a drag and a resize. The ask: redraw a cached view whose turtle
 moved, and let `/snap` report what was drawn.
 
+
+## A view change re-sends both frames to the GPU (Module 8, reco-core)
+
+`StitchPipeline::render_to_view` uploads both cameras' planes before every
+render, so a pan, a zoom or a tuning drag while paused sends the same two
+frames again each time. On the 5.3K match pair that is about 44 MB a
+picture: check_m8 `perf` saw pans at about 52 pictures a second, 19.7 ms
+each on average and 37.9 ms at the slowest, above a 60 Hz display's
+16.7 ms (DESIGN.md Rule 8: the preview at display rate). The Slint app
+renders the same way (`render_yuv` per picture). Measured on the pair at
+1100×620: 20.5 ms a render with the upload, 2.2 ms from the frames already
+on the GPU, pixel for pixel the same picture. The engine's no-upload path
+(`render_to_target_gpu`) draws into an internal target fixed at the size
+the renderer was built with (`StitchPipeline::resize` only changes the
+viewport), so it is wrong after the viewer's first resize, and the
+renderer's own `render_to_view` is private behind the pipeline. The ask: a
+pipeline method that renders the frames last uploaded to a given view
+(`render_uploaded_to_view(yaw, pitch, view)`), so the preview uploads only
+when the frame changes.
