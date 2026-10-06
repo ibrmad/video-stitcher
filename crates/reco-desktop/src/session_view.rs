@@ -170,6 +170,7 @@ impl App {
         self.show_gpu(cx, &info.gpu);
         self.gpu_name = Some(format!("{} ({})", info.gpu, info.backend));
         self.send_context(cx);
+        self.auto_export_ready(cx);
         self.set_label(cx, ids!(status_text), &status);
         self.update_ruler(cx);
         self.apply_shell(cx);

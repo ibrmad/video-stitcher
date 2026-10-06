@@ -143,6 +143,25 @@ impl App {
             .set_active(cx, on, Animate::No);
         self.show_ai_availability(cx);
         self.send_context(cx);
+        self.auto_export_ready(cx);
+    }
+
+    /// A benchmark run's tracking (automation.rs): on, `model`, the field
+    /// mode and `lookahead` seconds, as the Slint app's hook set them.
+    pub(crate) fn set_auto_tracking(&mut self, cx: &mut Cx, model: &Path, lookahead: f64) {
+        self.ui
+            .check_box(cx, ids!(ai_enable))
+            .set_active(cx, true, Animate::No);
+        self.ui
+            .text_input(cx, ids!(ai_model))
+            .set_text(cx, &model.display().to_string());
+        self.ui
+            .drop_down(cx, ids!(ai_mode))
+            .set_selected_item(cx, row_of(&MODES, "field"));
+        self.ui
+            .slider(cx, ids!(ai_lookahead))
+            .set_value(cx, lookahead);
+        self.show_lookahead(cx, lookahead);
     }
 
     fn ai_available(&self) -> bool {
@@ -335,11 +354,19 @@ impl App {
     /// source's size and rate), the lookahead inside them, and whether
     /// tracking can run.
     pub(crate) fn refresh_ai_rows(&mut self, cx: &mut Cx) {
+        let budget = if cfg!(feature = "automation") {
+            crate::automation::vram_budget(|key| std::env::var(key).ok())
+        } else {
+            None
+        };
         self.ai_zones = self
             .live
             .as_ref()
             .and_then(|l| l.info.as_ref())
-            .and_then(|info| ai::lookahead_zones(info.vram, (info.width, info.height), info.fps));
+            .and_then(|info| match budget {
+                Some(budget) => ai::zones_for_budget(budget, (info.width, info.height), info.fps),
+                None => ai::lookahead_zones(info.vram, (info.width, info.height), info.fps),
+            });
         let chosen = self
             .ui
             .slider(cx, ids!(ai_lookahead))

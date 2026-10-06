@@ -22,6 +22,7 @@ use makepad_widgets::widget_tree::CxWidgetExt;
 use makepad_widgets::*;
 
 mod ai_view;
+mod automation;
 mod bug_view;
 mod calibrate_view;
 mod cli;
@@ -58,6 +59,7 @@ mod ui;
 mod value_text;
 mod value_view;
 
+use automation::AutoRun;
 use calibrate_view::Calibrating;
 use cli::{Args, LookPreview};
 use export_view::{CodecProbe, Exporting};
@@ -314,6 +316,11 @@ pub struct App {
     /// opening); it keeps what is chosen after that.
     #[rust]
     export_sheet_filled: bool,
+    /// A benchmark run (automation builds), and its pause between runs.
+    #[rust]
+    auto_run: Option<AutoRun>,
+    #[rust]
+    auto_timer: Timer,
     /// A quit held while edits are unsaved (quit_view.rs).
     #[rust]
     quitting: Option<Quitting>,
@@ -800,7 +807,15 @@ impl MatchEvent for App {
                 .set_visible(cx, false);
         }
         self.launched_at = std::env::var(perf::LAUNCHED_AT).ok();
-        match Args::parse(std::env::args().skip(1)) {
+        let mut args: Vec<String> = std::env::args().skip(1).collect();
+        if cfg!(feature = "automation") {
+            let env = |key: &str| std::env::var(key).ok();
+            if !args.iter().any(|a| a == "--left") {
+                args.extend(automation::autoload_args(env).unwrap_or_default());
+            }
+            self.auto_run = automation::auto_export(env).map(AutoRun::new);
+        }
+        match Args::parse(args) {
             Ok(args) => self.args = args,
             Err(err) => log!("ignoring command line: {err}"),
         }
@@ -957,6 +972,9 @@ impl AppMain for App {
         }
         if self.toast_timer.is_event(event).is_some() {
             self.expire_toasts(cx);
+        }
+        if self.auto_timer.is_event(event).is_some() {
+            self.auto_timer_fired(cx);
         }
         if self.layout_timer.is_event(event).is_some() {
             self.save_layout(cx);

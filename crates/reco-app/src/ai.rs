@@ -203,10 +203,22 @@ pub fn lookahead_zones(
     fps: f64,
 ) -> Option<LookaheadZones> {
     let (free, total) = vram?;
-    if total == 0 || size.0 == 0 || size.1 == 0 {
+    if total == 0 {
         return None;
     }
-    let budget = reco_core::session::lookahead_budget_bytes(free, total);
+    zones_for_budget(
+        reco_core::session::lookahead_budget_bytes(free, total),
+        size,
+        fps,
+    )
+}
+
+/// The zones for a `size` source at `fps` with `budget` bytes for the
+/// lookahead (a benchmark build can set it: `RECO_VRAM_BUDGET_GB`).
+pub fn zones_for_budget(budget: usize, size: (u32, u32), fps: f64) -> Option<LookaheadZones> {
+    if size.0 == 0 || size.1 == 0 {
+        return None;
+    }
     let fit = reco_core::session::lookahead_fit(size.0, size.1, 1, budget, fps);
     Some(LookaheadZones {
         safe: fit.safe_secs,
@@ -327,6 +339,17 @@ impl AvailabilityProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_budget_gives_the_zones_its_memory_would() {
+        let (free, total) = (6_000_000_000, 8_000_000_000);
+        let budget = reco_core::session::lookahead_budget_bytes(free, total);
+        assert_eq!(
+            zones_for_budget(budget, (3840, 2160), 30.0),
+            lookahead_zones(Some((free, total)), (3840, 2160), 30.0)
+        );
+        assert_eq!(zones_for_budget(budget, (0, 2160), 30.0), None);
+    }
 
     #[test]
     fn the_usage_line_says_where_tracking_runs() {

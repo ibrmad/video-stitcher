@@ -22,6 +22,9 @@ load-dynamic = ["ai", "reco-app/load-dynamic"]
 tensorrt-native = ["reco-app/tensorrt-native"]
 ncnn = ["reco-app/ncnn"]
 profiling = ["reco-app/profiling"]
+# The Slint app's benchmark hooks (RECO_AUTOLOAD, RECO_AUTOEXPORT,
+# RECO_VRAM_BUDGET_GB; automation.rs). Off in releases.
+automation = []
 
 [[bin]]
 name = "reco-desktop"

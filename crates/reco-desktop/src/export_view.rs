@@ -160,7 +160,7 @@ impl App {
     }
 
     /// Open the sheet, filled from the settings and the open match.
-    fn open_export_sheet(&mut self, cx: &mut Cx) {
+    pub(crate) fn open_export_sheet(&mut self, cx: &mut Cx) {
         let Some(length) = self.match_length() else {
             return;
         };
@@ -334,7 +334,7 @@ impl App {
 
     /// Check the sheet, remember its choices, pause the preview and ask
     /// the worker for the tuned calibration; the job starts with it.
-    fn begin_export(&mut self, cx: &mut Cx) {
+    pub(crate) fn begin_export(&mut self, cx: &mut Cx) {
         let Some(range) = self.export_range.filter(|r| !r.is_empty()) else {
             return;
         };
@@ -505,6 +505,7 @@ impl App {
                 } => {
                     log!("export: done, {frames} frames to {}", path.display());
                     self.end_export(cx);
+                    self.auto_export_ended(cx, "done");
                     let duration_secs = if fps > 0.0 { frames as f64 / fps } else { 0.0 };
                     self.send_usage(
                         cx,
@@ -537,6 +538,7 @@ impl App {
                 ExportEvent::Failed(why) => {
                     log!("export: failed: {why}");
                     self.end_export(cx);
+                    self.auto_export_ended(cx, "failed");
                     self.send_usage(
                         cx,
                         UsageEvent::ExportError {
@@ -561,6 +563,7 @@ impl App {
                 ExportEvent::Cancelled => {
                     log!("export: cancelled");
                     self.end_export(cx);
+                    self.auto_export_ended(cx, "cancelled");
                     let body = if output.exists() {
                         format!("The part written so far is in {}.", file_name(&output))
                     } else {
