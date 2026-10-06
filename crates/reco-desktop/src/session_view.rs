@@ -277,7 +277,7 @@ impl App {
     /// The view bar while recording: the button shows the time and a stop
     /// square, and its menu is off; otherwise Record and the menu.
     fn show_recording(&mut self, cx: &mut Cx, recording: bool) {
-        self.set_button_enabled(cx, ids!(record_menu_button), !recording);
+        self.show_record_menu_enabled(cx);
         if recording {
             self.set_visible(cx, ids!(show_in_folder), false);
         }

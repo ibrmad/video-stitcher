@@ -371,12 +371,7 @@ impl App {
             self.set_button_enabled(cx, id, loaded && !exporting);
         }
         self.set_button_enabled(cx, ids!(record_button), loaded && !exporting);
-        let recording = self.live.as_ref().is_some_and(|l| l.recording.is_some());
-        self.set_button_enabled(
-            cx,
-            ids!(record_menu_button),
-            loaded && !exporting && !recording,
-        );
+        self.show_record_menu_enabled(cx);
         self.ui.widget(cx, ids!(timeline)).set_disabled(cx, !loaded);
         if let Some(mut ruler) = self
             .ui
