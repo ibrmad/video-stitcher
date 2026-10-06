@@ -18,6 +18,16 @@ pub fn size_label(name: &str, width: u32, height: u32) -> String {
     format!("{name} · {width} × {height}")
 }
 
+/// The card's line before the first frame: where the export starts (one
+/// far in seeks first, and would look stalled; Slint said "Seeking to …").
+pub fn starting_line(start_secs: f64) -> String {
+    if start_secs < 1.0 {
+        "Starting…".into()
+    } else {
+        format!("Starting at {}…", crate::time_ruler::clock(start_secs))
+    }
+}
+
 /// The card's progress line: "Frame 48,210 of 141,000 · 62 fps" (no rate
 /// before there is one).
 pub fn progress_detail(frames: u64, total: u64, fps: f64) -> String {
@@ -91,6 +101,13 @@ mod tests {
         assert_eq!(grouped(999), "999");
         assert_eq!(grouped(48_210), "48,210");
         assert_eq!(grouped(1_141_000), "1,141,000");
+    }
+
+    #[test]
+    fn the_card_says_where_the_export_starts() {
+        assert_eq!(starting_line(0.0), "Starting…");
+        assert_eq!(starting_line(750.0), "Starting at 12:30…");
+        assert_eq!(starting_line(4_000.0), "Starting at 1:06:40…");
     }
 
     #[test]

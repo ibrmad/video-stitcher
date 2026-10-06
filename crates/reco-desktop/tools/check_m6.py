@@ -627,6 +627,19 @@ def check_ai_fold():
         save_shot(app, "ai-fold")
 
 
+def check_starting():
+    """An export that starts far in says where while it seeks (Slint said
+    "Seeking to …"; it read "Starting…" and looked stalled)."""
+    _, files = linked("starting")
+    with launch(files, ["--export-range", "30-40"]) as app:
+        expect(open_sheet(app) is not None, "starting: Export opens the sheet")
+        click(app, "sheet_export")
+        line = wait_for(lambda: text_of(app, "export_detail"), 5)
+        expect(line == "Starting at 0:30…", f"starting: the card says where it starts ({line!r})")
+        click(app, "export_cancel")
+        wait_for(lambda: logged(app, "export: cancelled") or logged(app, "export: done"), 30)
+
+
 def checked(app, widget_id):
     """A checkbox's state from the snapshot (None when not on screen)."""
     for item in app.snap(widget_id):
@@ -667,7 +680,7 @@ def check_kept():
 
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
           "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
-          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept}
+          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept, "starting": check_starting}
 
 
 def main():

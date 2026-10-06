@@ -20,7 +20,9 @@ use reco_app::preview::worker::PreviewCommand;
 use reco_app::telemetry::UsageEvent;
 use reco_app::toasts::Severity;
 
-use crate::export_text::{grouped, percent, progress_detail, size_label, time_left, tracking_note};
+use crate::export_text::{
+    grouped, percent, progress_detail, size_label, starting_line, time_left, tracking_note,
+};
 use crate::project_view::Pick;
 use crate::time_ruler::clock;
 use crate::ui::preview::RecoPreview;
@@ -419,7 +421,7 @@ impl App {
         });
         self.send_preview(PreviewCommand::Snapshot);
         self.set_button_enabled(cx, ids!(export_cancel), true);
-        self.show_export_card(cx, "Starting…", 0.0, "");
+        self.show_export_card(cx, &starting_line(range.start()), 0.0, "");
         let starting = tracking.is_some().then_some("AI tracking: starting…");
         self.show_tracking_line(cx, starting);
         self.lock_transport(cx, true);
