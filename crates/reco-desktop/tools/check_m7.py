@@ -10,6 +10,7 @@ by default); exits non-zero if any failed.
 """
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -407,6 +408,8 @@ def check_bug():
         expect("## Files\n- Left: cam0.mp4\n- Right: cam1.mp4\n- Calibration: match.json\n" in report,
                "bug: with the files' names only")
         expect("- GPU: " in report and "- GPU: not started" not in report, "bug: with the GPU")
+        expect(re.search(r"- GPU: .+ \(\w+\)\n", report) is not None, "bug: and its backend")
+        expect(re.search(r"- AI: .+\n", report) is not None, "bug: and where AI tracking runs")
         expect(HOME + "/" not in report, "bug: and no home folder")
         expect([json.loads(b)["events"][0]["name"] for b in kept(sent, "app_open")] == ["app_open"]
                and len(kept(sent, "context")) == 1, "bug: usage data also sent app_open and the context once")
@@ -442,6 +445,11 @@ def check_usage():
         expect((source[0].get("width"), source[0].get("height"), source[0].get("decoder")) == (1280, 960, "zero-copy")
                and abs(source[0].get("fps", 0) - 30) < 1 and isinstance(source[0].get("sync_offset"), int),
                f"usage: an opened match sends its source info ({source[0]})")
+        context = wait_for(lambda: events(sent, "context"), 15) or [{}]
+        ai, gpu = context[0].get("ai", ""), context[0].get("gpu", "")
+        expect(ai.startswith("AI: ") and "build without" not in ai,
+               f"usage: the context says where AI tracking runs ({ai!r})")
+        expect(re.search(r" \(\w+\)$", gpu) is not None, f"usage: and the GPU with its backend ({gpu!r})")
         wait_for(lambda: app.enabled("export_button"), 10)
         click(app, "export_button")
         wait_for(lambda: app.rect("sheet_export"), 5)

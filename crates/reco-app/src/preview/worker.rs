@@ -274,6 +274,8 @@ pub struct PreviewInfo {
     pub zero_copy: bool,
     /// The GPU's name.
     pub gpu: String,
+    /// Its graphics backend ("Metal", "Vulkan", "Dx12").
+    pub backend: String,
     /// The GPU's free and total memory at open, bytes, where it says
     /// (Metal, CUDA, DXGI): the export's lookahead zones come from it.
     pub vram: Option<(u64, u64)>,
@@ -824,6 +826,7 @@ impl Worker {
                     height,
                     zero_copy: self.zero_copy,
                     gpu: gpu.gpu_name().to_string(),
+                    backend: gpu.backend_name().to_string(),
                     vram: gpu.available_vram(),
                 }));
                 log::info!(

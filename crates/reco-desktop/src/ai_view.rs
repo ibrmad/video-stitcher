@@ -142,6 +142,7 @@ impl App {
             .check_box(cx, ids!(ai_enable))
             .set_active(cx, on, Animate::No);
         self.show_ai_availability(cx);
+        self.send_context(cx);
     }
 
     fn ai_available(&self) -> bool {

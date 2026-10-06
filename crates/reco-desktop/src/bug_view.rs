@@ -3,6 +3,7 @@
 //! report always.
 
 use makepad_widgets::*;
+use reco_app::ai;
 use reco_app::bug_report::{compose, SystemFacts, LOG_LINES};
 use reco_app::project::Camera;
 use reco_app::telemetry::UsageEvent;
@@ -99,6 +100,7 @@ impl App {
             version: version_line(),
             os: os_line(),
             gpu: self.gpu_name.clone(),
+            ai: ai::capability_line(self.ai_availability.as_ref()),
             left: names(self.project.files(Camera::Left)),
             right: names(self.project.files(Camera::Right)),
             calibration: self

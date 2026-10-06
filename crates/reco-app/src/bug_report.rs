@@ -18,8 +18,10 @@ pub struct SystemFacts {
     pub version: String,
     /// "macos aarch64".
     pub os: String,
-    /// The GPU the preview runs on, once it started.
+    /// The GPU the preview runs on and its backend, once it started.
     pub gpu: Option<String>,
+    /// Where AI tracking runs (`ai::capability_line`).
+    pub ai: String,
     /// The left camera's file names, in play order.
     pub left: Vec<String>,
     /// The right camera's file names.
@@ -62,6 +64,9 @@ fn add_facts(report: &mut String, facts: &SystemFacts) {
         "\n## Environment\n- Reco {}\n- OS: {}\n- GPU: {gpu}\n",
         facts.version, facts.os
     ));
+    if !facts.ai.is_empty() {
+        report.push_str(&format!("- {}\n", facts.ai));
+    }
     if !facts.left.is_empty() || !facts.right.is_empty() || facts.calibration.is_some() {
         report.push_str("\n## Files\n");
         for (camera, files) in [("Left", &facts.left), ("Right", &facts.right)] {
@@ -131,7 +136,8 @@ mod tests {
         let facts = SystemFacts {
             version: "0.5.4 (abc1234)".into(),
             os: "macos aarch64".into(),
-            gpu: Some("Apple M1 Pro".into()),
+            gpu: Some("Apple M1 Pro (Metal)".into()),
+            ai: "AI: runs on CPU".into(),
             left: vec!["GX010120.MP4".into(), "GX020120.MP4".into()],
             right: vec!["GX010092.MP4".into()],
             calibration: Some("GX010120_calibration.json".into()),
@@ -148,7 +154,8 @@ mod tests {
         assert_eq!(
             compose("It froze", "", Some(&facts), None),
             "## User description\nIt froze\n\n## Contact\n(not provided)\n\
-             \n## Environment\n- Reco 0.5.4 (abc1234)\n- OS: macos aarch64\n- GPU: Apple M1 Pro\n\
+             \n## Environment\n- Reco 0.5.4 (abc1234)\n- OS: macos aarch64\n- GPU: Apple M1 Pro (Metal)\n\
+             - AI: runs on CPU\n\
              \n## Files\n- Left: GX010120.MP4, GX020120.MP4\n- Right: GX010092.MP4\n\
              - Calibration: GX010120_calibration.json\n\
              \n## Performance\n- FPS: 29.9\n- Frame time: 6.0 ms (slowest 1%: 9.0 ms)\n\

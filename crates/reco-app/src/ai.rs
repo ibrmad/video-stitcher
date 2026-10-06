@@ -240,6 +240,16 @@ pub fn availability_line(availability: &Availability) -> String {
     }
 }
 
+/// Where AI tracking runs, for usage data and the bug report (the Slint
+/// app's "AI: …" line); `None` while the machine hasn't answered.
+pub fn capability_line(availability: Option<&Availability>) -> String {
+    match availability {
+        Some(Availability::Ready(engines)) => format!("AI: runs on {engines}"),
+        Some(Availability::Unavailable(why)) => format!("AI: unavailable ({why})"),
+        None => "AI: not checked yet".into(),
+    }
+}
+
 /// The export card's line for whether the tracking started.
 pub fn tracking_line(status: &Result<(), String>) -> String {
     match status {
@@ -304,6 +314,19 @@ impl AvailabilityProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_usage_line_says_where_tracking_runs() {
+        assert_eq!(
+            capability_line(Some(&Availability::Ready("CoreML, CPU".into()))),
+            "AI: runs on CoreML, CPU"
+        );
+        assert_eq!(
+            capability_line(Some(&Availability::Unavailable("no ONNX Runtime".into()))),
+            "AI: unavailable (no ONNX Runtime)"
+        );
+        assert_eq!(capability_line(None), "AI: not checked yet");
+    }
 
     #[test]
     fn the_status_says_where_tracking_runs_or_why_not() {

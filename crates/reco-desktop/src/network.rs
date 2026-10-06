@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use makepad_widgets::*;
+use reco_app::ai;
 use reco_app::telemetry::{self, batch_json, UsageEvent};
 use reco_app::toasts::Severity;
 
@@ -48,10 +49,6 @@ pub(crate) fn os_line() -> String {
     format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
-/// The AI tracking's state, as the Slint app reported it (tracking joins
-/// this app with Module 6b).
-const AI_STATE: &str = "AI: disabled (build without autocam feature)";
-
 impl App {
     /// Send `event` when usage data is on.
     pub(crate) fn send_usage(&mut self, cx: &mut Cx, event: UsageEvent) {
@@ -60,22 +57,23 @@ impl App {
         }
     }
 
-    /// The system's context, once a run, when usage data is on and the
-    /// preview has named its GPU.
+    /// The system's context, once a run, when usage data is on, the preview
+    /// has named its GPU and the machine has said where AI tracking runs.
     pub(crate) fn send_context(&mut self, cx: &mut Cx) {
         if self.context_sent || !self.settings.telemetry_enabled {
             return;
         }
-        let Some(gpu) = self.gpu_name.clone() else {
+        let (Some(gpu), Some(_)) = (self.gpu_name.clone(), self.ai_availability.as_ref()) else {
             return;
         };
         self.context_sent = true;
+        let ai = ai::capability_line(self.ai_availability.as_ref());
         self.send_usage(
             cx,
             UsageEvent::Context {
                 os: os_line(),
                 gpu,
-                ai: AI_STATE.into(),
+                ai,
             },
         );
     }
