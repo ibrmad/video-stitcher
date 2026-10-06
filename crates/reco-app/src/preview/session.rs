@@ -2,6 +2,7 @@
 //! Reco's `StitchRenderer` and the camera pose (as reco-gui's
 //! `PreviewBridge` and `AppState` pose code, without Slint).
 
+use std::cell::Cell;
 use std::path::Path;
 use std::time::Duration;
 
@@ -96,6 +97,9 @@ pub struct PreviewSession {
     lens_preview: Option<(LensPreviewRenderer, Fit)>,
     /// The calibration changed since it was loaded or saved.
     dirty: bool,
+    /// The serial of the frame the stitch renderer holds (`None` until the
+    /// first render), so a render that only moves the view sends nothing.
+    uploaded: Cell<Option<u64>>,
 }
 
 fn pose_config() -> PoseControlConfig {
@@ -214,6 +218,7 @@ impl PreviewSession {
             shown: None,
             lens_preview: None,
             dirty: false,
+            uploaded: Cell::new(None),
         };
         session.clamp();
         Ok(session)
@@ -317,6 +322,15 @@ impl PreviewSession {
         }
         let rig_tilt = self.renderer.pipeline().viewport().rig_tilt;
         let pose = self.pose.render_pose(rig_tilt);
+        let serial = self.playback.frame_serial();
+        if self.uploaded.get() == Some(serial) {
+            // Only the view moved: draw from the frames already on the GPU
+            // (sending two 5.3K frames again took most of a render).
+            self.renderer
+                .pipeline()
+                .render_uploaded_to_view(pose.yaw, pose.pitch, target);
+            return Ok(());
+        }
         self.renderer
             .render_yuv(
                 &frame.left.as_planes(),
@@ -325,7 +339,9 @@ impl PreviewSession {
                 pose.pitch,
                 target,
             )
-            .map_err(|e| SessionError::Render(e.to_string()))
+            .map_err(|e| SessionError::Render(e.to_string()))?;
+        self.uploaded.set(Some(serial));
+        Ok(())
     }
 
     /// The render-target size.
@@ -715,6 +731,77 @@ mod tests {
     }
 
     /// Render into an offscreen texture and read it back (BGRA in u32).
+    /// What the renderer draws for the session's frame and view when the
+    /// frame is sent to the GPU again (as every render once did).
+    fn sent_again(session: &PreviewSession) -> Vec<u32> {
+        let (w, h) = session.size();
+        let gpu = session.gpu().clone();
+        let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("test target"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: OUTPUT_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let frame = session.playback.current_frame().expect("a frame");
+        let rig_tilt = session.renderer.pipeline().viewport().rig_tilt;
+        let pose = session.pose.render_pose(rig_tilt);
+        session
+            .renderer
+            .render_yuv(
+                &frame.left.as_planes(),
+                &frame.right.as_planes(),
+                pose.yaw,
+                pose.pitch,
+                &target.create_view(&Default::default()),
+            )
+            .expect("render");
+        crate::preview::readback::read_bgra(&gpu, &target, w, h).expect("readback")
+    }
+
+    #[test]
+    fn a_pan_draws_what_sending_the_frame_again_would() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let before = render_to_cpu(&mut session);
+        session.pan(80.0, 0.0);
+        for _ in 0..40 {
+            session.smooth(FRAME);
+        }
+        let after = render_to_cpu(&mut session);
+        assert!(after != before, "the pan moved the picture");
+        assert!(
+            after == sent_again(&session),
+            "the same picture as sending the frame again"
+        );
+    }
+
+    #[test]
+    fn a_new_frame_is_sent_before_it_is_drawn() {
+        let Some(mut session) = open_fast((320, 180)) else {
+            return;
+        };
+        let before = render_to_cpu(&mut session);
+        session.playback_mut().seek_by(5.0).expect("seek");
+        let after = render_to_cpu(&mut session);
+        assert!(after != before, "five seconds on, the picture changed");
+        assert!(
+            after == sent_again(&session),
+            "the new frame is drawn, not the one before"
+        );
+        session.playback_mut().step_forward().expect("step");
+        let stepped = render_to_cpu(&mut session);
+        assert!(stepped == sent_again(&session), "a step is sent too");
+    }
+
     fn render_to_cpu(session: &mut PreviewSession) -> Vec<u32> {
         let (w, h) = session.size();
         let gpu = session.gpu().clone();

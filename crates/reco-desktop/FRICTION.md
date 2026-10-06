@@ -313,3 +313,12 @@ renderer's own `render_to_view` is private behind the pipeline. The ask: a
 pipeline method that renders the frames last uploaded to a given view
 (`render_uploaded_to_view(yaw, pitch, view)`), so the preview uploads only
 when the frame changes.
+
+Done (owner's OK, 2026-10-06): reco-core has
+`StitchPipeline::render_uploaded_to_view`, an additive hook that
+`render_to_view` and `render_nv12_to_view` now end with
+(`render_uploaded_to_view_draws_the_last_upload`, a GPU test run with
+`--ignored`). The preview session sends a frame only when playback has
+taken a new one (`Playback::frame_serial`): 5.3K pans now redraw about
+82 times a second, 3.4 ms each and 6.1 ms at the slowest, and 5.3K
+playback dropped from 87% to 76% CPU (check_m8 `perf`).

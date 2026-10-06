@@ -58,6 +58,9 @@ pub struct Playback {
     info: Option<SourceInfo>,
     state: PlayState,
     current: Option<StereoYuv>,
+    /// Counts the frames taken, so a renderer can tell the current frame
+    /// from the one it was last sent.
+    serial: u64,
     frame_index: u64,
     total_frames: Option<u64>,
     clock: FrameClock,
@@ -77,6 +80,7 @@ impl Playback {
             info: None,
             state: PlayState::Empty,
             current: None,
+            serial: 0,
             frame_index: 0,
             total_frames: None,
             clock: FrameClock::new(Duration::ZERO),
@@ -117,6 +121,7 @@ impl Playback {
         match source.next_frame()? {
             Some(frame) => {
                 self.current = Some(Self::split(frame)?);
+                self.serial += 1;
                 self.frame_index += 1;
                 Ok(true)
             }
@@ -203,6 +208,7 @@ impl Playback {
         match source.try_next_frame()? {
             Some(frame) => {
                 self.current = Some(Self::split(frame)?);
+                self.serial += 1;
                 self.frame_index += 1;
                 Ok(true)
             }
@@ -248,6 +254,12 @@ impl Playback {
     /// The frame pair on screen.
     pub fn current_frame(&self) -> Option<&StereoYuv> {
         self.current.as_ref()
+    }
+
+    /// The current frame's serial: it changes with every frame taken
+    /// (played, stepped or sought to), and only then.
+    pub fn frame_serial(&self) -> u64 {
+        self.serial
     }
 
     /// Frames taken so far (1 after open).
