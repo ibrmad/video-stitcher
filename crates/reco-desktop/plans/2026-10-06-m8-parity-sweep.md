@@ -34,3 +34,47 @@ owner's sign-off.
    release workflows and the docs to reco-desktop. (The checkout holds
    another session's uncommitted edits to `crates/reco-gui/ui/main.slint`:
    the owner decides what happens to them first.)
+
+## Sweep results (2026-10-06)
+
+An agent walked the inventory (about 450 entries); I checked each finding.
+Owner's choices: port the export figures in Stats, keys by typed
+character and the benchmark auto-export; ask before quitting with unsaved
+edits; the ROI-over-lens-preview ruling stands; no Slint settings import;
+the other session's `main.slint` edits go with the Slint app.
+
+Fixes, each with a test or check that fails first:
+
+1. Shortcuts never fire behind a sheet; Escape closes every sheet (bug
+   report, lens picker too). DESIGN Rule 9.
+2. The export sheet keeps choices made and not exported when it closes.
+   Rule 9.
+3. Closing or ⌘Q with unsaved calibration edits asks: Save, Don't Save,
+   Cancel (the pasted outline is one of them).
+4. Recalibrate keeps the lens in use (a picked profile, unsaved edits),
+   not the file's.
+5. A log file (engine and app lines, cut at 2 MB, `RUST_LOG`), panics
+   written to it; the bug report attaches its tail.
+6. Usage data and the bug report name the real AI capability and the GPU
+   backend; `decoder` means what Slint sent.
+7. Reset layout only when the layout changed.
+8. The lens preview opens Fine-tune.
+9. An export says where it starts while it seeks.
+10. F/F11 toggles maximize on Windows and Linux (Makepad has no
+    fullscreen there: FRICTION).
+11. No console window for Windows release builds.
+12. Detector features as reco-gui: `load-dynamic`, `cuda`, `tensorrt`,
+    `ncnn`, `directml` (Windows).
+13. Export figures in Stats (owner).
+14. Keys by typed character (owner).
+15. Benchmark auto-export (owner): `RECO_AUTOEXPORT`, `_MODEL`,
+    `_LOOKAHEAD`, `_REPEAT`, `RECO_VRAM_BUDGET_GB`.
+16. PARITY bookkeeping: rulings (accessibility, colour match not
+    remembered, ROI over the lens preview, no settings import, the paused
+    preview's VRAM during an export), current panel widths, the
+    off-UI-thread decoder line.
+
+Retirement (with the sign-off): the Linux build (OrbStack, done in
+Module 8), resources packaged beside the binary, the CI and release
+workflows moved over (their Linux packages grow by X11, GLX, xkbcommon,
+PulseAudio, ALSA, gbm, drm), Windows proven in CI.
