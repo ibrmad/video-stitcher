@@ -254,6 +254,31 @@ Camera and lens (Module 5):
 - Folds: `RecoFold` wraps Makepad's FoldHeader so a closed body takes no
   pointer events outside the fold (FRICTION).
 
+Parity sweep (Module 8):
+
+- The preview renders from the frames already on the GPU when only the view
+  changed (`Playback::frame_serial` against the frame last sent; reco-core's
+  additive `render_uploaded_to_view`, owner's OK): a 5.3K pan costs about
+  3 ms instead of 20.
+- Sheets hold every shortcut: `run_shortcut` returns while one is open, and
+  the App hands the preview `SheetOpen` in the scope's props with each key.
+- Quitting (⌘Q, the menu, the window's close) with unsaved calibration
+  edits asks first (`QuitRequested` handled, `accept_close` false, then
+  `cx.quit()` once answered or saved); a termination signal still quits.
+- The log file is reco-app's `log_file`: the `log` crate's lines straight
+  in, the app's (Makepad's log ring) copied on each signal and at
+  shutdown, panics written by the hook. Checks name their own
+  (`RECO_DESKTOP_LOG_FILE`).
+- Keys: by place for Space, the arrows and F11; by the typed character for
+  R, F, + = - _ [ ] (macOS asks the layout, `UCKeyTranslate`; Windows and
+  Linux take their text events), so they follow the keyboard's layout.
+- The detector features are reco-gui's (reco-app's `ort`, `load-dynamic`,
+  `cuda`, `tensorrt`, `directml` on for Windows, `tensorrt-native`, `ncnn`),
+  and `automation` builds the benchmark hooks (automation.rs).
+- Linux: built and run in a container (Ubuntu 24.04, Xvfb, Mesa); it needs
+  X11, GLX, xkbcommon, PulseAudio, ALSA, gbm and drm, and its release must
+  package the resources beside the binary (FRICTION.md).
+
 Threading, adopted from Makepad's own rules:
 
 - The UI thread never blocks. It shares no `Mutex` or `RwLock` with workers,
@@ -539,6 +564,9 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   and `RECO_DESKTOP_FAKE_AI` stands in for a machine that can't run the
   detector. `RECO_DESKTOP_LOG_CURSOR` logs each change of the mouse
   cursor, for the checks that hold sliders to the arrow.
+  `RECO_DESKTOP_LAUNCHED_AT` (set by `drive.launch`) makes the first frame
+  log how long after the launch it came, and `RECO_DESKTOP_LOG_FILE` gives
+  each launch its own log file.
   Dialogs are answered through `RECO_DESKTOP_DIALOG_ANSWERS`, and settings go
   to a fresh `RECO_CONFIG_DIR`. Even a hidden window goes full screen, so no
   check starts one full screen.
