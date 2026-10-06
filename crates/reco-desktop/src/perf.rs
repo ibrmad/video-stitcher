@@ -1,7 +1,23 @@
 //! How long the UI thread spends drawing a frame (DESIGN.md Rule 8: under
-//! 4 ms), summarised every two seconds for `--perf-log`.
+//! 4 ms), summarised every two seconds for `--perf-log`; and how long after
+//! its launch the first window frame came (Rule 8: under 1 s).
 
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+/// Set by the checks to the launch time, in seconds since the Unix epoch:
+/// the first frame then logs how long after it came.
+pub const LAUNCHED_AT: &str = "RECO_DESKTOP_LAUNCHED_AT";
+
+/// How long after `launched_at` (seconds since the Unix epoch) `now` is;
+/// `None` for text that isn't a time, or a launch after `now`.
+pub fn since_launch(launched_at: &str, now: SystemTime) -> Option<Duration> {
+    let secs: f64 = launched_at.trim().parse().ok()?;
+    if !secs.is_finite() || secs < 0.0 {
+        return None;
+    }
+    now.duration_since(UNIX_EPOCH + Duration::from_secs_f64(secs))
+        .ok()
+}
 
 /// How often a summary is logged.
 pub const WINDOW: Duration = Duration::from_secs(2);
@@ -64,5 +80,18 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn the_first_frame_counts_from_the_launch() {
+        let launch = UNIX_EPOCH + Duration::from_millis(1_000_000_500);
+        let now = launch + Duration::from_millis(420);
+        let after = Some(Duration::from_millis(420));
+        assert_eq!(since_launch("1000000.5", now), after);
+        assert_eq!(since_launch(" 1000000.5\n", now), after);
+        assert_eq!(since_launch("soon", now), None);
+        assert_eq!(since_launch("NaN", now), None);
+        assert_eq!(since_launch("-1", now), None);
+        assert_eq!(since_launch("1000001", now), None, "a launch after now");
     }
 }

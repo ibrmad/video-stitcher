@@ -192,6 +192,8 @@ class App:
         env = launch_env(os.environ, env, hidden)
         log_fd, log_path = tempfile.mkstemp(prefix="reco-desktop-", suffix=".log")
         log = os.fdopen(log_fd, "w")
+        # The app logs how long after this its first frame came.
+        env["RECO_DESKTOP_LAUNCHED_AT"] = f"{time.time():.6f}"
         proc = subprocess.Popen([binary, "--remote", *args], stdout=log, stderr=subprocess.STDOUT, env=env)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:

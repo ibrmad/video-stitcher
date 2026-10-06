@@ -351,6 +351,10 @@ pub struct App {
     log_cursor: bool,
     #[rust]
     logged_cursor: Option<MouseCursor>,
+    /// The launch time the checks pass (`RECO_DESKTOP_LAUNCHED_AT`), until
+    /// the first frame logs how long after it came.
+    #[rust]
+    launched_at: Option<String>,
     /// Every slider, for `slider_arrow`.
     #[rust]
     sliders: Vec<WidgetRef>,
@@ -741,6 +745,7 @@ impl App {
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
         self.log_cursor = std::env::var_os(LOG_CURSOR).is_some();
+        self.launched_at = std::env::var(perf::LAUNCHED_AT).ok();
         match Args::parse(std::env::args().skip(1)) {
             Ok(args) => self.args = args,
             Err(err) => log!("ignoring command line: {err}"),
@@ -891,6 +896,15 @@ impl AppMain for App {
         let draw = matches!(event, Event::Draw(_));
         let started = std::time::Instant::now();
         self.ui.handle_event(cx, event, &mut Scope::empty());
+        if draw {
+            if let Some(after) = self
+                .launched_at
+                .take()
+                .and_then(|at| perf::since_launch(&at, std::time::SystemTime::now()))
+            {
+                log!("first frame: {} ms after launch", after.as_millis());
+            }
+        }
         if draw && self.args.perf_log {
             if let Some(line) = self
                 .draw_stats
