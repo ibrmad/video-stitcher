@@ -5,7 +5,7 @@ mod bug_sheet;
 mod controls;
 mod export_sheet;
 pub mod file_list;
-mod fold;
+pub mod fold;
 mod inspector;
 pub mod key_table;
 mod lens_picker;

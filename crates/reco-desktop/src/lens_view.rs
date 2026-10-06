@@ -12,6 +12,7 @@ use reco_app::preview::tuning::{CalibrationValues, Tuning};
 use reco_app::preview::worker::{PreviewCommand, PreviewInfo};
 use reco_app::project::Camera;
 
+use crate::ui::fold::RecoFold;
 use crate::value_text::Reading;
 use crate::App;
 
@@ -302,7 +303,18 @@ impl App {
             self.send_preview(PreviewCommand::Tune(Tuning::LensCorrection(on)));
         }
         if let Some(index) = self.ui.drop_down(cx, ids!(lens_preview)).changed(actions) {
-            self.send_preview(PreviewCommand::ShowCamera(shown_at(index)));
+            let shown = shown_at(index);
+            self.send_preview(PreviewCommand::ShowCamera(shown));
+            // One camera on its own is for tuning its lens (as Slint).
+            if shown.is_some() {
+                if let Some(mut fold) = self
+                    .ui
+                    .widget(cx, ids!(lens_advanced))
+                    .borrow_mut::<RecoFold>()
+                {
+                    fold.set_is_open(cx, true, Animate::Yes);
+                }
+            }
         }
         if self
             .ui

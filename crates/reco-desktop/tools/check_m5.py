@@ -479,7 +479,20 @@ def check_cursor():
         expect(app.errors() == [], f"cursor: no errors in the app log {app.errors()[:3]}")
 
 
-CHECKS = {"view": check_view, "lens": check_lens, "preview": check_preview, "picker": check_picker,
+def check_fine_tune_opens():
+    """As in Slint, showing one camera (the lens preview) opens Fine-tune,
+    where its lens is tuned."""
+    files = calibration_copy()
+    with launch(files) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "fine-tune: the preview opens")
+        time.sleep(0.5)
+        expect(app.rect("lens_fx") is None, "fine-tune: closed to start")
+        pick_row(app, "lens_preview", 1)
+        expect(bool(wait_for(lambda: app.rect("lens_fx"), 3)), "fine-tune: showing the left camera opens it")
+        expect(app.errors() == [], f"fine-tune: no errors in the app log {app.errors()[:3]}")
+
+
+CHECKS = {"fine_tune_opens": check_fine_tune_opens, "view": check_view, "lens": check_lens, "preview": check_preview, "picker": check_picker,
           "picker_scroll": check_picker_scroll, "stats": check_stats, "cursor": check_cursor}
 
 
