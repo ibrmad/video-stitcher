@@ -165,8 +165,9 @@ def read_png(path):
 
 def launch_env(base, env, hidden):
     """The environment for a launched app: hidden windows if asked, a fresh
-    settings folder (RECO_CONFIG_DIR) unless one is given, so checks never
-    read or write the owner's settings, and no network, browser or
+    settings folder (RECO_CONFIG_DIR) and log file (RECO_DESKTOP_LOG_FILE)
+    unless given, so checks never read or write the owner's, and no
+    network, browser or
     clipboard (each request, link or copy is a log line) unless env sets
     RECO_DESKTOP_NO_NETWORK, _NO_BROWSER or _NO_CLIPBOARD to None."""
     out = dict(base)
@@ -177,6 +178,8 @@ def launch_env(base, env, hidden):
         out["MAKEPAD_HIDE_WINDOWS"] = "1"
     if "RECO_CONFIG_DIR" not in (env or {}):
         out["RECO_CONFIG_DIR"] = tempfile.mkdtemp(prefix="reco-desktop-config-")
+    if "RECO_DESKTOP_LOG_FILE" not in (env or {}):
+        out["RECO_DESKTOP_LOG_FILE"] = os.path.join(tempfile.mkdtemp(prefix="reco-desktop-log-"), "reco-desktop.log")
     return {k: v for k, v in out.items() if v is not None}
 
 

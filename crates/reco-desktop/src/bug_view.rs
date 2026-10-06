@@ -2,7 +2,6 @@
 //! and (when they agree) what the app knows; Send with usage data on, Copy
 //! report always.
 
-use makepad_widgets::makepad_platform::log_ring;
 use makepad_widgets::*;
 use reco_app::bug_report::{compose, SystemFacts, LOG_LINES};
 use reco_app::project::Camera;
@@ -94,8 +93,8 @@ impl App {
     }
 
     /// What the app knows that helps find a bug.
-    fn system_facts(&self) -> SystemFacts {
-        let (_, lines) = log_ring::read_since(0, LOG_LINES);
+    fn system_facts(&mut self) -> SystemFacts {
+        let log = self.log_tail(LOG_LINES);
         SystemFacts {
             version: version_line(),
             os: os_line(),
@@ -110,7 +109,7 @@ impl App {
                 .map(|n| n.to_string_lossy().into_owned()),
             stats: self.last_stats.clone(),
             calibration_run: self.last_calibration_run,
-            log: lines.into_iter().map(|line| line.text).collect(),
+            log,
         }
     }
 }

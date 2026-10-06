@@ -29,6 +29,7 @@ mod keys;
 mod layout_view;
 mod lens_picker_view;
 mod lens_view;
+mod log_view;
 mod live;
 mod motion;
 mod names;
@@ -59,6 +60,7 @@ use live::Live;
 use names::middle_ellipsis;
 use panel_motion::PanelMotions;
 use perf::DrawStats;
+use reco_app::log_file::LogFile;
 use quit_view::Quitting;
 use reco_app::ai::{Availability, AvailabilityProbe, LookaheadZones};
 use reco_app::calibrate::CalibrationJob;
@@ -310,6 +312,12 @@ pub struct App {
     /// A quit held while edits are unsaved (quit_view.rs).
     #[rust]
     quitting: Option<Quitting>,
+    /// The log file, and how far the app's own lines are copied into it
+    /// (log_view.rs).
+    #[rust]
+    log_file: Option<LogFile>,
+    #[rust]
+    log_written: u64,
     /// The latest live calibration values (the Lens section reads them).
     #[rust]
     latest_values: Option<CalibrationValues>,
@@ -778,6 +786,7 @@ impl App {
 
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
+        self.start_log();
         self.log_cursor = std::env::var_os(LOG_CURSOR).is_some();
         // The top bar keeps room for the window buttons only on macOS.
         if !matches!(cx.os_type(), OsType::Macos) {
@@ -887,6 +896,7 @@ impl AppMain for App {
             Event::Shutdown => {
                 self.finish_recording_on_quit();
                 self.save_layout(cx);
+                self.log_tail(0);
             }
             // Unsaved edits hold a quit or the window's close while the sheet
             // asks; a termination signal still quits.
@@ -927,6 +937,7 @@ impl AppMain for App {
             }
             Event::NetworkResponses(responses) => self.network_responses(cx, responses),
             Event::Signal => {
+                self.write_log();
                 self.drain_preview(cx);
                 self.collect_durations(cx);
                 self.drain_calibration(cx);

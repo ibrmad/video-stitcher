@@ -86,6 +86,14 @@ class LaunchEnv(unittest.TestCase):
         self.assertTrue(os.path.isdir(a["RECO_CONFIG_DIR"]))
         self.assertNotEqual(a["RECO_CONFIG_DIR"], b["RECO_CONFIG_DIR"])
 
+    def test_each_launch_gets_its_own_log_file(self):
+        a = drive.launch_env({"HOME": "/Users/ann"}, None, hidden=True)["RECO_DESKTOP_LOG_FILE"]
+        b = drive.launch_env({"HOME": "/Users/ann"}, None, hidden=True)["RECO_DESKTOP_LOG_FILE"]
+        self.assertNotEqual(a, b)
+        self.assertFalse(a.startswith("/Users/ann"), "never the person's own log")
+        given = drive.launch_env({}, {"RECO_DESKTOP_LOG_FILE": "/tmp/x.log"}, hidden=True)
+        self.assertEqual(given["RECO_DESKTOP_LOG_FILE"], "/tmp/x.log")
+
     def test_checks_stay_off_the_network(self):
         self.assertEqual(drive.launch_env({}, None, hidden=True)["RECO_DESKTOP_NO_NETWORK"], "1")
         self.assertEqual(drive.launch_env({}, None, hidden=True)["RECO_DESKTOP_NO_BROWSER"], "1")

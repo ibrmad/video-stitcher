@@ -12,6 +12,7 @@ pub mod export;
 pub mod files;
 pub mod help;
 pub mod lens;
+pub mod log_file;
 pub mod preview;
 pub mod project;
 pub mod recording;

@@ -59,11 +59,11 @@ def calibration_copy(files):
     return (files[0], files[1], cal)
 
 
-def launch(files, extra=(), copied=False):
+def launch(files, extra=(), copied=False, env=None):
     """The app on a pair, with a copy of its calibration unless `copied`."""
     left, right, cal = files if copied else calibration_copy(files)
     return drive.App.launch(BIN, ["--window-size", "1280x980", "--left", left, "--right", right,
-                                  "--calibration", cal, *extra])
+                                  "--calibration", cal, *extra], env=env)
 
 
 def wait_for(probe, secs):
@@ -362,11 +362,31 @@ def check_unsaved():
     expect(blend_saved(files[2]) == before, f"unsaved: and leaves the file as it was ({blend_saved(files[2])})")
 
 
+def check_logfile():
+    """A log file as the Slint app kept: the engine's lines and the app's,
+    kept across runs, RUST_LOG filtering them."""
+    path = os.path.join(tempfile.mkdtemp(prefix="reco-m8-log-"), "reco-desktop.log")
+    with launch(FAST, env={"RECO_DESKTOP_LOG_FILE": path}) as app:
+        wait_for(lambda: app.rect("preview"), 30)
+    first = open(path).read() if os.path.exists(path) else ""
+    expect("Pipeline initialized" in first, "logfile: the engine's lines are in it (reco-core's pipeline)")
+    expect("preview: 1280x960 input" in first, "logfile: the app's own lines are in it")
+    expect(bool(re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z ", first)), "logfile: each line starts with its time")
+    with launch(FAST, env={"RECO_DESKTOP_LOG_FILE": path, "RUST_LOG": "warn"}) as app:
+        wait_for(lambda: app.rect("preview"), 30)
+    both = open(path).read()
+    expect(both.startswith(first) and len(both) > len(first), "logfile: a second run adds to it")
+    second = both[len(first):]
+    expect("Pipeline initialized" not in second and "preview: 1280x960 input" in second,
+           "logfile: RUST_LOG=warn leaves the engine's info lines out; the app's own stay")
+
+
 CHECKS = {
     "start": check_start,
     "perf": check_perf,
     "sheets": check_sheets,
     "unsaved": check_unsaved,
+    "logfile": check_logfile,
 }
 
 
