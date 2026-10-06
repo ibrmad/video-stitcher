@@ -9,7 +9,7 @@ use std::sync::Arc;
 use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 use reco_app::calibrate::{
-    CalibrationDone, CalibrationEvent, CalibrationJob, CalibrationOptions, FRAME_CHOICES,
+    CalibrationDone, CalibrationEvent, CalibrationJob, CalibrationOptions, KeptLens, FRAME_CHOICES,
     LOW_CONFIDENCE,
 };
 use reco_app::project::Camera;
@@ -137,11 +137,23 @@ impl App {
             options.detect_y.1,
             options.blend
         );
+        // The lenses in use stay, saved or not (a picked profile,
+        // fine-tuning).
+        let in_use = self
+            .latest_values
+            .as_ref()
+            .filter(|v| v.lens_changed)
+            .map(|v| (v.left_lens, v.right_lens));
+        let kept = self
+            .project
+            .calibration
+            .clone()
+            .map(|file| KeptLens { file, in_use });
         self.calibration_job = Some(CalibrationJob::start(
             left.clone(),
             right.clone(),
             save_to,
-            self.project.calibration.clone(),
+            kept,
             options,
             Arc::new(SignalToUI::set_ui_signal),
         ));

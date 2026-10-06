@@ -13,7 +13,7 @@ use reco_calibrate::{CalibrationConfig, CalibrationStep, ProfileSource};
 use reco_core::calibration::{CameraParams, MatchCalibration};
 
 use crate::files::save_atomically;
-use crate::lens::LensInfo;
+use crate::lens::{Lens, LensInfo};
 
 /// Below this confidence a warning says the stitch may be poor (the Slint
 /// app's threshold).
@@ -143,6 +143,30 @@ pub enum CalibrationEvent {
     Cancelled,
 }
 
+/// What a recalibration keeps: the lenses (and seam blend) of a
+/// calibration file, with the lenses in use on top when they differ from
+/// the file's (a picked profile or fine-tuning not yet saved; the Slint app
+/// kept its in-memory calibration).
+#[derive(Clone, Debug)]
+pub struct KeptLens {
+    /// The calibration file.
+    pub file: PathBuf,
+    /// The left and right lenses in use, when they differ from the file's.
+    pub in_use: Option<(Lens, Lens)>,
+}
+
+impl KeptLens {
+    /// The calibration to keep from (`None` if the file doesn't read).
+    fn load(self) -> Option<MatchCalibration> {
+        let mut calibration = MatchCalibration::from_file(&self.file).ok()?;
+        if let Some((left, right)) = self.in_use {
+            calibration.left = left.applied_to(&calibration.left);
+            calibration.right = right.applied_to(&calibration.right);
+        }
+        Some(calibration)
+    }
+}
+
 /// A calibration running on its own thread. Dropping it cancels it.
 pub struct CalibrationJob {
     cancel: Arc<AtomicBool>,
@@ -151,14 +175,13 @@ pub struct CalibrationJob {
 
 impl CalibrationJob {
     /// Calibrate `left` against `right` (each camera's first file) and save
-    /// the result to `save_to`. A recalibration keeps the lens of the
-    /// calibration in `keep_lens_of` (read on the job's thread). `waker` runs
-    /// after every event.
+    /// the result to `save_to`. A recalibration keeps the lenses of `kept`
+    /// (its file read on the job's thread). `waker` runs after every event.
     pub fn start(
         left: PathBuf,
         right: PathBuf,
         save_to: PathBuf,
-        keep_lens_of: Option<PathBuf>,
+        kept: Option<KeptLens>,
         options: CalibrationOptions,
         waker: Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
@@ -176,8 +199,7 @@ impl CalibrationJob {
                     }
                 };
                 let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let kept =
-                        keep_lens_of.and_then(|path| MatchCalibration::from_file(&path).ok());
+                    let kept = kept.and_then(KeptLens::load);
                     calibrate(
                         &left,
                         &right,
@@ -388,6 +410,54 @@ mod tests {
     }
 
     #[test]
+    fn a_recalibration_keeps_the_lenses_in_use() {
+        let Some((_, _, path)) = fixtures::fast_set() else {
+            return;
+        };
+        let file = MatchCalibration::from_file(&path).expect("the fixture's calibration");
+        let picked = Lens {
+            fx: 900.0,
+            fy: 905.0,
+            cx: 640.0,
+            cy: 480.0,
+            k: [0.01, 0.02, 0.0, 0.0],
+        };
+        let tuned = Lens {
+            fx: 950.0,
+            ..picked
+        };
+        let kept = KeptLens {
+            file: path.clone(),
+            in_use: Some((picked, tuned)),
+        }
+        .load()
+        .expect("the file reads");
+        assert_eq!(Lens::of(&kept.left), picked, "a picked profile, unsaved");
+        assert_eq!(Lens::of(&kept.right), tuned, "fine-tuning, unsaved");
+        assert_eq!(
+            (kept.left.width, kept.left.height),
+            (file.left.width, file.left.height),
+            "the size the lens is modelled at stays"
+        );
+        let as_saved = KeptLens {
+            file: path,
+            in_use: None,
+        }
+        .load()
+        .expect("the file reads");
+        assert_eq!(Lens::of(&as_saved.left), Lens::of(&file.left));
+        assert!(
+            KeptLens {
+                file: "/nonexistent.json".into(),
+                in_use: Some((picked, tuned)),
+            }
+            .load()
+            .is_none(),
+            "no file, nothing kept (as before)"
+        );
+    }
+
+    #[test]
     fn steps_count_from_one_to_seven() {
         assert_eq!(step_index(CalibrationStep::Probing), 1);
         assert_eq!(step_index(CalibrationStep::FeatureMatching), 6);
@@ -459,7 +529,10 @@ mod tests {
             left,
             right,
             save_to.clone(),
-            Some(real_cal),
+            Some(KeptLens {
+                file: real_cal,
+                in_use: None,
+            }),
             CalibrationOptions::default(),
             Arc::new(|| {}),
         );
