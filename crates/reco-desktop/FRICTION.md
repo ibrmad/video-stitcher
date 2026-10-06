@@ -366,6 +366,17 @@ uses, a package map); Windows and Linux have no such step, so the release
 needs one (a script copying the same layout). This comes with the switch
 from the Slint app.
 
+Done (owner's choice, 2026-10-06): `tools/package.py` runs cargo-makepad's
+bundle on macOS and lays out the same layout on Windows and Linux; it reads
+the font manifest from the binary's text, as cargo-makepad reads it from
+ELF and Mach-O sections only (a Windows binary keeps no long section
+names). The default International manifest doesn't name the theme's Inter,
+so no package carried it and the packaged app drew no text: `app_main!`
+declares `INTER_FONT_ASSET`, and `every_font_the_app_names_is_packaged`
+holds the theme to the manifest. The International set ships CJK and emoji
+fonts (about 48 MB of a package); a Latin set would be far smaller and
+show other scripts as boxes.
+
 ## Small gaps met in Module 8
 
 - Makepad logs `[E] PulseAudio: pa_context_connect failed` where no sound

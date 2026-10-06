@@ -748,10 +748,17 @@ Rulings for the sign-off (kept as they are, and why):
       - paused: about 0% CPU.
 - [x] Linux: built, linted and tested in Ubuntu 24.04 (CI's packages plus
       X11, GLX, xkbcommon, PulseAudio, ALSA, gbm and drm), and run under
-      Xvfb, the preview by readback on Mesa's llvmpipe. Its fonts and
-      icons load only from the source tree until the release packages them
-      beside the binary (FRICTION.md).
+      Xvfb, the preview by readback on Mesa's llvmpipe.
+- [x] Packaging (owner's choice: cargo-makepad on macOS, a script
+      elsewhere): `tools/package.py` makes a signed `Reco.app` and the
+      Windows and Linux folders, each carrying its fonts and icons.
+      Evidence: the Linux package, alone in a clean container (no source
+      tree, no Makepad checkout), draws its text and icons and plays the
+      videos, with no resource warning (`linux-package.png`); `Reco.app`
+      runs from its bundle, Inter inside it;
+      `every_font_the_app_names_is_packaged`; `tools/test_package.py`
+      (the manifest read from a binary, the crates linked, the layout).
 - [ ] Owner sign-off; Slint app removed, with the CI and release workflows
-      moved over, the resources packaged beside the binary and Windows
-      proven in CI (the other session's `main.slint` edits go with it,
-      owner, 2026-10-06).
+      moved over (packaging with `tools/package.py`) and Windows proven in
+      CI (the other session's `main.slint` edits go with it, owner,
+      2026-10-06).

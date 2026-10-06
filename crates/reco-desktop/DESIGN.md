@@ -276,8 +276,16 @@ Parity sweep (Module 8):
   `cuda`, `tensorrt`, `directml` on for Windows, `tensorrt-native`, `ncnn`),
   and `automation` builds the benchmark hooks (automation.rs).
 - Linux: built and run in a container (Ubuntu 24.04, Xvfb, Mesa); it needs
-  X11, GLX, xkbcommon, PulseAudio, ALSA, gbm and drm, and its release must
-  package the resources beside the binary (FRICTION.md).
+  X11, GLX, xkbcommon, PulseAudio, ALSA, gbm and drm.
+- Packaging (`tools/package.py`): a release carries Makepad's fonts and
+  icons. macOS: `cargo makepad desktop bundle` (cargo-makepad from the
+  pinned revision; `[package.metadata.makepad.desktop]` names it "Reco",
+  `org.reco-project.reco`) makes a signed `Reco.app`, extra files (ONNX
+  Runtime) go into `Contents/MacOS` and it is signed again. Windows and
+  Linux: a `MAKEPAD_PACKAGE_DIR=resources` build in its own target folder,
+  beside it `resources/<crate>/resources`, `resources/<crate>/fonts` (the
+  fonts the binary's manifest names) and `<exe>.makepad-package-paths`.
+  Fonts the theme uses are declared in `app_main!` (`font_assets`).
 
 Threading, adopted from Makepad's own rules:
 
