@@ -100,10 +100,12 @@ script_mod! {
                     }
                 }
                 window_menu +: {
-                    main := MenuItem.Main{items: [@app_menu_item, @view_menu]}
+                    main := MenuItem.Main{items: [@app_menu_item, @file_menu, @view_menu]}
                     app_menu_item := MenuItem.Sub{name: "Reco" items: [@preferences_menu, @quit]}
                     preferences_menu := MenuItem.Item{name: "Preferences…" key: KeyCode.Comma enabled: true}
                     quit := MenuItem.Item{name: "Quit Reco" key: KeyCode.KeyQ enabled: true}
+                    file_menu := MenuItem.Sub{name: "File" items: [@save_menu]}
+                    save_menu := MenuItem.Item{name: "Save Calibration" key: KeyCode.KeyS enabled: true}
                     view_menu := MenuItem.Sub{name: "View" items: [@toggle_media_menu, @toggle_inspector_menu, @toggle_timeline_menu]}
                     toggle_media_menu := MenuItem.Item{name: "Setup Panel" key: KeyCode.Key1 enabled: true}
                     toggle_inspector_menu := MenuItem.Item{name: "Adjust Panel" key: KeyCode.Key2 enabled: true}
@@ -740,7 +742,12 @@ impl AppMain for App {
 
     fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
         match event {
-            Event::KeyDown(_) => self.pointer_input = false,
+            Event::KeyDown(ke) => {
+                self.pointer_input = false;
+                if keys::is_save_shortcut(ke.key_code, &ke.modifiers) {
+                    self.save_calibration(cx);
+                }
+            }
             Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
             Event::Drag(drag) => self.drag_files(drag),
             Event::Drop(drop) => self.drop_files(cx, drop),
@@ -766,6 +773,9 @@ impl AppMain for App {
             }
             Event::MacosMenuCommand(item) if *item == live_id!(toggle_timeline_menu) => {
                 self.toggle_timeline(cx);
+            }
+            Event::MacosMenuCommand(item) if *item == live_id!(save_menu) => {
+                self.save_calibration(cx);
             }
             Event::MacosMenuCommand(item) if *item == live_id!(preferences_menu) => {
                 self.open_preferences(cx);

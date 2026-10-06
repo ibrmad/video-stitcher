@@ -109,7 +109,7 @@ impl App {
         self.show_lens_values(cx, &values, adopt);
         self.show_outline(cx, values.roi_points);
         let unsaved = values.dirty && self.project.calibration.is_some();
-        self.set_visible(cx, ids!(save_calibration), unsaved);
+        self.set_visible(cx, ids!(calibration_unsaved), unsaved);
         self.latest_values = Some(values);
     }
 
@@ -151,9 +151,23 @@ impl App {
             }
         }
         if self.ui.button(cx, ids!(save_calibration)).clicked(actions) {
-            if let Some(path) = self.project.calibration.clone() {
-                self.send_preview(PreviewCommand::SaveCalibration { path });
-            }
+            self.save_calibration(cx);
         }
+    }
+
+    /// Save the adjusted calibration to its file, when something is
+    /// unsaved (Save in the Adjust panel's title row, ⌘S). The row goes at
+    /// once, so a second press before the worker answers saves nothing
+    /// twice; a failed save brings it back with the next values.
+    pub(crate) fn save_calibration(&mut self, cx: &mut Cx) {
+        let unsaved = self.latest_values.as_ref().is_some_and(|v| v.dirty);
+        let Some(path) = self.project.calibration.clone().filter(|_| unsaved) else {
+            return;
+        };
+        self.send_preview(PreviewCommand::SaveCalibration { path });
+        if let Some(values) = self.latest_values.as_mut() {
+            values.dirty = false;
+        }
+        self.set_visible(cx, ids!(calibration_unsaved), false);
     }
 }

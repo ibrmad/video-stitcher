@@ -133,7 +133,8 @@ def open_advanced(app, fold_id):
 
 def check_tune():
     """The Adjust panel shows the calibration's values, tunes the picture
-    live, and Save writes them; a reopen shows them again."""
+    live, and its title row offers Save while something is unsaved (⌘S
+    too) and writes them; a reopen shows them again."""
     files = calibration_copy()
     loaded = json.load(open(files[2]))
     with launch(files) as app:
@@ -157,6 +158,10 @@ def check_tune():
         expect(before != after, "tune: tilting changes the picture")
         saving = wait_for(lambda: app.rect("save_calibration"), 5)
         expect(bool(saving), "tune: Save appears once something changed")
+        panel = app.rect("inspector")
+        expect(bool(saving) and panel is not None and panel[0] <= saving[0] and saving[1] < panel[1] + 28,
+               f"tune: in the Adjust panel's title row, beside the tuning ({saving} in {panel})")
+        expect(app.rect("calibration_unsaved") is not None, "tune: the title row says Unsaved")
         slide(app, "intersect", 0.3)
         expect(text_of(app, "intersect_value") not in (None, "", f"{loaded['params']['intersect']:.3f}"),
                f"tune: the overlap follows its slider ({text_of(app, 'intersect_value')})")
@@ -164,9 +169,9 @@ def check_tune():
         time.sleep(0.5)
         expect(text_of(app, "intersect_value") == f"{loaded['params']['intersect']:.3f}",
                f"tune: Reset layout restores the file's overlap ({text_of(app, 'intersect_value')})")
-        click(app, "save_calibration")
+        app.key("KeyS", cmd=1)
         saved = wait_for(lambda: title_rect(app, "Calibration saved"), 10)
-        expect(bool(saved), "tune: a toast says it was saved")
+        expect(bool(saved), "tune: ⌘S saves it, and a toast says so")
         expect(bool(wait_for(lambda: app.rect("save_calibration") is None, 5)), "tune: Save goes once saved")
         written = json.load(open(files[2]))
         expect(abs(math.degrees(written["rig_tilt"]) - float(tilt.rstrip("°"))) < 0.06,

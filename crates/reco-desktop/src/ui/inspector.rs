@@ -17,8 +17,19 @@ script_mod! {
     mod.widgets.RecoInspector = SolidView{
         width: Fill height: Fill flow: Down
         draw_bg.color: theme.reco_panel
+        // Edits to the calibration (Stitch, Lens, the field outline) are
+        // saved from here, while any are unsaved; ⌘S too.
         RecoTitleRow{
             adjust_header := RecoStrong{text: "Adjust"}
+            View{width: Fill height: Fit}
+            calibration_unsaved := View{
+                visible: false
+                width: Fit height: Fit flow: Right spacing: theme.reco_gap align: Align{y: 0.5}
+                RecoSubdued{text: "Unsaved"}
+                Tip{text: "Save the adjusted calibration to its file (⌘S)"
+                    save_calibration := RecoButton{text: "Save"}
+                }
+            }
         }
         ScrollShadowView{
             width: Fill height: Fill flow: Down

@@ -38,6 +38,19 @@ pub const KEY_ZOOM: f32 = 5.0;
 /// Seconds a bracket key seeks.
 pub const BRACKET_SEEK: f64 = 5.0;
 
+/// Whether `key` is Save (⌘S on macOS, Ctrl+S elsewhere): it saves the
+/// calibration wherever the keyboard is. The macOS menu bar has it too;
+/// the window sees the key as well, so injected keys (the checks) and
+/// systems without a menu bar save the same way.
+pub fn is_save_shortcut(key: KeyCode, modifiers: &KeyModifiers) -> bool {
+    let command = if cfg!(target_os = "macos") {
+        modifiers.logo && !modifiers.control
+    } else {
+        modifiers.control && !modifiers.logo
+    };
+    key == KeyCode::KeyS && command && !modifiers.shift && !modifiers.alt
+}
+
 /// The command for `key`, or `None`. Keys held with ⌘, Ctrl or Option are
 /// menu shortcuts and never drive the preview.
 pub fn command_for_key(key: KeyCode, modifiers: &KeyModifiers) -> Option<KeyCommand> {
@@ -146,6 +159,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
         "⌘1  ⌘2  ⌘3",
         "Show or hide the Setup, Adjust and Time panels",
     ),
+    menu("⌘S", "Save the calibration"),
     menu("⌘,", "Preferences"),
     menu("⌘Q", "Quit"),
 ];
@@ -269,6 +283,31 @@ mod tests {
         assert!(
             SHORTCUTS.iter().any(|s| s.keys == "⌘,"),
             "the menus' keys too"
+        );
+    }
+
+    #[test]
+    fn command_s_saves_the_calibration() {
+        let mac = cfg!(target_os = "macos");
+        let command = KeyModifiers {
+            logo: mac,
+            control: !mac,
+            ..KeyModifiers::default()
+        };
+        assert!(is_save_shortcut(KeyCode::KeyS, &command));
+        assert!(
+            !is_save_shortcut(KeyCode::KeyS, &KeyModifiers::default()),
+            "S alone does nothing"
+        );
+        assert!(!is_save_shortcut(KeyCode::KeyA, &command));
+        let shifted = KeyModifiers {
+            shift: true,
+            ..command
+        };
+        assert!(!is_save_shortcut(KeyCode::KeyS, &shifted), "⇧⌘S isn't Save");
+        assert!(
+            SHORTCUTS.iter().any(|s| s.keys == "⌘S" && s.menu),
+            "the sheet lists it with the menus' keys"
         );
     }
 
