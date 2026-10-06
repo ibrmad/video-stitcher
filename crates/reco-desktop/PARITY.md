@@ -214,8 +214,12 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       the app menu (Module 0; the dialog is Module 7's).
 - [x] Show in folder after a recording. Evidence: "record: Show in folder
       appears"; `finder_selects_the_file`.
-- [ ] Export progress, status text and Cancel; Show in folder after an
-      export. → Module 6 (the export job). The card exists since Module 0.
+- [x] Export progress, status text and Cancel; Show in folder after an
+      export. Done in Module 6 (see "During an export" there). Evidence:
+      "export: the card shows over the picture", "cancel: the export runs",
+      "cancel: it stops", "cancel: a notice says so", "export: Show in
+      folder offers the file"; `progress_reads_in_frames_and_time`,
+      `cancelling_an_export_stops_it`.
 - [x] Toasts: info, warn and error with TTL 4/7/10 s (plus custom), at most
       4, dismissable, clear of the Inspector. (New: rendered reliably, and
       they do not overwrite the status line.) Evidence: "toasts: four show",
@@ -333,7 +337,7 @@ unit tests (`cargo test -p reco-app -p reco-desktop`); and screenshots in
       the sliders that make the edits, and ⌘S saves (File → Save
       Calibration). Evidence: "tune: in the Adjust panel's title row,
       beside the tuning", "tune: the title row says Unsaved", "tune: ⌘S
-      saves it, and a toast says so"; `command_s_saves_the_calibration`.
+      saves it, and a toast says so"; `command_keys_are_the_menu_shortcuts`.
 - [x] Intersect −1..1, camera axis offset −0.6..0.6, `x_ty` −0.1..0.1,
       Reset. Evidence: "tune: the overlap follows its slider", "tune: Reset
       layout restores the file's overlap"; `reset_restores_the_loaded_layout`.
@@ -458,7 +462,7 @@ detector. reco-app's tracked exports run in optimized builds only
       empty range says so", "rules: an empty range can't be exported",
       "rules: a time that doesn't read is put back";
       `the_range_stays_inside_the_videos`, `the_start_never_passes_the_end`,
-      `both_ends_move_at_once`, `a_range_keeps_its_place_when_the_length_changes`,
+      `a_range_keeps_its_place_when_the_length_changes`,
       `typed_times_read_as_seconds`, `an_empty_range_fails_at_once`. (New: a
       time typed but not entered still counts when Export is pressed.)
 - [x] Record replay; save AI debug events. Evidence:
