@@ -10,15 +10,26 @@ description = "Reco's app logic without a UI framework: the live preview session
 
 [features]
 # AI tracking in exports (Module 6b): reco-autocam with ONNX Runtime on the
-# CPU, as reco-gui builds it; `coreml` adds Apple's engine.
-default = ["ai"]
+# CPU by default, as reco-gui builds it. The detector backends are
+# reco-gui's: Jetson and custom builds opt out with --no-default-features
+# and a native backend (tensorrt-native, ncnn); DirectML is on for Windows
+# (below).
+default = ["ai", "ort"]
 ai = ["dep:reco-autocam", "dep:reco-detect"]
-coreml = ["ai", "reco-autocam/coreml"]
+ort = ["ai", "reco-autocam/ort", "reco-detect/ort"]
+cuda = ["ort", "reco-autocam/cuda"]
+tensorrt = ["ort", "reco-autocam/tensorrt"]
+coreml = ["ort", "reco-autocam/coreml"]
+directml = ["ort", "reco-autocam/directml"]
+load-dynamic = ["ort", "reco-autocam/load-dynamic"]
+tensorrt-native = ["ai", "reco-autocam/tensorrt-native"]
+ncnn = ["ai", "reco-autocam/ncnn"]
+profiling = ["reco-core/profiling", "reco-io/profiling", "reco-calibrate/profiling", "reco-autocam?/profiling"]
 
 [dependencies]
 reco-core = { path = "../reco-core" }
-reco-autocam = { path = "../reco-autocam", optional = true }
-reco-detect = { path = "../reco-detect", optional = true }
+reco-autocam = { path = "../reco-autocam", optional = true, default-features = false }
+reco-detect = { path = "../reco-detect", optional = true, default-features = false }
 reco-io = { path = "../reco-io", features = ["ffmpeg", "config", "stacked-output"] }
 reco-control = { path = "../reco-control" }
 reco-calibrate = { path = "../reco-calibrate", features = ["io"] }
@@ -29,6 +40,12 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.22"
 # Usage data's random client and batch ids (already in the lockfile).
 uuid = { version = "1", features = ["v4"] }
+
+# DirectML on Windows, as reco-gui: without ort's `directml` feature the
+# engine falls back to the CPU while logging as if it ran on the GPU.
+[target.'cfg(windows)'.dependencies]
+reco-detect = { path = "../reco-detect", optional = true, default-features = false, features = ["directml"] }
+reco-autocam = { path = "../reco-autocam", optional = true, default-features = false, features = ["directml"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # The version wgpu-hal 28 uses; only for raw Metal handles.

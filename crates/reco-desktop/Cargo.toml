@@ -10,10 +10,18 @@ repository.workspace = true
 description = "Makepad 2 desktop app for Reco (replaces reco-gui; see DESIGN.md)"
 
 [features]
-# AI tracking in exports; `coreml` adds Apple's engine to the detector.
+# AI tracking in exports, with ONNX Runtime by default; the detector
+# backends are reco-gui's (reco-app/Cargo.toml says which is which).
 default = ["ai"]
-ai = ["reco-app/ai"]
+ai = ["reco-app/ai", "reco-app/ort"]
 coreml = ["ai", "reco-app/coreml"]
+cuda = ["ai", "reco-app/cuda"]
+tensorrt = ["ai", "reco-app/tensorrt"]
+directml = ["ai", "reco-app/directml"]
+load-dynamic = ["ai", "reco-app/load-dynamic"]
+tensorrt-native = ["reco-app/tensorrt-native"]
+ncnn = ["reco-app/ncnn"]
+profiling = ["reco-app/profiling"]
 
 [[bin]]
 name = "reco-desktop"

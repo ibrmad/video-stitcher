@@ -258,8 +258,21 @@ pub fn tracking_line(status: &Result<(), String>) -> String {
     }
 }
 
+/// A native backend (TensorRT on a Jetson, ncnn) has no ONNX Runtime
+/// engines to ask: it is taken as ready, and an export that can't start the
+/// detector says so.
+#[cfg(all(feature = "ai", not(feature = "ort")))]
+fn probe() -> Availability {
+    let engine = if cfg!(feature = "tensorrt-native") {
+        "TensorRT"
+    } else {
+        "ncnn"
+    };
+    Availability::Ready(engine.into())
+}
+
 /// Ask ONNX Runtime which engines load here.
-#[cfg(feature = "ai")]
+#[cfg(feature = "ort")]
 fn probe() -> Availability {
     let result = reco_detect::probe_execution_providers();
     if result.is_available() {
