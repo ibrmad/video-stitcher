@@ -356,6 +356,9 @@ script_mod! {
         reco_label_width: 124.0
         reco_aspect_width: 80.0
         reco_quality_width: 92.0
+        // Record's button keeps one width recording or not ("Record" and
+        // "■ 1:02:03"), so the view bar doesn't move when recording starts.
+        reco_record_width: 80.0
         reco_progress_width: 440.0
         // The export sheet, and the time fields inside it.
         reco_sheet_width: 540.0

@@ -16,9 +16,7 @@ use reco_app::preview::view::PreviewAspect;
 use reco_app::preview::worker::{
     PreviewCommand, PreviewConfig, PreviewEvent, PreviewInfo, PreviewWorker,
 };
-use reco_app::recording::{
-    recording_file_name, recording_folder, recording_size, RecordingFormat, RecordingQuality,
-};
+use reco_app::recording::{recording_file_name, recording_folder, recording_size, RecordingFormat};
 use reco_app::toasts::Severity;
 
 use crate::live::{self, Live};
@@ -276,15 +274,15 @@ impl App {
         });
     }
 
-    /// The view bar while recording: the badge and Stop; otherwise the
-    /// quality and Record.
+    /// The view bar while recording: the button shows the time and a stop
+    /// square, and its menu is off; otherwise Record and the menu.
     fn show_recording(&mut self, cx: &mut Cx, recording: bool) {
-        self.set_visible(cx, ids!(recording_badge), recording);
-        self.set_visible(cx, ids!(quality_tip), !recording);
+        self.set_button_enabled(cx, ids!(record_menu_button), !recording);
         if recording {
             self.set_visible(cx, ids!(show_in_folder), false);
-            self.set_label(cx, ids!(recording_time), "0:00");
         }
+        let label = if recording { "0:00" } else { "Record" };
+        self.ui.button(cx, ids!(record_button)).set_text(cx, label);
         let icon = if recording {
             self.stop_icon.clone()
         } else {
@@ -298,12 +296,13 @@ impl App {
             live.recording = Some(0);
         }
         self.show_recording(cx, true);
-        self.toast(
-            cx,
-            Severity::Info,
-            "Recording started",
-            &path.display().to_string(),
-        );
+        // The file's name: its folder is Preferences' (or beside the video),
+        // and Show in folder finds it afterwards.
+        let file = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        self.toast(cx, Severity::Info, "Recording started", &file);
     }
 
     fn recorded(&mut self, cx: &mut Cx, frames: u64) {
@@ -313,11 +312,9 @@ impl App {
         live.recording = Some(frames);
         let fps = live.info.as_ref().map_or(30.0, |i| i.fps.max(1.0));
         let status = live.status();
-        self.set_label(
-            cx,
-            ids!(recording_time),
-            &time_ruler::clock(frames as f64 / fps),
-        );
+        self.ui
+            .button(cx, ids!(record_button))
+            .set_text(cx, &time_ruler::clock(frames as f64 / fps));
         self.set_label(cx, ids!(status_text), &status);
     }
 
@@ -358,23 +355,12 @@ impl App {
         }
     }
 
-    /// Record, the quality, and Show in folder.
+    /// Record, its menu, and Show in folder.
     pub(crate) fn record_actions(&mut self, cx: &mut Cx, actions: &Actions) {
         if self.ui.button(cx, ids!(record_button)).clicked(actions) {
             self.toggle_recording();
         }
-        if let Some(index) = self
-            .ui
-            .drop_down(cx, ids!(record_quality))
-            .selected(actions)
-        {
-            self.settings
-                .set_quality(RecordingQuality::from_index(index));
-            self.save_settings();
-            if self.pointer_input {
-                cx.set_key_focus(Area::Empty);
-            }
-        }
+        self.record_menu_actions(cx, actions);
         if self.ui.button(cx, ids!(show_in_folder)).clicked(actions) {
             if let Some(path) = self.live.as_ref().and_then(|l| l.last_output.clone()) {
                 if let Err(e) = reco_app::reveal::reveal(&path) {

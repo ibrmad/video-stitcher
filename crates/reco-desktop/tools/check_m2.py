@@ -286,10 +286,58 @@ def recordings(folder):
     return sorted(f for f in os.listdir(folder) if f.startswith("reco_recording_") and f.endswith(".mp4"))
 
 
+def saved(config):
+    path = os.path.join(config, "desktop.json")
+    return json.load(open(path)) if os.path.exists(path) else {}
+
+
+def menu_rows(app):
+    """The open menu's rows, {text: rect} (its template rows' labels)."""
+    return {i.get("t"): i["r"] for i in app.snap("label") if i.get("i") == "label"}
+
+
+def record_menu(app):
+    """Open the record menu by its ▾; its rows ({} when it didn't open)."""
+    app.click_id("record_menu_button")
+    if not wait_for(lambda: app.rect("record_menu_list"), 5):
+        return {}
+    time.sleep(0.3)
+    return menu_rows(app)
+
+
+def chosen(app):
+    """The open menu's row marked ✓, or None (none, or more than one)."""
+    marks = [i["r"] for i in app.snap("mark") if i.get("i") == "mark" and i.get("t") == "✓"]
+    if len(marks) != 1:
+        return None
+    middle = marks[0][1] + marks[0][3] / 2
+    for text, r in menu_rows(app).items():
+        if abs(r[1] + r[3] / 2 - middle) < 4:
+            return text
+    return None
+
+
+def pick(app, rows, text):
+    """Click the open menu's row `text`; whether it was there."""
+    r = rows.get(text)
+    if r:
+        app.get("/click", x=r[0] + 20, y=r[1] + r[3] / 2, wait=1)
+    return r is not None
+
+
+def recording(app):
+    """Whether the Record button shows a recording's time."""
+    return (text_of(app, "record_button") or "Record") != "Record"
+
+
 def check_record():
-    """Record: the badge and the quality, a 1920x1080 file with one frame per
-    frame played, toasts, Show in folder; quitting while recording still
-    leaves a playable file. Never clicks Show in folder (it opens Finder)."""
+    """Record: one button starts and stops (the time on it while recording),
+    and the ▾ beside it opens a menu with the quality (✓ on the current one,
+    remembered) and "Codec and folder…" (Preferences), off while recording;
+    the view bar stays still when recording starts; a 1920x1080 file with
+    one frame per frame played; notices naming the file; Show in folder;
+    quitting while recording still leaves a playable file. Never clicks Show
+    in folder (it opens Finder)."""
     config = tempfile.mkdtemp(prefix="reco-desktop-config-")
     folder = tempfile.mkdtemp(prefix="reco-desktop-recordings-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
@@ -297,23 +345,51 @@ def check_record():
     with launch(config_dir=config) as app:
         ready(app)
         time.sleep(1.0)
-        expect(app.rect("record_quality") is not None, "record: the quality shows before recording")
+        expect(text_of(app, "record_button") == "Record",
+               f"record: the button says Record ({text_of(app, 'record_button')})")
+        rows = record_menu(app)
+        expect({"Fast", "Balanced", "High", "Codec and folder…"} <= set(rows),
+               f"record: the menu has the qualities and Codec and folder… ({sorted(r for r in rows if r)})")
+        expect(chosen(app) == "Balanced", f"record: ✓ on the current quality ({chosen(app)})")
+        save_shot(app, "record-menu")
+        pick(app, rows, "High")
+        expect(bool(wait_for(lambda: app.rect("record_menu_list") is None, 3)), "record: picking a quality closes the menu")
+        expect(saved(config).get("recording_quality") == "high",
+               f"record: the quality is remembered ({saved(config).get('recording_quality')})")
+        rows = record_menu(app)
+        expect(chosen(app) == "High", f"record: the ✓ moves to it ({chosen(app)})")
+        pick(app, rows, "Codec and folder…")
+        expect(bool(wait_for(lambda: app.rect("prefs_record_codec"), 5)), "record: Codec and folder… opens Preferences")
+        app.key("Escape")
+        time.sleep(0.5)
+
+        bar_before = [app.rect(wid) for wid in ("aspect", "record_button", "record_menu_button")]
         app.click_id("record_button")
         expect(bool(wait_for(lambda: title_rect(app, "Recording started"), 10)), "record: a toast says recording started")
-        expect(app.rect("recording_badge") is not None, "record: the badge shows while recording")
+        body = next((i.get("t", "") for i in app.snap("reco_recording_") if i.get("i") == "body"), "")
+        expect(body.startswith("reco_recording_") and "/" not in body,
+               f"record: the toast names the file, not its path ({body!r})")
+        expect(bool(wait_for(lambda: recording(app), 3)),
+               f"record: while recording the button shows the time ({text_of(app, 'record_button')})")
+        expect(app.enabled("record_menu_button") is False, "record: the menu is off while recording")
+        bar_during = [app.rect(wid) for wid in ("aspect", "record_button", "record_menu_button")]
+        expect(bar_during == bar_before,
+               f"record: nothing in the view bar moves when recording starts ({bar_before} -> {bar_during})")
         save_shot(app, "recording")
-        expect(app.rect("record_quality") is None, "record: the quality hides while recording")
         app.key("space")
         time.sleep(3.0)
         status = text_of(app, "status_text") or ""
         expect(status.startswith("Recording ·"), f"record: the status line says recording ({status})")
+        shown = text_of(app, "record_button") or ""
+        expect(shown not in ("0:00", "Record") and seconds(shown) is not None,
+               f"record: the button's time counts ({shown})")
         app.key("space")
         time.sleep(0.5)
         app.click_id("record_button")
         expect(bool(wait_for(lambda: title_rect(app, "Recording saved"), 15)), "record: a toast says the recording was saved")
         expect(app.rect("show_in_folder") is not None, "record: Show in folder appears")
-        expect(app.rect("record_quality") is not None and app.rect("recording_badge") is None,
-               "record: the quality returns and the badge goes")
+        expect(text_of(app, "record_button") == "Record" and app.enabled("record_menu_button") is True,
+               "record: the button says Record again and the menu is back")
         body = next((i.get("t", "") for i in app.snap("frames ·") if i.get("i") == "body"), "")
         files = recordings(folder)
         expect(len(files) == 1, f"record: one file in the recording folder ({files})")
@@ -332,9 +408,9 @@ def check_record():
         for _ in range(3):
             time.sleep(1.0 - time.time() % 1.0 + 0.05)
             app.click_id("record_button")
-            wait_for(lambda: app.rect("recording_badge"), 10)
+            wait_for(lambda: recording(app), 10)
             app.click_id("record_button")
-            wait_for(lambda: app.rect("recording_badge") is None, 10)
+            wait_for(lambda: not recording(app), 10)
         slots = [app.rect(f"toast_{i}") is not None for i in range(4)]
         expect(all(slots), f"record: more notices than fit show four ({slots})")
         expect(app.errors() == [], "record: no errors in the app log")

@@ -35,6 +35,7 @@ mod perf;
 mod prefs_view;
 mod project_view;
 mod recent_view;
+mod record_view;
 mod roi_view;
 mod session_view;
 mod shell_state;
@@ -368,6 +369,12 @@ impl App {
             self.set_button_enabled(cx, id, loaded && !exporting);
         }
         self.set_button_enabled(cx, ids!(record_button), loaded && !exporting);
+        let recording = self.live.as_ref().is_some_and(|l| l.recording.is_some());
+        self.set_button_enabled(
+            cx,
+            ids!(record_menu_button),
+            loaded && !exporting && !recording,
+        );
         self.ui.widget(cx, ids!(timeline)).set_disabled(cx, !loaded);
         if let Some(mut ruler) = self
             .ui
@@ -377,9 +384,6 @@ impl App {
             ruler.set_locked(cx, exporting);
         }
         self.ui.widget(cx, ids!(aspect)).set_disabled(cx, !loaded);
-        self.ui
-            .widget(cx, ids!(record_quality))
-            .set_disabled(cx, !loaded);
         let fold_hint = loaded && self.shell.auto_folded(Panel::Inspector);
         self.set_visible(cx, ids!(fold_hint), fold_hint);
         self.ui.redraw(cx);
@@ -629,9 +633,7 @@ impl App {
         {
             preview.set_aspect(cx, aspect);
         }
-        self.ui
-            .drop_down(cx, ids!(record_quality))
-            .set_selected_item(cx, self.settings.quality().index());
+        self.show_record_menu(cx);
     }
 
     /// Save the settings; a failure is logged, not shown (nothing is lost

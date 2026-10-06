@@ -1,5 +1,5 @@
-//! The viewer, after a Rerun view: a 24 pt view bar (the view's name, the
-//! preview aspect, Record) over a black canvas. Until a stitched preview
+//! The viewer, after a Rerun view: a 28 pt view bar (the view's name, the
+//! preview aspect, Record and its menu) over a black canvas. Until a stitched preview
 //! exists the canvas shows the next step of the job under the panorama
 //! frame, with a stepper that says where the user is; calibration shows its
 //! progress in that column. An export shows a progress card over the
@@ -45,31 +45,36 @@ script_mod! {
                     fold_hint_button := RecoFlatButton{text: "Adjust · ⌘2"}
                 }
             }
+            aspect_label := RecoSubdued{text: "Aspect"}
             Tip{text: "Preview aspect"
                 aspect := RecoDropDown{
                     animator +: {disabled: {default: @on}}
                     width: theme.reco_aspect_width labels: ["Auto" "16:9" "4:3" "21:9"]
                 }
             }
-            // A DropDown has no `visible`: its Tip hides it while recording.
-            quality_tip := Tip{text: "Recording quality"
-                record_quality := RecoDropDown{
-                    animator +: {disabled: {default: @on}}
-                    width: theme.reco_quality_width labels: ["Fast" "Balanced" "High"]
+            // Record, and its menu beside it as one control: the button
+            // starts and stops (while recording it shows the time and a stop
+            // square); the menu has the quality and Codec and folder…
+            View{
+                width: Fit height: Fit flow: Right spacing: theme.reco_gap_xs align: Align{y: 0.5}
+                Tip{text: "Record the preview as you watch"
+                    record_button := RecoButton{
+                        animator +: {disabled: {default: @on}}
+                        width: Fit{min: theme.reco_record_width}
+                        text: "Record"
+                        icon_walk: Walk{width: theme.reco_record_icon height: theme.reco_record_icon}
+                        draw_icon +: {svg: crate_resource("self:resources/icons/record.svg") color: theme.reco_record}
+                    }
                 }
-            }
-            // While recording: a red dot and the time recorded.
-            recording_badge := View{
-                visible: false
-                width: Fit height: Fit flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
-                RecoDotError{}
-                recording_time := RecoText{text: "0:00" draw_text +: {color: theme.reco_record}}
-            }
-            Tip{text: "Record the preview as you watch"
-                record_button := RecoIconButton{
-                    animator +: {disabled: {default: @on}}
-                    icon_walk: Walk{width: theme.reco_record_icon height: theme.reco_record_icon}
-                    draw_icon +: {svg: crate_resource("self:resources/icons/record.svg") color: theme.reco_record}
+                // Off while recording (it stays, so nothing moves).
+                record_menu := RecoMenu{
+                    placement: BottomEnd
+                    record_menu_button := RecoIconButton{
+                        animator +: {disabled: {default: @on}}
+                        icon_walk: Walk{width: theme.reco_icon_small height: theme.reco_icon_small}
+                        draw_icon +: {svg: crate_resource("self:resources/icons/chevron_down.svg")}
+                    }
+                    content +: {record_menu_list := RecoMenuList{}}
                 }
             }
         }

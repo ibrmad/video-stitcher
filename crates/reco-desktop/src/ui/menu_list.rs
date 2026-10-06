@@ -3,8 +3,11 @@
 //! row height with its padding, an item lit under the pointer as Rerun's
 //! menus light theirs. A click picks an item; with the keyboard (the
 //! popover hands it the focus), ↑/↓ move between items and Return picks.
-//! Rows come from the `item`, `section` and `separator` templates; the App
-//! fills them (`set_entries`) and reads `MenuListAction::Picked`.
+//! Rows come from the `item`, `choice`, `section` and `separator`
+//! templates; the App fills them (`set_entries`) and reads
+//! `MenuListAction::Picked`. A choice is an item that can carry a ✓ at
+//! the content edge (the record menu's quality), so no row keeps an empty
+//! mark column.
 
 use std::collections::HashMap;
 
@@ -33,6 +36,12 @@ script_mod! {
             width: Fill height: theme.reco_row flow: Right align: Align{y: 0.5}
             padding: Inset{left: theme.reco_pad right: theme.reco_pad}
             label := RecoText{width: Fill max_lines: 1 text_overflow: TextOverflow.Ellipsis text: ""}
+        }
+        choice := View{
+            width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap align: Align{y: 0.5}
+            padding: Inset{left: theme.reco_pad right: theme.reco_pad}
+            label := RecoText{width: Fill max_lines: 1 text_overflow: TextOverflow.Ellipsis text: ""}
+            mark := RecoText{text: "" draw_text +: {color: theme.reco_accent}}
         }
         section := View{
             width: Fill height: theme.reco_row flow: Right align: Align{y: 0.5}
@@ -68,6 +77,8 @@ script_mod! {
 pub enum MenuEntry {
     /// A command, picked by its id.
     Item(LiveId, String),
+    /// One of a set (a quality), picked by its id; the chosen one shows a ✓.
+    Choice(LiveId, String, bool),
     /// A line between groups.
     Separator,
     /// A quiet line that names something (the version), not picked.
@@ -78,6 +89,7 @@ impl MenuEntry {
     fn template(&self) -> LiveId {
         match self {
             MenuEntry::Item(..) => live_id!(item),
+            MenuEntry::Choice(..) => live_id!(choice),
             MenuEntry::Separator => live_id!(separator),
             MenuEntry::Section(_) => live_id!(section),
         }
@@ -85,8 +97,16 @@ impl MenuEntry {
 
     fn id(&self) -> Option<LiveId> {
         match self {
-            MenuEntry::Item(id, _) => Some(*id),
+            MenuEntry::Item(id, _) | MenuEntry::Choice(id, _, _) => Some(*id),
             _ => None,
+        }
+    }
+
+    /// A choice's mark: a ✓ when it is the chosen one.
+    fn mark(&self) -> &'static str {
+        match self {
+            MenuEntry::Choice(_, _, true) => "✓",
+            _ => "",
         }
     }
 }
@@ -207,8 +227,14 @@ impl RecoMenuList {
             }
         }
         for ((_, row), entry) in self.rows.iter().zip(&entries) {
-            if let MenuEntry::Item(_, text) | MenuEntry::Section(text) = entry {
+            if let MenuEntry::Item(_, text)
+            | MenuEntry::Choice(_, text, _)
+            | MenuEntry::Section(text) = entry
+            {
                 row.label(cx, ids!(label)).set_text(cx, text);
+            }
+            if let MenuEntry::Choice(..) = entry {
+                row.label(cx, ids!(mark)).set_text(cx, entry.mark());
             }
         }
         self.hover = None;
@@ -304,5 +330,20 @@ impl Widget for RecoMenuList {
         cx.end_turtle_with_area(&mut self.area);
         cx.add_nav_stop(self.area, NavRole::DropDown, Inset::default());
         DrawStep::done()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_choice_is_picked_like_an_item_and_marks_the_chosen_one() {
+        let high = MenuEntry::Choice(live_id!(high), "High".into(), true);
+        assert_eq!(high.id(), Some(live_id!(high)));
+        assert_eq!(high.template(), live_id!(choice));
+        assert_eq!(high.mark(), "✓");
+        let fast = MenuEntry::Choice(live_id!(fast), "Fast".into(), false);
+        assert_eq!(fast.mark(), "", "only the chosen row is marked");
     }
 }

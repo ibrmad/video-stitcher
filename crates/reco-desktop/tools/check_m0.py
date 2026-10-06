@@ -109,6 +109,7 @@ def takes_input(state):
         "step_forward": state == "ready",
         "aspect": stitched,
         "record_button": state == "ready",
+        "record_menu_button": state == "ready",
     }
     # The timeline is drawn (and so gated) once the lanes show.
     if state is not None:
@@ -233,6 +234,14 @@ def check_state(size, state):
         inspector = stitched and size[0] >= 960
         expect(visible(app, "inspector") == inspector,
                f"{name}: Adjust panel {'open' if inspector else 'closed'}")
+        # The view bar's controls end inside it, at every width: Aspect with
+        # its label, Record and the record menu.
+        bar = app.rect("view_bar")
+        expect(visible(app, "aspect_label"), f"{name}: the aspect dropdown is labelled")
+        for wid in ("aspect", "record_button", "record_menu_button"):
+            r = app.rect(wid)
+            expect(r is not None and bar is not None and r[0] + r[2] <= bar[0] + bar[2] + 0.5,
+                   f"{name}: `{wid}` fits in the view bar ({r} in {bar})")
         expect(visible(app, "fold_hint") == (stitched and not inspector),
                f"{name}: fold hint {'shown' if stitched and not inspector else 'hidden'}")
         for wid, want in takes_input(state).items():
@@ -485,16 +494,16 @@ def check_dropdowns():
     title bar (where a real press drags the window and never reaches the
     menu; the owner found the top row unclickable)."""
     with launch((1280, 820), "ready") as app:
-        r = app.rect("record_quality")
+        r = app.rect("aspect")
         bottom = r[1] + r[3]
-        expect(bottom > 32, f"dropdown: the quality dropdown sits below the title bar ({r})")
-        for row, label in ((0, "Fast"), (2, "High"), (1, "Balanced"), (0, "Fast")):
+        expect(bottom > 32, f"dropdown: the aspect dropdown sits below the title bar ({r})")
+        for row, label in ((0, "Auto"), (2, "4:3"), (1, "16:9"), (0, "Auto")):
             click(app, r)
             time.sleep(0.4)
             # The menu's 4 pt padding, then one 28 pt row each (theme.reco_row).
             app.get("/click", x=r[0] + r[2] / 2, y=bottom + 4 + ROW / 2 + ROW * row, wait=1)
             time.sleep(0.4)
-            picked = next((i.get("t") for i in app.snap("record_quality") if i.get("i") == "record_quality"), None)
+            picked = next((i.get("t") for i in app.snap("aspect") if i.get("i") == "aspect"), None)
             expect(picked == label, f"dropdown: the click on row {row + 1} picks {label} ({picked})")
         expect(app.errors() == [], "dropdown: no errors in the app log")
 
