@@ -45,7 +45,7 @@ Write clear commit messages. Use conventional prefixes:
 
 ## Architecture
 
-The project is a Cargo workspace with nine crates:
+The project is a Cargo workspace with ten crates:
 
 - **reco-core** - GPU stitching engine (library, no I/O deps)
 - **reco-io** - FFmpeg/GStreamer/libcamera/V4L2 backends
@@ -54,7 +54,8 @@ The project is a Cargo workspace with nine crates:
 - **reco-calibrate** - Stereo calibration
 - **reco-control** - Input transport (keyboard, gamepad, mobile, WebSocket)
 - **reco-cli** - CLI binary
-- **reco-gui** - Slint desktop GUI
+- **reco-app** - The desktop app's logic, without UI
+- **reco-desktop** - Desktop app (Makepad 2)
 - **reco-obs** - OBS Studio source plugin
 
 `reco-core` must remain a pure library with no I/O dependencies. Detection, encoding, and camera backends live in their respective crates.

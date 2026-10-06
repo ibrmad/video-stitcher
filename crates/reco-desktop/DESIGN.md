@@ -6,8 +6,10 @@ Branch: `feat/makepad-desktop-ui`.
 ## Goal
 
 A new desktop app for Reco that looks modern, is easy to use and is fast,
-built with Makepad 2. It replaces the Slint app (`crates/reco-gui`) once it
-does everything that app does.
+built with Makepad 2. It replaced the Slint app (`crates/reco-gui`): the
+owner signed off the parity sweep on 2026-10-06 and the Slint app was
+removed in one commit. Code comments that say "as the Slint app" point at
+it: `git log --diff-filter=D -- crates/reco-gui/ui/main.slint` finds the commit, and its parent has the app.
 
 It is finished when:
 
@@ -24,7 +26,7 @@ It is finished when:
 | UI framework | Makepad 2, git dependency pinned to `dev` @ `62691a290eb58f7d5234960524429aaada3e572c` (2026-10-03) | Probe (2026-10-04): wgpu 28 and Makepad share one `MTLDevice` on macOS, so a wgpu-rendered 1080p texture adopted with `Texture::adopt_metal_bgra` ran at 120 fps and ~12% CPU with no engine changes. egui 0.36 and iced `main` need Reco on wgpu 30, which touches 34 files and the Metal interop in three. |
 | Platform order | macOS first | The owner's platform. Other desktops must compile and run, using a portable preview path (GPU readback into a Makepad texture) until each gets a zero-copy path. |
 | Engine | unchanged | `reco-core`, `reco-io`, `reco-calibrate`, `reco-autocam`, `reco-control` and `reco-detect` keep their APIs. A gap gets a `FRICTION.md` entry and is raised, not hacked around (Reco rule). |
-| Slint app | frozen | Stays buildable and is the behavioural reference until parity sign-off, then is removed in one commit. |
+| Slint app | removed (2026-10-06) | Stayed buildable as the behavioural reference until the owner's parity sign-off, then was removed in one commit. |
 | Look | the Rerun viewer (`re_ui`) as the design reference (owner, 2026-10-05) | A dense, flat, dark tool UI built around a timeline and side panels, close to Reco's job. Reco keeps pitch green in Rerun's accent role and takes Rerun's density whole: hints live in tooltips. See Look below. |
 | Accessibility | known gap | Makepad 2 has no screen-reader bridge on macOS (`CxOsOp::AccessibilityUpdate` is ignored). Full keyboard access is still required (Rule 9). |
 
@@ -272,7 +274,7 @@ Parity sweep (Module 8):
 - Keys: by place for Space, the arrows and F11; by the typed character for
   R, F, + = - _ [ ] (macOS asks the layout, `UCKeyTranslate`; Windows and
   Linux take their text events), so they follow the keyboard's layout.
-- The detector features are reco-gui's (reco-app's `ort`, `load-dynamic`,
+- The detector features are the Slint app's (reco-app's `ort`, `load-dynamic`,
   `cuda`, `tensorrt`, `directml` on for Windows, `tensorrt-native`, `ncnn`),
   and `automation` builds the benchmark hooks (automation.rs).
 - Linux: built and run in a container (Ubuntu 24.04, Xvfb, Mesa); it needs
@@ -349,9 +351,9 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
 
 ## Rules
 
-1. **Side by side.** The new app lives in `crates/reco-desktop` next to the
-   Slint app. The Slint app stays untouched and working until the new app
-   passes every parity check; then it is removed in one commit.
+1. **Side by side.** The new app lived in `crates/reco-desktop` next to the
+   Slint app, which stayed untouched and working until the new app passed
+   every parity check; then it was removed in one commit (2026-10-06).
 2. **Engine untouched.** No changes to the engine crates except small
    additive hooks the UI needs, each called out in its commit and in the
    crate's `FRICTION.md`.

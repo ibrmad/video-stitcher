@@ -7,11 +7,11 @@ edition = "2021"
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Makepad 2 desktop app for Reco (replaces reco-gui; see DESIGN.md)"
+description = "Reco's desktop app, built with Makepad 2 (see DESIGN.md)"
 
 [features]
 # AI tracking in exports, with ONNX Runtime by default; the detector
-# backends are reco-gui's (reco-app/Cargo.toml says which is which).
+# backends are reco-app's (its Cargo.toml says which is which).
 default = ["ai"]
 ai = ["reco-app/ai", "reco-app/ort"]
 coreml = ["ai", "reco-app/coreml"]
@@ -22,7 +22,7 @@ load-dynamic = ["ai", "reco-app/load-dynamic"]
 tensorrt-native = ["reco-app/tensorrt-native"]
 ncnn = ["reco-app/ncnn"]
 profiling = ["reco-app/profiling"]
-# The Slint app's benchmark hooks (RECO_AUTOLOAD, RECO_AUTOEXPORT,
+# Benchmark hooks, kept from the Slint app (RECO_AUTOLOAD, RECO_AUTOEXPORT,
 # RECO_VRAM_BUDGET_GB; automation.rs). Off in releases.
 automation = []
 

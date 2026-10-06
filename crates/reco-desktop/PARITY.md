@@ -763,7 +763,22 @@ Rulings for the sign-off (kept as they are, and why):
       runs from its bundle, Inter inside it;
       `every_font_the_app_names_is_packaged`; `tools/test_package.py`
       (the manifest read from a binary, the crates linked, the layout).
-- [ ] Owner sign-off; Slint app removed, with the CI and release workflows
-      moved over (packaging with `tools/package.py`) and Windows proven in
-      CI (the other session's `main.slint` edits go with it, owner,
-      2026-10-06).
+- [x] Owner sign-off (2026-10-06); the Slint app removed in one commit,
+      with the CI and release workflows moved over: rust.yml lints, tests
+      and documents reco-desktop (its benchmark hooks too, and the tools'
+      own tests), checks it on macOS with the keyboard-layout tests; the
+      release and the Windows test builds package it with
+      `tools/package.py` (cargo-makepad on macOS). The other session's
+      `main.slint` edits went with it (owner, 2026-10-06). Evidence:
+      actionlint finds only an older note; in an Ubuntu 24.04 container
+      (arm64), rust.yml's check job (format, the six clippy runs, the
+      tools' tests), its docs (`-D warnings`) and bench build pass, and
+      every workspace test but reco-io's
+      `matroska_reader_sees_partial_writes`, which fails there before the
+      removal too (arm64 FFmpeg; CI's x86_64 passes it); cargo-deny's
+      bans, licences and sources pass (its advisories fail on rustls and
+      der, as on main); the release's macOS step run here: `Reco.app`
+      with ONNX Runtime inside, signed, zipped and unzipped, verifies and
+      finds the runtime ("AI tracking: Ready: runs on CPU").
+- [ ] Windows proven in CI: build-test.yml or test-build-gui.yml run on the
+      branch, and the package opened on Windows.

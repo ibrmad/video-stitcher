@@ -1,5 +1,9 @@
 # Reco desktop GUI (`crates/reco-gui`): inventory for a screen-by-screen port
 
+> The Slint app was removed on 2026-10-06, after the owner signed off the
+> parity sweep ([PARITY.md](../PARITY.md)). This inventory stays as the record
+> of what was ported; `git log --diff-filter=D -- crates/reco-gui/ui/main.slint` finds the commit, and its parent has the app.
+
 **Scope and caveats**
 - Everything is under `crates/reco-gui/`.
 - File sizes: `ui/main.slint` 2,862 lines, `src/main.rs` 4,710, `src/export.rs` 388, `src/playback.rs` 260, `src/preview.rs` 216, `src/settings.rs` 196, `src/toast.rs` 240, `src/telemetry_client.rs` 343, `build.rs` 16.

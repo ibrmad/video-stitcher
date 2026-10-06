@@ -80,30 +80,28 @@ exceptions = [
     { allow = ["AGPL-3.0-only"], crate = "reco-calibrate" },
     { allow = ["AGPL-3.0-only"], crate = "reco-control" },
     { allow = ["AGPL-3.0-only"], crate = "reco-detect" },
-    { allow = ["AGPL-3.0-only"], crate = "reco-gui" },
+    { allow = ["AGPL-3.0-only"], crate = "reco-app" },
+    { allow = ["AGPL-3.0-only"], crate = "reco-desktop" },
     { allow = ["AGPL-3.0-only"], crate = "reco-obs" },
-
-    # --- Slint (tri-licensed GPL-3.0-only OR LicenseRef-Slint-Royalty-
-    # free-2.0 OR LicenseRef-Slint-Software-3.0). We hold a Slint
-    # proprietary royalty-free license for desktop (non-embedded) use,
-    # which selects the LicenseRef-Slint-Royalty-free-2.0 option.
-    # cargo-deny doesn't recognize LicenseRef-* identifiers, so we
-    # pin GPL-3.0 here to make the lint pass; the ACTUAL license we
-    # distribute under is the Slint royalty-free one. Revisit if we
-    # ever plan embedded-hardware distribution (not scheduled). ---
-    { allow = ["GPL-3.0-only"], crate = "i-slint-backend-qt" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-backend-selector" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-backend-winit" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-common" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-compiler" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-core" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-core-macros" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-renderer-femtovg" },
-    { allow = ["GPL-3.0-only"], crate = "i-slint-renderer-software" },
-    { allow = ["GPL-3.0-only"], crate = "slint" },
-    { allow = ["GPL-3.0-only"], crate = "slint-build" },
-    { allow = ["GPL-3.0-only"], crate = "slint-macros" },
 ]
+
+# Makepad's own small libraries (pinned git dependency of reco-desktop)
+# declare no license; the repository's LICENSE (MIT, Makepad B.V.) covers
+# them, as the published Makepad crates say ("MIT OR Apache-2.0").
+[[licenses.clarify]]
+crate = "makepad-fast-inflate"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+crate = "makepad-git"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+crate = "makepad-regex"
+expression = "MIT"
+license-files = []
 
 # ---------------------------------------------------------------------------
 # Bans: duplicate major versions + specific disallowed crates
@@ -145,4 +143,6 @@ allow-git = [
     # Transitive deps of telemetry-parser — both pinned upstream.
     "https://github.com/AdrianEddy/mp4parse-rust",
     "https://github.com/ilya-epifanov/fc-blackbox",
+    # Makepad 2, pinned to one commit in reco-desktop (its DESIGN.md).
+    "https://github.com/makepad/makepad",
 ]

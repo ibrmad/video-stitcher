@@ -5,7 +5,7 @@
 [![CI](https://github.com/reco-project/video-stitcher/actions/workflows/rust.yml/badge.svg)](https://github.com/reco-project/video-stitcher/actions)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-Stitch two camera feeds into a seamless panoramic sports view with AI-powered automatic camera control. No subscriptions, no vendor lock-in. Ships as a CLI, a Slint-based desktop app, and an OBS Studio source plugin that all consume the same Rust engine.
+Stitch two camera feeds into a seamless panoramic sports view with AI-powered automatic camera control. No subscriptions, no vendor lock-in. Ships as a CLI, a desktop app (Makepad), and an OBS Studio source plugin that all consume the same Rust engine.
 
 ## Features
 
@@ -78,7 +78,7 @@ LIBVA_MESSAGING_LEVEL=2 ./target/release/reco stitch left.mp4 right.mp4 -c match
 
 ## Architecture
 
-Nine Rust crates. Strict dependency direction keeps the engine reusable as a library.
+Ten Rust crates. Strict dependency direction keeps the engine reusable as a library.
 
 ```
 reco-core        GPU stitching engine (wgpu). No I/O, no domain logic.
@@ -88,11 +88,12 @@ reco-autocam     Panners (field, ball, sweep), lookahead smoothing, ROI filters.
 reco-calibrate   AKAZE features, stereo optimization, lens database, live-calibration source trait.
 reco-control     Operator intent vocabulary (keyboard today; gopro/mobile/websocket scaffolds).
 reco-cli         Terminal consumer: stitch / calibrate / preview / camera / analyze / info.
-reco-gui         Slint desktop consumer with wgpu preview + export UI.
+reco-app         The desktop app's logic, no UI: settings, preview session, export, calibration.
+reco-desktop     Desktop consumer (Makepad 2) with zero-copy wgpu preview + export UI.
 reco-obs         OBS Studio source plugin (async-frame ingestion, BGRA, interactive pan/zoom).
 ```
 
-**Dependency direction:** consumers (`cli` / `gui` / `obs`) depend on the four library crates (`autocam`, `calibrate`, `detect`, `io`); all four depend on `reco-core`. `reco-control` is consumed by `cli` / `gui` / `obs`.
+**Dependency direction:** consumers (`cli` / `desktop` / `obs`) depend on the four library crates (`autocam`, `calibrate`, `detect`, `io`); all four depend on `reco-core`. `reco-control` is consumed by `cli` / `desktop` / `obs`. `reco-desktop` reaches the engine mostly through `reco-app`, which keeps the app's logic testable without a window.
 
 Push-based is the canonical ingestion path: consumers call `StitchCore::submit_frame_yuv` / `submit_frame_bgra` per frame. Batch file processing (`StitchSession::run`) is a thin pull-adapter on top.
 

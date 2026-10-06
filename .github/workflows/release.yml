@@ -69,8 +69,8 @@ jobs:
             libavcodec-dev libavformat-dev libavutil-dev \
             libswscale-dev libavdevice-dev libavfilter-dev libswresample-dev \
             pkg-config clang \
-            libfontconfig1-dev libxcb-render0-dev libxcb-shape0-dev \
-            libxcb-xfixes0-dev libxkbcommon-dev
+            libx11-dev libxcursor-dev libglx-dev libxkbcommon-dev \
+            libpulse-dev libasound2-dev libgbm-dev libdrm-dev libssl-dev
 
       # ----------------------------------------------------------------
       # Linux ARM64 cross-compilation
@@ -129,12 +129,31 @@ jobs:
             echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++"
           } >> "$GITHUB_ENV"
 
+      # reco-desktop's arm64 libraries (Makepad: X11, Xcursor, GLX,
+      # xkbcommon, PulseAudio, ALSA, gbm, drm; OpenSSL). Apart, so a
+      # multiarch conflict here costs only the desktop package, a warning
+      # below, and the arm64 CLI still ships.
+      - name: Install reco-desktop libraries (ARM64 cross)
+        if: matrix.cross
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y \
+            libx11-dev:arm64 libxcursor-dev:arm64 libglx-dev:arm64 \
+            libxkbcommon-dev:arm64 libpulse-dev:arm64 libasound2-dev:arm64 \
+            libgbm-dev:arm64 libdrm-dev:arm64 libssl-dev:arm64
+
       # ----------------------------------------------------------------
       # macOS dependencies (works for both ARM64 and Intel runners)
       # ----------------------------------------------------------------
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: brew install ffmpeg pkg-config
+
+      # Makepad's packager, at the revision reco-desktop pins: it makes the
+      # self-contained Reco.app (crates/reco-desktop/tools/package.py).
+      - name: Install cargo-makepad (macOS)
+        if: runner.os == 'macOS'
+        run: cargo install --git https://github.com/makepad/makepad --rev 62691a290eb58f7d5234960524429aaada3e572c cargo-makepad --locked
 
       # ----------------------------------------------------------------
       # Windows dependencies
@@ -193,10 +212,11 @@ jobs:
             echo 'RUSTFLAGS=-C link-arg=-Wl,-rpath,$ORIGIN' >> "$GITHUB_ENV"
           fi
 
+      # The desktop app is built by its packaging step below
+      # (crates/reco-desktop/tools/package.py), which carries its fonts and
+      # icons: a plain build reads them from the source tree.
       - name: Build release binaries
-        run: |
-          cargo build --release --target ${{ matrix.target }} -p reco-cli --features load-dynamic
-          cargo build --release --target ${{ matrix.target }} -p reco-gui --features load-dynamic || echo "::warning::reco-gui build failed on ${{ matrix.name }} (cross-compile or missing deps)"
+        run: cargo build --release --target ${{ matrix.target }} -p reco-cli --features load-dynamic
 
       # ----------------------------------------------------------------
       # ONNX Runtime (bundled for AI detection)
@@ -259,25 +279,40 @@ jobs:
           cp LICENSE "$staging/"
           tar czf "$staging.tar.gz" "$staging"
 
+      # macOS: a signed Reco.app (cargo-makepad) with ONNX Runtime inside;
+      # Linux: reco-desktop with its resources beside it. A failed GUI
+      # package is a warning, so the CLI still ships (as with the old GUI).
       - name: Package GUI (Unix)
         if: runner.os != 'Windows'
         run: |
-          gui_bin="target/${{ matrix.target }}/release/reco-gui"
-          if [ -f "$gui_bin" ]; then
-            staging="reco-gui-${{ github.ref_name }}-${{ matrix.name }}"
-            mkdir "$staging"
-            cp "$gui_bin" "$staging/"
-            # Bundle ONNX Runtime under the exact name ort dlopens - the
-            # versioned filename it previously kept was never found (#446).
-            if [ -n "$ORT_LIB" ] && [ -f "$ORT_LIB" ]; then
-              if [ "$RUNNER_OS" = "macOS" ]; then
-                cp "$ORT_LIB" "$staging/libonnxruntime.dylib"
-              else
-                cp "$ORT_LIB" "$staging/libonnxruntime.so"
-              fi
+          staging="reco-desktop-${{ github.ref_name }}-${{ matrix.name }}"
+          # ONNX Runtime under the exact name ort dlopens (#446).
+          extra=()
+          if [ -n "$ORT_LIB" ] && [ -f "$ORT_LIB" ]; then
+            mkdir -p "$RUNNER_TEMP/ort"
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              cp "$ORT_LIB" "$RUNNER_TEMP/ort/libonnxruntime.dylib"
+              extra=(--extra "$RUNNER_TEMP/ort/libonnxruntime.dylib")
+            else
+              cp "$ORT_LIB" "$RUNNER_TEMP/ort/libonnxruntime.so"
+              extra=(--extra "$RUNNER_TEMP/ort/libonnxruntime.so")
             fi
+          fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            if python3 crates/reco-desktop/tools/package.py --out gui-out --features load-dynamic "${extra[@]}"; then
+              mkdir "$staging"
+              ditto gui-out/Reco.app "$staging/Reco.app"
+              cp LICENSE "$staging/"
+              ditto -c -k --keepParent "$staging" "$staging.zip"
+            else
+              echo "::warning::reco-desktop packaging failed on ${{ matrix.name }}"
+            fi
+          elif python3 crates/reco-desktop/tools/package.py --out . --name "$staging" \
+              --target ${{ matrix.target }} --features load-dynamic "${extra[@]}"; then
             cp LICENSE "$staging/"
             tar czf "$staging.tar.gz" "$staging"
+          else
+            echo "::warning::reco-desktop packaging failed on ${{ matrix.name }} (cross-compile or missing deps)"
           fi
 
       - name: Package CLI (Windows)
@@ -303,11 +338,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $guiBin = "target\${{ matrix.target }}\release\reco-gui.exe"
-          if (Test-Path $guiBin) {
-            $staging = "reco-gui-${{ github.ref_name }}-${{ matrix.name }}"
-            New-Item -ItemType Directory -Path $staging | Out-Null
-            Copy-Item $guiBin "$staging\"
+          $staging = "reco-desktop-${{ github.ref_name }}-${{ matrix.name }}"
+          python crates/reco-desktop/tools/package.py --out . --name $staging --target ${{ matrix.target }} --features load-dynamic
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::reco-desktop packaging failed on ${{ matrix.name }}"
+          } else {
             Copy-Item LICENSE "$staging\"
             if (Test-Path "$env:FFMPEG_DLL_DIR") {
               Copy-Item "$env:FFMPEG_DLL_DIR\*.dll" "$staging\"

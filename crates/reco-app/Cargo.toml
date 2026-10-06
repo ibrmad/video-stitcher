@@ -10,10 +10,9 @@ description = "Reco's app logic without a UI framework: the live preview session
 
 [features]
 # AI tracking in exports (Module 6b): reco-autocam with ONNX Runtime on the
-# CPU by default, as reco-gui builds it. The detector backends are
-# reco-gui's: Jetson and custom builds opt out with --no-default-features
-# and a native backend (tensorrt-native, ncnn); DirectML is on for Windows
-# (below).
+# CPU by default, as the Slint app built it, with its detector backends:
+# Jetson and custom builds opt out with --no-default-features and a native
+# backend (tensorrt-native, ncnn); DirectML is on for Windows (below).
 default = ["ai", "ort"]
 ai = ["dep:reco-autocam", "dep:reco-detect"]
 ort = ["ai", "reco-autocam/ort", "reco-detect/ort"]
@@ -41,8 +40,9 @@ base64 = "0.22"
 # Usage data's random client and batch ids (already in the lockfile).
 uuid = { version = "1", features = ["v4"] }
 
-# DirectML on Windows, as reco-gui: without ort's `directml` feature the
-# engine falls back to the CPU while logging as if it ran on the GPU.
+# DirectML on Windows, as the Slint app had it: without ort's `directml`
+# feature the engine falls back to the CPU while logging as if it ran on
+# the GPU.
 [target.'cfg(windows)'.dependencies]
 reco-detect = { path = "../reco-detect", optional = true, default-features = false, features = ["directml"] }
 reco-autocam = { path = "../reco-autocam", optional = true, default-features = false, features = ["directml"] }

@@ -132,14 +132,14 @@ jobs:
           Expand-Archive -Path $dmlPkg -DestinationPath "$env:RUNNER_TEMP\directml"
           echo "DML_DLL=$env:RUNNER_TEMP\directml\bin\x64-win\DirectML.dll" >> $env:GITHUB_ENV
 
-      - name: Build GUI
-        run: cargo build --release -p reco-gui --features load-dynamic
+      # The desktop app with its fonts and icons beside it (a plain build
+      # reads them from the source tree), then the DLLs.
+      - name: Package GUI
+        run: python crates/reco-desktop/tools/package.py --out . --name artifact-gui --features load-dynamic
 
-      - name: Bundle GUI + DLLs
+      - name: Add the DLLs
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifact-gui
-          Copy-Item target/release/reco-gui.exe artifact-gui/
           Copy-Item "$env:FFMPEG_DLL_DIR\*.dll" artifact-gui/
           if (Test-Path "$env:ORT_DLL") { Copy-Item "$env:ORT_DLL" artifact-gui/ }
           if (Test-Path "$env:DML_DLL") { Copy-Item "$env:DML_DLL" artifact-gui/ }
@@ -147,5 +147,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reco-gui-windows-test
+          name: reco-desktop-windows-test
           path: artifact-gui/

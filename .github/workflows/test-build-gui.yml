@@ -1,9 +1,10 @@
 name: Test Build (Windows GUI)
 
-# On-demand Windows reco-gui build for testing a branch on a Windows box
-# without a local FFmpeg/clang toolchain. Produces a runnable bundle
-# (reco-gui.exe + FFmpeg/ONNX/DirectML DLLs) as a downloadable artifact.
-# Not a release: no tag, no publish.
+# On-demand Windows build of the desktop app (reco-desktop) for testing a
+# branch on a Windows box without a local FFmpeg/clang toolchain. Produces
+# a runnable package (reco-desktop.exe, its fonts and icons, and the
+# FFmpeg/ONNX/DirectML DLLs) as a downloadable artifact. Not a release: no
+# tag, no publish.
 
 on:
   workflow_dispatch:
@@ -30,7 +31,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          key: test-gui-windows
+          key: test-desktop-windows
 
       - name: Install FFmpeg
         shell: pwsh
@@ -51,8 +52,10 @@ jobs:
           echo "FFMPEG_DIR=$dir" >> $env:GITHUB_ENV
           echo "FFMPEG_DLL_DIR=$dir\bin" >> $env:GITHUB_ENV
 
-      - name: Build reco-gui
-        run: cargo build --release --target x86_64-pc-windows-msvc -p reco-gui --features load-dynamic
+      # The app with its fonts and icons beside it (a plain build reads
+      # them from the source tree).
+      - name: Package reco-desktop
+        run: python crates/reco-desktop/tools/package.py --out . --name reco-desktop-test-windows-x86_64 --target x86_64-pc-windows-msvc --features load-dynamic
 
       - name: Download ONNX Runtime (DirectML) + DirectML
         shell: pwsh
@@ -69,9 +72,7 @@ jobs:
       - name: Bundle
         shell: pwsh
         run: |
-          $staging = "reco-gui-test-windows-x86_64"
-          New-Item -ItemType Directory -Path $staging | Out-Null
-          Copy-Item "target\x86_64-pc-windows-msvc\release\reco-gui.exe" "$staging\"
+          $staging = "reco-desktop-test-windows-x86_64"
           Copy-Item LICENSE "$staging\"
           Copy-Item "$env:FFMPEG_DLL_DIR\*.dll" "$staging\"
           Copy-Item "$env:ORT_DLL" "$staging\"
@@ -80,6 +81,6 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: reco-gui-test-windows
-          path: reco-gui-test-windows-x86_64.zip
+          name: reco-desktop-test-windows
+          path: reco-desktop-test-windows-x86_64.zip
           if-no-files-found: error
