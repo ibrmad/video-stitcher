@@ -511,6 +511,7 @@ def check_ai_short():
         expect(open_sheet(app) is not None, "short: Export opens the sheet")
         wait_for(lambda: app.enabled("ai_enable"), 30)
         expect(bool(wait_for(lambda: app.rect("ai_model"), 3)), "short: remembered on, the rows show")
+
         reveal(app, "ai_advanced")
         open_advanced(app, "ai_advanced")
         window = app.get("/s")["w"][0]["sz"]
@@ -582,9 +583,28 @@ def check_ai_figures():
         os.remove(written)
 
 
+def check_ai_fold():
+    """The closed Advanced tier looks closed when the sheet opens with AI
+    tracking on. (A fold's first draw shows its body whole, Makepad
+    measuring it; the owner saw the tier open until a scroll closed it.)"""
+    folder, files = linked("ai-fold")
+    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    with open(os.path.join(config, "desktop.json"), "w") as f:
+        json.dump({"ai_enabled": True}, f)
+    with launch(files, config_dir=config) as app:
+        ready = wait_for(lambda: app.rect("preview"), 30)
+        # The machine's answer first, as when the app has been open a while.
+        wait_for(lambda: logged(app, "AI tracking: "), 30)
+        expect(open_sheet(app) is not None and bool(ready), "fold: Export opens the sheet")
+        expect(bool(wait_for(lambda: app.rect("ai_advanced"), 5)), "fold: the Advanced tier is in view")
+        time.sleep(1.0)
+        expect(app.rect("ai_cluster_mode") is None, "fold: and closed, with no scroll or click")
+        save_shot(app, "ai-fold")
+
+
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
           "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
-          "ai_figures": check_ai_figures}
+          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold}
 
 
 def main():

@@ -1,4 +1,4 @@
-//! The viewer, after a Rerun view: a 28 pt view bar (the view's name, the
+//! The viewer, after a Rerun view: a 32 pt view bar (the view's name, the
 //! preview aspect, Record and its menu) over a black canvas. Until a stitched preview
 //! exists the canvas shows the next step of the job under the panorama
 //! frame, with a stepper that says where the user is; calibration shows its
@@ -31,7 +31,7 @@ script_mod! {
     mod.widgets.RecoViewer = View{
         width: Fill height: Fill flow: Down
         view_bar := SolidView{
-            width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
+            width: Fill height: theme.reco_bar_height flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
             padding: Inset{left: theme.reco_pad right: theme.reco_gap_s}
             draw_bg.color: theme.reco_bar
             view_title := RecoStrong{text: "Preview"}

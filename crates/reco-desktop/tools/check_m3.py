@@ -109,12 +109,12 @@ def answers(**picks):
     return path
 
 
-def launch(files=None, extra=(), config_dir=None, answers_file=None):
+def launch(files=None, extra=(), config_dir=None, answers_file=None, env=None):
     args = ["--window-size", "1280x820"]
     if files:
         left, right, cal = files
         args += ["--left", left, "--right", right, "--calibration", cal]
-    env = {}
+    env = dict(env or {})
     if config_dir:
         env["RECO_CONFIG_DIR"] = config_dir
     if answers_file:
@@ -187,7 +187,7 @@ def check_list():
     os.symlink(FAST[1], os.path.join(folder, "GX010002.MP4"))
     picks = answers(left=[f"{folder}/{n}" for n in ("GX030001.MP4", "GX010001.MP4", "GX020001.MP4")],
                     right=[f"{folder}/GX010002.MP4"])
-    with launch(answers_file=picks) as app:
+    with launch(answers_file=picks, env={"RECO_DESKTOP_LOG_CURSOR": "1"}) as app:
         wait_for(lambda: text_of(app, "next_title") == "Add your two camera videos", 15)
         app.click_id("add_right")
         app.click_id("add_left")
@@ -200,6 +200,12 @@ def check_list():
         expect(left == ["GX010001.MP4", "GX020001.MP4", "GX030001.MP4"],
                f"list: the left camera's files show in recording order ({left})")
         save_shot(app, "list-open")
+        # The rows' grab hand stays: the sliders' arrow is for sliders only.
+        lx, ly, lw, lh = app.rect("left_list")
+        for step in range(5):
+            app.get("/m", k="move", x=lx + lw * (step + 1) / 6, y=ly + 12, wait=1)
+        cursors = {line.split("cursor: ")[1].strip() for line in app.log_lines() if "cursor: " in line}
+        expect("Grab" in cursors, f"list: the rows show the grab hand ({sorted(cursors)})")
         removes = sorted((i["r"] for i in app.snap("remove") if i.get("i") == "remove"), key=lambda r: r[1])
         if len(removes) >= 2:
             r = removes[1]

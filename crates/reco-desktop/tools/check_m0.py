@@ -42,6 +42,9 @@ LENGTH, PLAYHEAD_AT = 6300.0, 754.0
 RULER, LANE_HEIGHT = 18, 18
 # A row (theme.reco_row): section bands and control rows.
 ROW = 28
+# The view bar and the panels' title rows: 32 pt, so a 26 pt control keeps
+# 3 pt above and below (at 28 it kept 1; the owner found them tight).
+BAR = 32
 
 # Every --look-preview state in job order; None is a fresh start.
 STATES = (None, "one-camera", "cameras", "calibrating", "calibration-failed", "ready", "exporting")
@@ -242,6 +245,21 @@ def check_state(size, state):
             r = app.rect(wid)
             expect(r is not None and bar is not None and r[0] + r[2] <= bar[0] + bar[2] + 0.5,
                    f"{name}: `{wid}` fits in the view bar ({r} in {bar})")
+        expect(bar is not None and abs(bar[3] - BAR) <= 0.5, f"{name}: the view bar is {BAR} pt ({bar})")
+        for wid in ("aspect", "record_button"):
+            r = app.rect(wid)
+            if r and bar:
+                above, below = r[1] - bar[1], bar[1] + bar[3] - (r[1] + r[3])
+                expect(min(above, below) >= 2.5,
+                       f"{name}: `{wid}` has room above and below in the bar ({above:.1f}, {below:.1f})")
+        media, cameras = app.rect("media_panel"), app.rect("cameras")
+        if media and cameras:
+            expect(abs(cameras[1] - media[1] - BAR) <= 0.5,
+                   f"{name}: Setup's title row is {BAR} pt ({cameras[1] - media[1]})")
+        adjust, view = app.rect("inspector"), app.rect("view_section")
+        if adjust and view:
+            expect(abs(view[1] - adjust[1] - BAR) <= 0.5,
+                   f"{name}: Adjust's title row is {BAR} pt ({view[1] - adjust[1]})")
         expect(visible(app, "fold_hint") == (stitched and not inspector),
                f"{name}: fold hint {'shown' if stitched and not inspector else 'hidden'}")
         for wid, want in takes_input(state).items():

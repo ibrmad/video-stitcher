@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use makepad_widgets::makepad_platform::thread::SignalToUI;
+use makepad_widgets::widget_tree::CxWidgetExt;
 use makepad_widgets::*;
 
 mod ai_view;
@@ -67,6 +68,9 @@ use shell_state::{Panel, ShellState};
 use ui::menu_list::MenuEntry;
 use ui::panorama::RecoPanorama;
 use ui::time_panel::RecoTimeRuler;
+
+/// Set: each change of the mouse cursor is a log line (checks).
+const LOG_CURSOR: &str = "RECO_DESKTOP_LOG_CURSOR";
 
 /// Longest project name shown in the title bar before its middle is cut.
 const PROJECT_NAME_CHARS: usize = 44;
@@ -336,6 +340,15 @@ pub struct App {
     /// Fires a quiet second after the window or a panel changed.
     #[rust]
     layout_timer: Timer,
+    /// Log the cursor's changes (`RECO_DESKTOP_LOG_CURSOR`), and the last
+    /// one logged.
+    #[rust]
+    log_cursor: bool,
+    #[rust]
+    logged_cursor: Option<MouseCursor>,
+    /// Every slider, for `slider_arrow`.
+    #[rust]
+    sliders: Vec<WidgetRef>,
 }
 
 impl App {
@@ -611,6 +624,40 @@ impl App {
         self.ui.widget(cx, id).set_disabled(cx, !enabled);
     }
 
+    /// Sliders show the arrow, as macOS's own do (the owner chose it):
+    /// Makepad's slider sets an open hand over it and a closed one while
+    /// dragging. Only over a slider: the file lists' grips keep their hand.
+    /// (Makepad's point lookup starts at widgets that implement it, which
+    /// the root doesn't; the sliders are collected from the widget tree
+    /// once, all of them being in the layout from the start.)
+    fn slider_arrow(&mut self, cx: &mut Cx, event: &Event) {
+        let at = match event {
+            Event::MouseMove(e) => e.abs,
+            Event::MouseDown(e) => e.abs,
+            Event::MouseUp(e) => e.abs,
+            _ => return,
+        };
+        if !matches!(cx.mouse_cursor(), MouseCursor::Grab | MouseCursor::Grabbing) {
+            return;
+        }
+        if self.sliders.is_empty() {
+            let tree = cx.widget_tree();
+            self.sliders = tree
+                .flat_tree(cx)
+                .iter()
+                .map(|row| tree.widget(WidgetUid(row.uid)))
+                .filter(|widget| widget.borrow::<Slider>().is_some())
+                .collect();
+        }
+        if self
+            .sliders
+            .iter()
+            .any(|slider| slider.area().rect(cx).contains(at))
+        {
+            cx.set_cursor(MouseCursor::Arrow);
+        }
+    }
+
     fn toggle(&mut self, cx: &mut Cx, panel: Panel) {
         if self.shell.toggle(panel) {
             self.apply_shell(cx);
@@ -649,6 +696,7 @@ impl App {
 
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
+        self.log_cursor = std::env::var_os(LOG_CURSOR).is_some();
         match Args::parse(std::env::args().skip(1)) {
             Ok(args) => self.args = args,
             Err(err) => log!("ignoring command line: {err}"),
@@ -805,6 +853,14 @@ impl AppMain for App {
                 .add(started.elapsed(), std::time::Instant::now())
             {
                 log!("{line}");
+            }
+        }
+        self.slider_arrow(cx, event);
+        if self.log_cursor && matches!(event, Event::MouseMove(_)) {
+            let cursor = cx.mouse_cursor();
+            if self.logged_cursor != Some(cursor) {
+                self.logged_cursor = Some(cursor);
+                log!("cursor: {cursor:?}");
             }
         }
     }

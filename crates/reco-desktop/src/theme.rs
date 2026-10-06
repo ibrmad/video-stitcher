@@ -324,6 +324,9 @@ script_mod! {
 
         // Sizes (points)
         reco_row: 28.0
+        // The view bar and the panels' title rows: a 26 pt control keeps
+        // 3 pt above and below (at 28 it kept 1, tight on Retina).
+        reco_bar_height: 32.0
         reco_button: 26.0
         reco_button_pad_x: 10.0
         reco_icon_button: 26.0
@@ -401,4 +404,39 @@ script_mod! {
         reco_inspector_floor: 226.0
     }
     mod.theme = mod.themes.reco_dark
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    /// The names `mod.themes.reco_dark` sets, in order: the `name:` that
+    /// starts each of its own lines.
+    fn tokens(source: &str) -> Vec<&str> {
+        source
+            .lines()
+            .skip_while(|line| !line.contains("mod.themes.reco_dark = "))
+            .skip(1)
+            .take_while(|line| *line != "    }")
+            .filter_map(|line| line.strip_prefix("        "))
+            .filter_map(|line| line.split_once(':').map(|(name, _)| name))
+            .filter(|name| {
+                !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            })
+            .collect()
+    }
+
+    /// A name set twice keeps only its last value, silently: a 32 pt size
+    /// once took the name of the view bar's colour, and the bar drew white.
+    #[test]
+    fn theme_tokens_are_set_once() {
+        let names = tokens(include_str!("theme.rs"));
+        assert!(names.len() > 100, "the token list was read ({})", names.len());
+        let mut seen = HashSet::new();
+        let twice: Vec<&str> = names.into_iter().filter(|name| !seen.insert(*name)).collect();
+        assert!(twice.is_empty(), "theme tokens set more than once: {twice:?}");
+    }
 }

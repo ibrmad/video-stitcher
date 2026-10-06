@@ -231,3 +231,26 @@ has no gate, unlike `Button`, which has `enabled`. The export sheet's
 and the sheet puts it back off when a click or Space flips it then. The
 ask: a disabled widget ignores input, or `CheckBox` gets an `enabled` as
 `Button` has.
+
+## A closed fold first drawn shows open (UI pass, Makepad)
+
+`FoldHeader` draws its body whole until it has measured it, whatever its
+state, so a closed fold whose first draw is in view shows open for that
+frame and stays so until something redraws it: the export sheet's AI
+Advanced tier showed open on opening the sheet and closed on the first
+scroll. `RecoFold` (ui/fold.rs) clips a closed fold's first draw to its
+header and asks for another draw, which is measured and closed. The ask: a
+closed fold measures its body without showing it.
+
+## A slider shows a hand and a text cursor (UI pass, Makepad)
+
+`Slider` sets `MouseCursor::Grab` on hover and `Grabbing` on a press in its
+event handler, with no property to change it, and its number field (the
+readout typed values go into) shows the text cursor over the track and
+takes the keyboard on a press even while hidden. Reco wants the arrow, as
+macOS sliders have, and its own value fields. `RecoSlider` sizes the
+readout away (0 by 0, read-only), and the App puts the arrow back after
+each pointer event over a slider (`App::slider_arrow`). It finds the
+sliders through the widget tree: `find_widgets_from_point` from the root
+returns nothing. The ask: a `cursor` property on `Slider`, a readout that
+can be turned off, and a hit search that works from the root.

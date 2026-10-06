@@ -279,7 +279,8 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
 - **Accent**: pitch green where Rerun uses blue, and nowhere else: the
   primary action (white on `#007541`), focus rings, slider and progress
   fills, the lit seam, camera lanes (`#34d399` marks, `#0f4a30` blocks).
-- **Geometry**: 28 pt rows, title rows and bands; a 14 pt content edge in
+- **Geometry**: 28 pt rows and bands, 32 pt title rows and view bar (a
+  26 pt control keeps 3 pt above and below); a 14 pt content edge in
   every panel; 10 pt between items, 5 pt between an icon and its text;
   26 pt buttons and 18 pt icons; 4 pt control corners, 6 pt floating
   corners. Menus (the app menu, Recent, every dropdown's list) share the
@@ -357,6 +358,16 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   and `SliderMinimal` draws its track at the bottom of its box (room for a
   label). `RecoSlider` drops the margin and draws its own centred track and
   knob; a property row shows the value in its own label.
+- `Slider` sets the grab hand over itself and the closed hand while pressed,
+  in code, and its number field shows the text cursor over the track and
+  takes the keyboard on a press even when hidden. `RecoSlider` sizes the
+  field away, and the App puts the arrow back over sliders after each
+  pointer event (`slider_arrow`; the sliders come from the widget tree,
+  since `find_widgets_from_point` from the root finds nothing). FRICTION.md.
+- `FoldHeader` draws a body it has never measured whole, whatever its
+  state, so a closed fold first drawn in view showed open until the next
+  redraw. `RecoFold` clips a closed fold's first draw to its header and
+  draws again on the next frame. FRICTION.md.
 - Theme values derived from others (`font_body_m`, `font_title_l` and the
   like) are computed from the base theme, so they stay IBM Plex. The menu
   layer reads them, so `MenuLayer` is styled where it is placed. The theme
@@ -493,7 +504,8 @@ everywhere (2026-10-05). Every value is a token in `src/theme.rs`.
   log line (a switch naming a folder also keeps the payload there for the
   check to read), `RECO_DESKTOP_FAKE_RELEASE` answers the update check,
   and `RECO_DESKTOP_FAKE_AI` stands in for a machine that can't run the
-  detector.
+  detector. `RECO_DESKTOP_LOG_CURSOR` logs each change of the mouse
+  cursor, for the checks that hold sliders to the arrow.
   Dialogs are answered through `RECO_DESKTOP_DIALOG_ANSWERS`, and settings go
   to a fresh `RECO_CONFIG_DIR`. Even a hidden window goes full screen, so no
   check starts one full screen.

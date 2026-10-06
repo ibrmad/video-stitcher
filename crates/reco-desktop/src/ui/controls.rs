@@ -41,7 +41,7 @@ script_mod! {
     }
     // A panel's name with its actions on the right.
     mod.widgets.RecoTitleRow = View{
-        width: Fill height: theme.reco_row flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
+        width: Fill height: theme.reco_bar_height flow: Right spacing: theme.reco_gap_s align: Align{y: 0.5}
         padding: Inset{left: theme.reco_pad right: theme.reco_pad}
     }
     mod.widgets.RecoSeparator = SolidView{
@@ -282,7 +282,11 @@ script_mod! {
     mod.widgets.RecoSlider = SliderMinimal{
         width: Fill height: theme.reco_row margin: 0
         text: ""
+        // The number field Makepad types values into stays (a press gives
+        // it the keyboard) but takes no room: hidden, it still showed the
+        // text cursor over the track.
         text_input +: {
+            width: 0 height: 0
             is_read_only: true
             draw_text +: {
                 color: theme.reco_transparent color_hover: theme.reco_transparent

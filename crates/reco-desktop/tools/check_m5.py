@@ -106,15 +106,15 @@ def calibration_copy():
     return (FAST[0], FAST[1], cal)
 
 
-def launch(files, answers=None):
+def launch(files, answers=None, env=None):
     left, right, cal = files
     args = ["--window-size", "1280x980", "--left", left, "--right", right, "--calibration", cal]
-    env = None
+    env = dict(env) if env else None
     if answers is not None:
         fd, path = tempfile.mkstemp(prefix="reco-m5-answers-", suffix=".json")
         with os.fdopen(fd, "w") as f:
             json.dump(answers, f)
-        env = {"RECO_DESKTOP_DIALOG_ANSWERS": path}
+        env = {**(env or {}), "RECO_DESKTOP_DIALOG_ANSWERS": path}
     return drive.App.launch(BIN, args, env=env)
 
 
@@ -419,8 +419,52 @@ def check_stats():
         expect(app.errors() == [], f"stats: no errors in the app log {app.errors()[:3]}")
 
 
+def press_drag(app, x, y, dx):
+    """Press at (x, y), drag `dx` points across, release."""
+    app.get("/m", k="down", x=x, y=y, wait=1)
+    for step in range(1, 7):
+        app.get("/m", k="move", x=x + dx * step / 6, y=y, wait=1)
+    app.get("/m", k="up", x=x + dx, y=y, wait=1)
+
+
+def check_cursor():
+    """Sliders show the arrow, as macOS's own sliders do (the owner chose it
+    over Makepad's open and closed hand), never the text cursor (Makepad's
+    slider holds a number field for typing its value: Reco hides its
+    readout, and the owner saw the I-beam over the empty field). A press
+    anywhere on the slider's box drags it, the track's ends and edges too
+    (the empty field took presses at the right end). RECO_DESKTOP_LOG_CURSOR
+    logs each cursor change."""
+    files = calibration_copy()
+    with launch(files, env={"RECO_DESKTOP_LOG_CURSOR": "1"}) as app:
+        expect(wait_for(lambda: app.rect("preview"), 30) is not None, "cursor: the preview opens")
+        for slider in ("fov_slider", "seam_blend"):
+            x, y, w, h = app.rect(slider)
+            for row in (0.3, 0.5, 0.7):
+                for step in range(25):
+                    app.get("/m", k="move", x=x + w * step / 24, y=y + h * row, wait=1)
+        x, y, w, h = app.rect("fov_slider")
+        app.get("/m", k="down", x=x + w / 2, y=y + h / 2, wait=1)
+        app.get("/m", k="up", x=x + w / 2, y=y + h / 2, wait=1)
+        cursors = {line.split("cursor: ")[1].strip() for line in app.log_lines() if "cursor: " in line}
+        expect(bool(cursors), f"cursor: the moves are logged ({sorted(cursors)})")
+        expect("Text" not in cursors, f"cursor: never a text cursor over a slider ({sorted(cursors)})")
+        expect(not cursors & {"Grab", "Grabbing"},
+               f"cursor: the arrow over a slider, pressed or not, as macOS's own ({sorted(cursors)})")
+        # Left from the right end, then right from the top edge, so each
+        # drag has room to move the value.
+        for label, (px, py), dx in (("its right end", (x + w - 3, y + h / 2), -w * 0.4),
+                                    ("its top edge", (x + w / 2, y + 2), w * 0.4)):
+            before = text_of(app, "fov_value")
+            press_drag(app, px, py, dx)
+            time.sleep(0.4)
+            expect(text_of(app, "fov_value") != before,
+                   f"cursor: a press at {label} drags the slider ({before} -> {text_of(app, 'fov_value')})")
+        expect(app.errors() == [], f"cursor: no errors in the app log {app.errors()[:3]}")
+
+
 CHECKS = {"view": check_view, "lens": check_lens, "preview": check_preview, "picker": check_picker,
-          "picker_scroll": check_picker_scroll, "stats": check_stats}
+          "picker_scroll": check_picker_scroll, "stats": check_stats, "cursor": check_cursor}
 
 
 def main():
