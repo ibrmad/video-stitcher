@@ -357,9 +357,14 @@ beside the executable, or a `<exe>.makepad-package-paths` map), which
 Makepad's own packager does. A plain `cargo build` binary moved to another
 machine draws no text or icons: seen in a Linux container without the
 source tree ("is not packaged with this app, so its text will show as
-boxes"). The release must build with `MAKEPAD_PACKAGE_DIR` and copy each
-crate's resources beside the binary; this comes with the switch from the
-Slint app.
+boxes"). `MAKEPAD_PACKAGE_DIR` alone isn't enough: the default font
+(Inter) is still looked for at the build machine's path, because fonts are
+packaged through a manifest in the binary (`app_main!`'s `font_assets`)
+that Makepad's packager reads. `cargo makepad desktop bundle` makes a
+self-contained macOS `.app` (every crate's resources, the fonts the binary
+uses, a package map); Windows and Linux have no such step, so the release
+needs one (a script copying the same layout). This comes with the switch
+from the Slint app.
 
 ## Small gaps met in Module 8
 
