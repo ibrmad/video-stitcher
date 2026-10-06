@@ -72,6 +72,7 @@ use reco_app::toasts::Toasts;
 use shell_state::{Panel, ShellState};
 use ui::menu_list::MenuEntry;
 use ui::panorama::RecoPanorama;
+use ui::preview::SheetOpen;
 use ui::time_panel::RecoTimeRuler;
 
 /// Set: each change of the mouse cursor is a log line (checks).
@@ -713,6 +714,10 @@ impl App {
 
     /// A menu shortcut, from the menu bar or read as a key.
     fn run_shortcut(&mut self, cx: &mut Cx, shortcut: keys::AppShortcut) {
+        // Nothing fires behind a sheet (DESIGN.md Rule 9).
+        if self.sheet_open(cx) {
+            return;
+        }
         match shortcut {
             keys::AppShortcut::Save => self.save_calibration(cx),
             keys::AppShortcut::Preferences => self.open_preferences(cx),
@@ -734,6 +739,20 @@ impl App {
             );
         }
         self.apply_shell(cx);
+    }
+
+    /// One of the sheets (Export, the lens picker, Preferences, Keyboard
+    /// shortcuts, Report a bug) is open.
+    fn sheet_open(&mut self, cx: &mut Cx) -> bool {
+        [
+            ids!(export_sheet),
+            ids!(lens_picker),
+            ids!(prefs_sheet),
+            ids!(shortcuts_sheet),
+            ids!(bug_sheet),
+        ]
+        .into_iter()
+        .any(|sheet| self.ui.modal(cx, sheet).is_open())
     }
 
     /// A camera has video, so the time panel shows its lanes.
@@ -894,8 +913,11 @@ impl AppMain for App {
         }
         self.match_event(cx, event);
         let draw = matches!(event, Event::Draw(_));
+        // Only a key needs to know (the preview leaves it alone then).
+        let sheet_open = SheetOpen(matches!(event, Event::KeyDown(_)) && self.sheet_open(cx));
         let started = std::time::Instant::now();
-        self.ui.handle_event(cx, event, &mut Scope::empty());
+        self.ui
+            .handle_event(cx, event, &mut Scope::with_props(&sheet_open));
         if draw {
             if let Some(after) = self
                 .launched_at

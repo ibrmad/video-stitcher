@@ -52,6 +52,10 @@ pub enum PreviewAction {
     None,
 }
 
+/// The App passes this in the scope's props with each key: while a sheet
+/// is open the preview leaves keys alone (DESIGN.md Rule 9).
+pub struct SheetOpen(pub bool);
+
 /// Take a ring texture by its raw `MTLTexture` pointer (retained, no copy).
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos"))]
 fn adopt(
@@ -283,7 +287,7 @@ impl RecoPreview {
 }
 
 impl Widget for RecoPreview {
-    fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
+    fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
         if self.beat.is_event(event).is_some() {
             for slot in self.retirement.beat(Instant::now()) {
                 self.queue(PreviewCommand::Release {
@@ -300,8 +304,9 @@ impl Widget for RecoPreview {
             return;
         }
         // Keys reach the preview when nothing else holds focus (a focused
-        // button keeps Space and arrows for itself).
-        if let Event::KeyDown(ke) = event {
+        // button keeps Space and arrows for itself) and no sheet is open.
+        let sheet_open = scope.props.get::<SheetOpen>().is_some_and(|open| open.0);
+        if let (Event::KeyDown(ke), false) = (event, sheet_open) {
             let focus = cx.key_focus();
             if focus.is_empty() || cx.has_key_focus(self.area) {
                 if let Some(command) = command_for_key(ke.key_code, &ke.modifiers) {

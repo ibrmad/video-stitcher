@@ -212,9 +212,79 @@ def check_perf():
             expect(app.errors() == [], f"perf {name}: no errors in the app log {app.errors()[:3]}")
 
 
+# The app menu's rows (1 = the first).
+SHORTCUTS, REPORT_BUG = 1, 3
+
+
+def click(app, widget_id):
+    """Click a widget if it is on screen; whether it was."""
+    r = app.rect(widget_id)
+    if r:
+        app.get("/click", x=r[0] + r[2] / 2, y=r[1] + r[3] / 2, wait=1)
+    return r is not None
+
+
+def menu(app, row):
+    """Pick the app menu's row `row` with the keyboard."""
+    click(app, "app_menu")
+    wait_for(lambda: app.rect("app_menu_list"), 5)
+    time.sleep(0.2)
+    for _ in range(row):
+        app.key("down")
+    app.key("return")
+
+
+def setup_shown(app):
+    return app.rect("setup_header") is not None
+
+
+def check_sheets():
+    """DESIGN.md Rule 9: no shortcut fires behind a sheet, and Escape closes
+    every sheet. A closed sheet's widgets stay in the snapshot, so ⌘1 tells:
+    once a sheet closes, it hides Setup again."""
+    with launch(FAST) as app:
+        if wait_for(lambda: app.rect("preview"), 30) is None:
+            expect(False, "sheets: the preview opens")
+            return
+        wait_for(lambda: app.enabled("export_button"), 10)
+        time.sleep(0.5)
+        openers = (
+            ("export", lambda: click(app, "export_button")),
+            ("keyboard shortcuts", lambda: menu(app, SHORTCUTS)),
+            ("bug report", lambda: menu(app, REPORT_BUG)),
+            ("lens picker", lambda: click(app, "lens_browse")),
+            ("Preferences", lambda: app.key("Comma", cmd=1)),
+        )
+        for name, open_it in openers:
+            open_it()
+            time.sleep(0.8)
+            before = text_of(app, "time_current")
+            app.key("Key1", cmd=1)
+            app.key("space")
+            time.sleep(0.8)
+            expect(setup_shown(app), f"sheets: ⌘1 does nothing behind the {name} sheet")
+            expect(text_of(app, "time_current") == before,
+                   f"sheets: Space doesn't play behind the {name} sheet ({before} -> {text_of(app, 'time_current')})")
+            if name != "Preferences":
+                app.key("Comma", cmd=1)
+                time.sleep(0.6)
+                expect(app.rect("prefs_save") is None, f"sheets: ⌘, doesn't open Preferences over the {name} sheet")
+            save_shot(app, f"sheet-{name.split()[0].lower()}")
+            app.key("escape")
+            time.sleep(0.5)
+            app.key("Key1", cmd=1)
+            expect(bool(wait_for(lambda: not setup_shown(app), 3)),
+                   f"sheets: Escape closes the {name} sheet (⌘1 hides Setup again)")
+            app.key("Key1", cmd=1)
+            wait_for(lambda: setup_shown(app), 3)
+            time.sleep(0.4)
+        expect(app.errors() == [], f"sheets: no errors in the app log {app.errors()[:3]}")
+
+
 CHECKS = {
     "start": check_start,
     "perf": check_perf,
+    "sheets": check_sheets,
 }
 
 
