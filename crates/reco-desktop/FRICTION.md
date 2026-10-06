@@ -294,6 +294,13 @@ frame when the room changes; check_m2 `toasts` looks at their pixels after
 a slide, a drag and a resize. The ask: redraw a cached view whose turtle
 moved, and let `/snap` report what was drawn.
 
+The same at start (Module 8, the owner saw it): the step badges in the
+viewer's empty state each had a cached draw list, drawn at the first
+frame's size; when the saved window size was restored the words moved
+and the badges stayed. They now draw in their parent's list (their
+digits still draw over the fill), and check_m0 `stepper` launches with a
+saved window size, since the checks' `--window-size` skips the restore.
+
 
 ## A view change re-sends both frames to the GPU (Module 8, reco-core)
 

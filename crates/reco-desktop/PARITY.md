@@ -712,6 +712,11 @@ and what became of it:
       `render_uploaded_to_view_draws_the_last_upload`,
       `a_pan_draws_what_sending_the_frame_again_would`,
       `a_new_frame_is_sent_before_it_is_drawn`.
+- [x] Found by the owner: the stepper's badges stayed where the first frame
+      drew them when the saved window size was restored at start (cached
+      badges; the checks' `--window-size` skipped that path). Evidence:
+      check_m0 `stepper` ("the badges are drawn where they are laid out"
+      at start, after slides, a resize and a restored window).
 - [x] The decoder's reopen and seek run off the UI thread (a Slint issue):
       the render worker owns the session. Evidence: the worker's tests
       (`seek_burst_lands_on_the_sum`); check_m1 "] seeks 5 s".
