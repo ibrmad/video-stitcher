@@ -37,8 +37,6 @@ pub struct DesktopSettings {
     pub export_events: bool,
     /// The codec recordings use: "h264", "hevc" or "av1".
     pub recording_codec: String,
-    /// The seam blend a new calibration starts with (0 to 0.3).
-    pub default_blend: f32,
     /// The AI tracking's model (an .onnx file), once chosen.
     pub ai_model_path: Option<PathBuf>,
     /// Send anonymous usage data (opt-in).
@@ -67,9 +65,6 @@ pub struct DesktopSettings {
 
 /// The smallest window the app opens at (the Slint app's minimum).
 pub const MIN_WINDOW: (f64, f64) = (720.0, 600.0);
-
-/// The widest seam blend Preferences offers.
-pub const MAX_BLEND: f32 = 0.3;
 
 /// Sessions the Recent menu keeps.
 pub const MAX_RECENT: usize = 8;
@@ -116,7 +111,6 @@ impl Default for DesktopSettings {
             export_replay: false,
             export_events: false,
             recording_codec: "h264".into(),
-            default_blend: 0.05,
             ai_model_path: None,
             telemetry_enabled: false,
             telemetry_client_id: None,
@@ -179,14 +173,6 @@ impl DesktopSettings {
         self.telemetry_client_id
             .get_or_insert_with(|| uuid::Uuid::new_v4().to_string())
             .clone()
-    }
-
-    /// The default seam blend, inside Preferences' range.
-    pub fn blend(&self) -> f32 {
-        if self.default_blend.is_nan() {
-            return 0.05;
-        }
-        self.default_blend.clamp(0.0, MAX_BLEND)
     }
 
     /// Remember the window after a change: its size while windowed, and
@@ -259,7 +245,6 @@ mod tests {
     fn preferences_default_as_the_slint_app() {
         let d = DesktopSettings::default();
         assert_eq!(d.recording_codec, "h264");
-        assert!((d.default_blend - 0.05).abs() < 1e-6);
         assert_eq!(d.ai_model_path, None);
         assert!(!d.telemetry_enabled, "usage data is opt-in");
         assert_eq!(d.telemetry_client_id, None, "no id until it is needed");
@@ -298,12 +283,15 @@ mod tests {
     }
 
     #[test]
-    fn the_default_blend_stays_in_its_range() {
-        let wide: DesktopSettings = serde_json::from_str(r#"{"default_blend":0.9}"#).unwrap();
-        assert!((wide.blend() - 0.3).abs() < 1e-6);
-        let negative: DesktopSettings = serde_json::from_str(r#"{"default_blend":-1}"#).unwrap();
-        assert_eq!(negative.blend(), 0.0);
-        assert!((DesktopSettings::default().blend() - 0.05).abs() < 1e-6);
+    fn a_file_from_before_loads_and_drops_the_blend_default() {
+        let old: DesktopSettings =
+            serde_json::from_str(r#"{"default_blend":0.12,"recording_codec":"hevc"}"#).unwrap();
+        assert_eq!(old.recording_codec, "hevc");
+        let written = serde_json::to_string(&old).unwrap();
+        assert!(
+            !written.contains("default_blend"),
+            "Preferences has no seam blend any more: {written}"
+        );
     }
 
     #[test]

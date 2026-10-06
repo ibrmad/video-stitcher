@@ -79,7 +79,7 @@ impl App {
             ),
             skip_start: self.calibration_start(),
             skip_end: slider(ids!(cal_skip_end), defaults.skip_end),
-            blend: self.settings.blend(),
+            blend: defaults.blend,
         }
     }
 

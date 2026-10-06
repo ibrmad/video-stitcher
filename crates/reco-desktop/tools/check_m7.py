@@ -192,105 +192,86 @@ def open_prefs(app):
     if not wait_for(lambda: app.rect("prefs_save"), 5):
         return None
     time.sleep(0.3)
-    return face(app, "prefs_export_codec")
+    return face(app, "prefs_record_codec")
 
 
 def check_prefs():
-    """Preferences opens from the app menu on the saved values; Cancel and
-    Escape keep nothing; a missing folder or a model that isn't .onnx is
-    refused with the reason; Save keeps and applies every choice, and turns
-    usage data on (an app_open event, no network); a new launch shows them."""
+    """Preferences holds only app-wide settings: the recording codec and
+    folder, and usage data (the export defaults, recording quality, seam
+    blend and AI model live where they are used). It opens from the app
+    menu on the saved values; Cancel and Escape keep nothing; a missing
+    folder is refused with the reason; Save keeps and applies every choice,
+    and turns usage data on (an app_open event, no network); a new launch
+    shows them."""
     config = tempfile.mkdtemp(prefix="reco-m7-config-")
     folder = tempfile.mkdtemp(prefix="reco-m7-recordings-")
-    model = os.path.join(tempfile.mkdtemp(prefix="reco-m7-model-"), "yolo.onnx")
-    with open(model, "wb") as f:
-        f.write(b"onnx")
-    with launch(config, answers={"recording_folder": [folder], "model": [model]}) as app:
+    with launch(config, answers={"recording_folder": [folder]}) as app:
         colour = open_prefs(app)
         expect(colour is not None, "prefs: the app menu opens Preferences")
-        expect(text_of(app, "prefs_export_codec") == "H.264" and text_of(app, "prefs_export_quality") == "Balanced",
-               "prefs: export defaults show (H.264, Balanced)")
-        expect(text_of(app, "prefs_folder") == "" and text_of(app, "prefs_model") == "",
-               "prefs: no recording folder or model yet")
-        expect(text_of(app, "prefs_blend_value") == "0.05", f"prefs: the seam blend shows 0.05 ({text_of(app, 'prefs_blend_value')})")
+        elsewhere = [wid for wid in ("prefs_export_codec", "prefs_export_quality", "prefs_record_quality",
+                                     "prefs_blend", "prefs_model") if app.rect(wid)]
+        expect(not elsewhere, f"prefs: only app-wide settings, the rest live where they are used ({elsewhere})")
+        expect(text_of(app, "prefs_record_codec") == "H.264",
+               f"prefs: the recording codec shows H.264 ({text_of(app, 'prefs_record_codec')})")
+        expect(text_of(app, "prefs_folder") == "", "prefs: no recording folder yet")
         expect(checked(app, "prefs_telemetry") is False, "prefs: usage data is off until turned on")
         gap = mark_gap(app, "prefs_telemetry")
         expect(gap >= 6, f"prefs: the checkbox's text clears its box ({gap} pt)")
         save_shot(app, "prefs")
 
-        pick_row(app, "prefs_export_quality", 2)
-        expect(text_of(app, "prefs_export_quality") == "High", "prefs: a change shows in the sheet")
+        pick_row(app, "prefs_record_codec", 1)
+        expect(text_of(app, "prefs_record_codec") != "H.264", "prefs: a change shows in the sheet")
         click(app, "prefs_cancel")
-        expect(bool(wait_for(lambda: not shows(app, "prefs_export_codec", colour), 3)), "prefs: Cancel closes it")
-        expect(saved(config).get("export_quality") in (None, "balanced"), "prefs: Cancel keeps nothing")
+        expect(bool(wait_for(lambda: not shows(app, "prefs_record_codec", colour), 3)), "prefs: Cancel closes it")
+        expect(saved(config).get("recording_codec") in (None, "h264"), "prefs: Cancel keeps nothing")
         open_prefs(app)
-        expect(text_of(app, "prefs_export_quality") == "Balanced",
-               f"prefs: reopened, the change is gone ({text_of(app, 'prefs_export_quality')})")
-        pick_row(app, "prefs_record_quality", 2)
+        expect(text_of(app, "prefs_record_codec") == "H.264",
+               f"prefs: reopened, the change is gone ({text_of(app, 'prefs_record_codec')})")
+        pick_row(app, "prefs_record_codec", 1)
         app.key("Escape")
-        expect(bool(wait_for(lambda: not shows(app, "prefs_export_codec", colour), 3)), "prefs: Escape closes it")
+        expect(bool(wait_for(lambda: not shows(app, "prefs_record_codec", colour), 3)), "prefs: Escape closes it")
         open_prefs(app)
-        expect(text_of(app, "prefs_record_quality") == "Balanced",
-               f"prefs: Escape keeps nothing ({text_of(app, 'prefs_record_quality')})")
+        expect(text_of(app, "prefs_record_codec") == "H.264",
+               f"prefs: Escape keeps nothing ({text_of(app, 'prefs_record_codec')})")
 
         type_into(app, "prefs_folder", "/no/such/folder")
         click(app, "prefs_save")
         expect(wait_for(lambda: text_of(app, "prefs_error_text") == "That recording folder doesn't exist.", 3) is not None,
                f"prefs: a missing folder is refused ({text_of(app, 'prefs_error_text')})")
-        expect(shows(app, "prefs_export_codec", colour), "prefs: the sheet stays open")
+        expect(shows(app, "prefs_record_codec", colour), "prefs: the sheet stays open")
         click(app, "prefs_folder_browse")
         expect(wait_for(lambda: text_of(app, "prefs_folder") == folder, 3) is not None,
                f"prefs: Choose… sets the folder ({text_of(app, 'prefs_folder')})")
-        type_into(app, "prefs_model", model + ".txt")
-        click(app, "prefs_save")
-        expect(wait_for(lambda: text_of(app, "prefs_error_text") == "The AI model must be an .onnx file.", 3) is not None,
-               f"prefs: a model that isn't .onnx is refused ({text_of(app, 'prefs_error_text')})")
-        click(app, "prefs_model_browse")
-        expect(wait_for(lambda: text_of(app, "prefs_model") == model, 3) is not None,
-               f"prefs: Choose… sets the model ({text_of(app, 'prefs_model')})")
         save_shot(app, "prefs-refused")
 
-        pick_row(app, "prefs_export_codec", 1)
-        pick_row(app, "prefs_export_quality", 2)
-        pick_row(app, "prefs_record_codec", 2)
-        pick_row(app, "prefs_record_quality", 0)
-        drag(app, "prefs_blend", 0.5)
-        blend = text_of(app, "prefs_blend_value")
-        expect(blend not in (None, "0.05"), f"prefs: dragging the seam blend shows its value ({blend})")
+        pick_row(app, "prefs_record_codec", 1)
         click(app, "prefs_telemetry")
         expect(checked(app, "prefs_telemetry") is True, "prefs: usage data ticks on")
-        codecs = (text_of(app, "prefs_export_codec"), text_of(app, "prefs_record_codec"))
+        codec = text_of(app, "prefs_record_codec")
         click(app, "prefs_save")
-        expect(bool(wait_for(lambda: not shows(app, "prefs_export_codec", colour), 3)), "prefs: Save closes it")
+        expect(bool(wait_for(lambda: not shows(app, "prefs_record_codec", colour), 3)), "prefs: Save closes it")
         kept = saved(config)
-        expect((kept.get("export_codec"), kept.get("export_quality")) == (codecs[0].lower(), "high"),
-               f"prefs: export defaults kept ({kept.get('export_codec')}, {kept.get('export_quality')})")
-        expect((kept.get("recording_codec"), kept.get("recording_quality")) == (codecs[1].lower(), "fast"),
-               f"prefs: recording codec and quality kept ({kept.get('recording_codec')}, {kept.get('recording_quality')})")
-        expect(kept.get("recording_folder") == folder and kept.get("ai_model_path") == model,
-               "prefs: the folder and the model are kept")
-        expect(blend is not None and abs(kept.get("default_blend", -1) - float(blend)) < 0.006,
-               f"prefs: the seam blend is kept ({kept.get('default_blend')})")
+        expect(kept.get("recording_codec") == (codec or "").lower(),
+               f"prefs: the recording codec is kept ({kept.get('recording_codec')})")
+        expect(kept.get("recording_folder") == folder, "prefs: the folder is kept")
         expect(kept.get("telemetry_enabled") is True and len(kept.get("telemetry_client_id") or "") == 36,
                "prefs: usage data is on, under a random id")
         expect(wait_for(lambda: logged(app, "network: would send app_open"), 3) is not None,
                "prefs: turning it on sends app_open (no network in checks)")
-        expect(text_of(app, "record_quality") == "Fast", f"prefs: the view bar shows the recording quality ({text_of(app, 'record_quality')})")
         expect(not app.errors(), f"prefs: no errors in the app log {app.errors()[:3]}")
     with launch(config) as app:
         expect(wait_for(lambda: logged(app, "network: would send app_open"), 10) is not None,
                "prefs: with usage data on, a launch sends app_open")
         open_prefs(app)
-        expect(text_of(app, "prefs_folder") == folder and text_of(app, "prefs_model") == model,
-               "prefs: a new launch shows the folder and the model")
-        expect(text_of(app, "prefs_export_quality") == "High" and text_of(app, "prefs_record_quality") == "Fast",
-               "prefs: and the qualities")
+        expect(text_of(app, "prefs_folder") == folder and text_of(app, "prefs_record_codec") == codec,
+               "prefs: a new launch shows the codec and the folder")
         expect(checked(app, "prefs_telemetry") is True, "prefs: and usage data on")
         save_shot(app, "prefs-saved")
 
 
 def check_blend():
-    """A new calibration starts with Preferences' seam blend."""
+    """A first calibration starts at seam blend 0.05: a default saved by an
+    older Preferences (it had one) no longer applies."""
     config = tempfile.mkdtemp(prefix="reco-m7-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"default_blend": 0.12}, f)
@@ -307,8 +288,8 @@ def check_blend():
         app.click_id("add_right")
         wait_for(lambda: app.enabled("auto_calibrate"), 15)
         app.click_id("auto_calibrate")
-        expect(wait_for(lambda: logged(app, "blend 0.12"), 10) is not None,
-               "blend: Auto-calibrate starts with the saved seam blend")
+        expect(wait_for(lambda: logged(app, "blend 0.05"), 10) is not None,
+               "blend: Auto-calibrate starts at 0.05, whatever an old saved default said")
         click(app, "cancel_calibration")
         wait_for(lambda: text_of(app, "calibration_status") == "Not calibrated", 30)
     expect(not os.path.exists(os.path.join(folder, "cam0_calibration.json")), "blend: nothing saved beside the videos")

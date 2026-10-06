@@ -1,13 +1,15 @@
-//! Preferences in the App: the sheet shows the saved settings; Save checks
-//! the typed folder and model, keeps everything and applies it; Cancel,
-//! Escape or a press outside leaves the settings as they were (the next
-//! open shows them again).
+//! Preferences in the App: the app-wide settings (the recording codec and
+//! folder, and usage data). Settings with a home elsewhere stay there: the
+//! export sheet remembers its own codec, quality and AI model, the view
+//! bar has the recording quality, and Adjust the seam blend. Save checks
+//! the typed folder, keeps everything and applies it; Cancel, Escape or a
+//! press outside leaves the settings as they were (the next open shows
+//! them again).
 
 use std::path::{Path, PathBuf};
 
 use makepad_widgets::*;
-use reco_app::export::{self, QUALITIES};
-use reco_app::recording::RecordingQuality;
+use reco_app::export;
 use reco_app::telemetry::UsageEvent;
 
 use crate::project_view::Pick;
@@ -25,25 +27,6 @@ pub(crate) fn checked_folder(typed: &str) -> Result<Option<PathBuf>, String> {
         return Err("That recording folder doesn't exist.".into());
     }
     Ok(Some(folder))
-}
-
-/// The AI model typed in the sheet: none, or an .onnx file that exists.
-pub(crate) fn checked_model(typed: &str) -> Result<Option<PathBuf>, String> {
-    let typed = typed.trim();
-    if typed.is_empty() {
-        return Ok(None);
-    }
-    let model = PathBuf::from(typed);
-    let onnx = model
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("onnx"));
-    if !onnx {
-        return Err("The AI model must be an .onnx file.".into());
-    }
-    if !model.is_file() {
-        return Err("That model file doesn't exist.".into());
-    }
-    Ok(Some(model))
 }
 
 /// A path for a text field ("" for none).
@@ -68,38 +51,19 @@ impl App {
     /// Open the sheet on the saved settings.
     pub(crate) fn open_preferences(&mut self, cx: &mut Cx) {
         let settings = self.settings.clone();
-        let codecs = self.prefs_codecs(&[&settings.export_codec, &settings.recording_codec]);
+        let codecs = self.prefs_codecs(&[&settings.recording_codec]);
         let labels: Vec<String> = codecs.iter().map(|c| export::codec_label(c)).collect();
-        for (id, saved) in [
-            (ids!(prefs_export_codec), &settings.export_codec),
-            (ids!(prefs_record_codec), &settings.recording_codec),
-        ] {
-            let dropdown = self.ui.drop_down(cx, id);
-            dropdown.set_labels(cx, labels.clone());
-            let at = codecs.iter().position(|c| c == saved).unwrap_or(0);
-            dropdown.set_selected_item(cx, at);
-        }
-        self.prefs_codec_list = codecs;
-        let quality = QUALITIES
+        let dropdown = self.ui.drop_down(cx, ids!(prefs_record_codec));
+        dropdown.set_labels(cx, labels);
+        let at = codecs
             .iter()
-            .position(|q| *q == settings.export_quality)
-            .unwrap_or(1);
-        self.ui
-            .drop_down(cx, ids!(prefs_export_quality))
-            .set_selected_item(cx, quality);
-        self.ui
-            .drop_down(cx, ids!(prefs_record_quality))
-            .set_selected_item(cx, settings.quality().index());
+            .position(|c| *c == settings.recording_codec)
+            .unwrap_or(0);
+        dropdown.set_selected_item(cx, at);
+        self.prefs_codec_list = codecs;
         self.ui
             .text_input(cx, ids!(prefs_folder))
             .set_text(cx, &path_text(settings.recording_folder.as_deref()));
-        self.ui
-            .slider(cx, ids!(prefs_blend))
-            .set_value(cx, f64::from(settings.blend()));
-        self.show_prefs_blend(cx, f64::from(settings.blend()));
-        self.ui
-            .text_input(cx, ids!(prefs_model))
-            .set_text(cx, &path_text(settings.ai_model_path.as_deref()));
         self.ui.check_box(cx, ids!(prefs_telemetry)).set_active(
             cx,
             settings.telemetry_enabled,
@@ -109,10 +73,6 @@ impl App {
         self.ui.modal(cx, ids!(prefs_sheet)).open(cx);
     }
 
-    fn show_prefs_blend(&mut self, cx: &mut Cx, blend: f64) {
-        self.set_label(cx, ids!(prefs_blend_value), &format!("{blend:.2}"));
-    }
-
     fn show_prefs_error(&mut self, cx: &mut Cx, error: Option<&str>) {
         self.set_visible(cx, ids!(prefs_error), error.is_some());
         self.set_label(cx, ids!(prefs_error_text), error.unwrap_or(""));
@@ -120,22 +80,12 @@ impl App {
 
     /// The sheet's controls.
     pub(crate) fn prefs_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        if let Some(blend) = self.ui.slider(cx, ids!(prefs_blend)).slided(actions) {
-            self.show_prefs_blend(cx, blend);
-        }
         if self
             .ui
             .button(cx, ids!(prefs_folder_browse))
             .clicked(actions)
         {
             self.pick(cx, Pick::RecordingFolder);
-        }
-        if self
-            .ui
-            .button(cx, ids!(prefs_model_browse))
-            .clicked(actions)
-        {
-            self.pick(cx, Pick::Model);
         }
         if self.ui.button(cx, ids!(prefs_cancel)).clicked(actions) {
             self.ui.modal(cx, ids!(prefs_sheet)).close(cx);
@@ -145,75 +95,45 @@ impl App {
         }
     }
 
-    /// A folder or model chosen in a dialog, into its field.
-    pub(crate) fn prefs_path_picked(&mut self, cx: &mut Cx, pick: Pick, path: &Path) {
-        let field = match pick {
-            Pick::RecordingFolder => ids!(prefs_folder),
-            _ => ids!(prefs_model),
-        };
+    /// The recording folder chosen in a dialog, into its field.
+    pub(crate) fn prefs_folder_picked(&mut self, cx: &mut Cx, path: &Path) {
         self.ui
-            .text_input(cx, field)
+            .text_input(cx, ids!(prefs_folder))
             .set_text(cx, &path.display().to_string());
         self.show_prefs_error(cx, None);
     }
 
-    /// Check the typed paths, then keep and apply everything.
+    /// Check the typed folder, then keep and apply everything.
     fn save_preferences(&mut self, cx: &mut Cx) {
-        let folder = checked_folder(&self.ui.text_input(cx, ids!(prefs_folder)).text());
-        let model = checked_model(&self.ui.text_input(cx, ids!(prefs_model)).text());
-        let (folder, model) = match (folder, model) {
-            (Ok(folder), Ok(model)) => (folder, model),
-            (Err(why), _) | (_, Err(why)) => {
+        let folder = match checked_folder(&self.ui.text_input(cx, ids!(prefs_folder)).text()) {
+            Ok(folder) => folder,
+            Err(why) => {
                 self.show_prefs_error(cx, Some(&why));
                 return;
             }
         };
-        let codec = |app: &Self, cx: &mut Cx, id: &[LiveId]| {
-            let at = app.ui.drop_down(cx, id).selected_item();
-            app.prefs_codec_list
-                .get(at)
-                .cloned()
-                .unwrap_or_else(|| "h264".into())
-        };
-        let export_codec = codec(self, cx, ids!(prefs_export_codec));
-        let recording_codec = codec(self, cx, ids!(prefs_record_codec));
-        let export_quality = QUALITIES
-            .get(
-                self.ui
-                    .drop_down(cx, ids!(prefs_export_quality))
-                    .selected_item(),
-            )
-            .copied()
-            .unwrap_or("balanced");
-        let recording_quality = RecordingQuality::from_index(
-            self.ui
-                .drop_down(cx, ids!(prefs_record_quality))
-                .selected_item(),
-        );
-        let blend = self
+        let at = self
             .ui
-            .slider(cx, ids!(prefs_blend))
-            .value()
-            .unwrap_or(0.05);
+            .drop_down(cx, ids!(prefs_record_codec))
+            .selected_item();
+        let recording_codec = self
+            .prefs_codec_list
+            .get(at)
+            .cloned()
+            .unwrap_or_else(|| "h264".into());
         let telemetry = self.ui.check_box(cx, ids!(prefs_telemetry)).active(cx);
 
         let turned_on = telemetry && !self.settings.telemetry_enabled;
         let s = &mut self.settings;
-        s.export_codec = export_codec;
-        s.export_quality = export_quality.into();
         s.recording_codec = recording_codec;
-        s.set_quality(recording_quality);
         s.recording_folder = folder;
-        s.default_blend = blend as f32;
-        s.ai_model_path = model;
         s.telemetry_enabled = telemetry;
         log!(
-            "preferences: export {} {}, recording {} {}, blend {:.2}, usage data {}",
-            s.export_codec,
-            s.export_quality,
+            "preferences: recording {} to {}, usage data {}",
             s.recording_codec,
-            s.recording_quality,
-            s.default_blend,
+            s.recording_folder
+                .as_deref()
+                .map_or("beside the left video".into(), |f| f.display().to_string()),
             if telemetry { "on" } else { "off" }
         );
         self.save_settings();
@@ -249,25 +169,5 @@ mod tests {
         let file = temp_file("not-a-folder.txt");
         assert_eq!(checked_folder(&file.display().to_string()), missing);
         let _ = std::fs::remove_file(file);
-    }
-
-    #[test]
-    fn the_model_is_an_onnx_file_that_exists() {
-        assert_eq!(checked_model(""), Ok(None), "no model");
-        let model = temp_file("yolo.ONNX");
-        assert_eq!(
-            checked_model(&model.display().to_string()),
-            Ok(Some(model.clone()))
-        );
-        assert_eq!(
-            checked_model("/no/such/model.onnx"),
-            Err("That model file doesn't exist.".to_string())
-        );
-        let text = temp_file("notes.txt");
-        assert_eq!(
-            checked_model(&text.display().to_string()),
-            Err("The AI model must be an .onnx file.".to_string())
-        );
-        let _ = (std::fs::remove_file(model), std::fs::remove_file(text));
     }
 }

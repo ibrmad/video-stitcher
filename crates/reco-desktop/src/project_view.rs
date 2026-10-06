@@ -40,8 +40,6 @@ pub(crate) enum Pick {
     LensFile,
     /// Where recordings go (a folder; Preferences).
     RecordingFolder,
-    /// The AI tracking's model (Preferences).
-    Model,
     /// The AI tracking's model (the export sheet).
     ExportModel,
 }
@@ -55,7 +53,6 @@ impl Pick {
             Pick::Export => live_id!(pick_export),
             Pick::LensFile => live_id!(pick_lens),
             Pick::RecordingFolder => live_id!(pick_recording_folder),
-            Pick::Model => live_id!(pick_model),
             Pick::ExportModel => live_id!(pick_export_model),
         }
     }
@@ -68,7 +65,6 @@ impl Pick {
             Pick::Export,
             Pick::LensFile,
             Pick::RecordingFolder,
-            Pick::Model,
             Pick::ExportModel,
         ]
         .into_iter()
@@ -84,7 +80,7 @@ impl Pick {
             Pick::Export => "export",
             Pick::LensFile => "lens",
             Pick::RecordingFolder => "recording_folder",
-            Pick::Model | Pick::ExportModel => "model",
+            Pick::ExportModel => "model",
         }
     }
 }
@@ -144,7 +140,7 @@ impl App {
                 .set_title("Load a lens profile".into())
                 .add_filter("Lens profile".into(), vec!["json".into()]),
             Pick::RecordingFolder => return self.pick_recording_folder(cx),
-            Pick::Model | Pick::ExportModel => FileDialog::new()
+            Pick::ExportModel => FileDialog::new()
                 .set_title("Choose the AI tracking's model".into())
                 .add_filter("ONNX model".into(), vec!["onnx".into()]),
         };
@@ -194,9 +190,9 @@ impl App {
                 }
                 return;
             }
-            Pick::RecordingFolder | Pick::Model => {
+            Pick::RecordingFolder => {
                 if let Some(path) = paths.first() {
-                    self.prefs_path_picked(cx, pick, path);
+                    self.prefs_folder_picked(cx, path);
                 }
                 return;
             }

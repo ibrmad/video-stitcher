@@ -42,7 +42,8 @@ pub struct CalibrationOptions {
     pub skip_start: f64,
     /// Seconds skipped at the end.
     pub skip_end: f64,
-    /// The seam blend a new calibration is saved with (Preferences).
+    /// The seam blend a first calibration is saved with (a recalibration
+    /// keeps its own).
     pub blend: f32,
 }
 
