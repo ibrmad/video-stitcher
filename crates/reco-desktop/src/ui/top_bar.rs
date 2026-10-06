@@ -16,8 +16,14 @@ script_mod! {
     mod.widgets.RecoTopBar = View{
         width: Fill height: Fill flow: Right spacing: theme.reco_gap_s
         align: Align{y: 0.5}
-        // Room for the macOS window buttons.
-        padding: Inset{left: theme.reco_caption_inset right: theme.reco_gap_s}
+        // "Reco" starts on the content edge (the button pads the rest).
+        padding: Inset{left: theme.reco_pad - theme.reco_gap_s right: theme.reco_gap_s}
+        // Room for the macOS window buttons, hidden on other systems: on
+        // macOS "Reco" starts at the caption inset.
+        window_buttons_room := View{
+            width: theme.reco_caption_inset - theme.reco_pad
+            height: Fit
+        }
         // The app menu holds what Rerun keeps there: help, preferences, the
         // bug report and the version.
         app_menu := RecoMenu{

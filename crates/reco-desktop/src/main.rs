@@ -102,7 +102,11 @@ script_mod! {
                 window.title: "Reco"
                 window.inner_size: vec2(1280, 820)
                 caption_bar +: {
+                    // A fixed height: off macOS the bar has no window
+                    // buttons to size it, and a filling label in a fitting
+                    // bar comes out 0 tall (the top bar vanished on Linux).
                     caption_label +: {
+                        height: theme.reco_bar_height
                         flow: Right spacing: 0 align: Align{y: 0.5}
                         caption_icon +: {width: 0 height: 0 margin: 0}
                         label +: {visible: false}
@@ -764,6 +768,12 @@ impl App {
 impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
         self.log_cursor = std::env::var_os(LOG_CURSOR).is_some();
+        // The top bar keeps room for the window buttons only on macOS.
+        if !matches!(cx.os_type(), OsType::Macos) {
+            self.ui
+                .view(cx, ids!(window_buttons_room))
+                .set_visible(cx, false);
+        }
         self.launched_at = std::env::var(perf::LAUNCHED_AT).ok();
         match Args::parse(std::env::args().skip(1)) {
             Ok(args) => self.args = args,
