@@ -44,7 +44,7 @@ pub fn auto_export(env: impl Fn(&str) -> Option<String>) -> Option<AutoExport> {
     })
 }
 
-/// `RECO_AUTOLOAD`'s "left[;left2],right[;right2],cal.json" as the command
+/// `RECO_AUTOLOAD`'s `left[;left2],right[;right2],cal.json` as the command
 /// line's `--left/--right/--calibration` (`None` when unset or malformed).
 pub fn autoload_args(env: impl Fn(&str) -> Option<String>) -> Option<Vec<String>> {
     let raw = env("RECO_AUTOLOAD")?;
