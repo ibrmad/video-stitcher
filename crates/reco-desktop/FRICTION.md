@@ -254,3 +254,17 @@ each pointer event over a slider (`App::slider_arrow`). It finds the
 sliders through the widget tree: `find_widgets_from_point` from the root
 returns nothing. The ask: a `cursor` property on `Slider`, a readout that
 can be turned off, and a hit search that works from the root.
+
+## The menu bar's shortcuts didn't fire (UI pass, Makepad)
+
+The owner's ⌘1, ⌘2, ⌘3 and ⌘, did nothing, on the ABC layout. Each is a
+menu item with its key equivalent (Makepad's `WindowMenu` builds the
+`NSMenu` on its first draw, and a fired item marks the press so the window
+doesn't see it), and the path reads right, but the checks can't press a
+real key: the remote injects keys as `Event::KeyDown`, past AppKit, and a
+`--remote` run never takes focus. So no check had pressed them, and the
+cause on the owner's Mac is not known. The app now also reads its menu
+shortcuts as keys (`keys::app_shortcut`), as ⌘S already was; a press the
+menu takes never reaches the window, so nothing runs twice. check_m7
+`keys` presses each. The ask: a way to drive menu key equivalents from the
+remote, so a check covers the AppKit path.

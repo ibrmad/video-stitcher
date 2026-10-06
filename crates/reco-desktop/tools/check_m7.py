@@ -561,7 +561,33 @@ def check_persist():
     # over the display. remember_window's test and a one-off probe cover it.
 
 
-CHECKS = {"prefs": check_prefs, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug,
+def check_keys():
+    """The menu bar's shortcuts work as keys too (the owner pressed ⌘1, ⌘2,
+    ⌘3 and ⌘, and nothing happened): each toggles its panel or opens
+    Preferences, wherever the keyboard is."""
+    config = tempfile.mkdtemp(prefix="reco-m7-keys-")
+    folder = tempfile.mkdtemp(prefix="reco-m7-keys-cal-")
+    cal = os.path.join(folder, "match.json")
+    shutil.copyfile(FAST[2], cal)
+    with launch(config, files=(FAST[0], FAST[1], cal)) as app:
+        expect(bool(wait_for(lambda: app.rect("preview"), 30)), "keys: the preview opens")
+        time.sleep(0.5)
+        for key, shown, name in (("Key1", "setup_header", "Setup"), ("Key2", "adjust_header", "Adjust"),
+                                 ("Key3", "lanes", "the time panel's lanes")):
+            expect(app.rect(shown) is not None, f"keys: {name} shows to start")
+            app.key(key, cmd=1)
+            gone = wait_for(lambda: app.rect(shown) is None, 3)
+            expect(bool(gone), f"keys: ⌘{key[-1]} hides {name}")
+            app.key(key, cmd=1)
+            back = wait_for(lambda: app.rect(shown) is not None, 3)
+            expect(bool(back), f"keys: ⌘{key[-1]} again shows it")
+        app.key("Comma", cmd=1)
+        expect(bool(wait_for(lambda: app.rect("prefs_save"), 5)), "keys: ⌘, opens Preferences")
+        app.key("escape")
+        expect(not app.errors(), f"keys: no errors in the app log {app.errors()[:3]}")
+
+
+CHECKS = {"prefs": check_prefs, "keys": check_keys, "blend": check_blend, "shortcuts": check_shortcuts, "bug": check_bug,
           "usage": check_usage, "update": check_update, "persist": check_persist}
 
 

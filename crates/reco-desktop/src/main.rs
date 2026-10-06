@@ -691,6 +691,17 @@ impl App {
         }
     }
 
+    /// A menu shortcut, from the menu bar or read as a key.
+    fn run_shortcut(&mut self, cx: &mut Cx, shortcut: keys::AppShortcut) {
+        match shortcut {
+            keys::AppShortcut::Save => self.save_calibration(cx),
+            keys::AppShortcut::Preferences => self.open_preferences(cx),
+            keys::AppShortcut::ToggleSetup => self.toggle(cx, Panel::Media),
+            keys::AppShortcut::ToggleAdjust => self.toggle(cx, Panel::Inspector),
+            keys::AppShortcut::ToggleTime => self.toggle_timeline(cx),
+        }
+    }
+
     fn toggle_timeline(&mut self, cx: &mut Cx) {
         self.timeline_folded = !self.timeline_folded;
         self.apply_shell(cx);
@@ -790,8 +801,8 @@ impl AppMain for App {
         match event {
             Event::KeyDown(ke) => {
                 self.pointer_input = false;
-                if keys::is_save_shortcut(ke.key_code, &ke.modifiers) {
-                    self.save_calibration(cx);
+                if let Some(shortcut) = keys::app_shortcut(ke.key_code, &ke.modifiers) {
+                    self.run_shortcut(cx, shortcut);
                 }
             }
             Event::MouseDown(_) | Event::MouseUp(_) => self.pointer_input = true,
@@ -811,20 +822,18 @@ impl AppMain for App {
                 self.shell.fit_width(ge.new_geom.inner_size.x);
                 self.apply_shell(cx);
             }
-            Event::MacosMenuCommand(item) if *item == live_id!(toggle_media_menu) => {
-                self.toggle(cx, Panel::Media);
-            }
-            Event::MacosMenuCommand(item) if *item == live_id!(toggle_inspector_menu) => {
-                self.toggle(cx, Panel::Inspector);
-            }
-            Event::MacosMenuCommand(item) if *item == live_id!(toggle_timeline_menu) => {
-                self.toggle_timeline(cx);
-            }
-            Event::MacosMenuCommand(item) if *item == live_id!(save_menu) => {
-                self.save_calibration(cx);
-            }
-            Event::MacosMenuCommand(item) if *item == live_id!(preferences_menu) => {
-                self.open_preferences(cx);
+            Event::MacosMenuCommand(item) => {
+                let shortcut = match *item {
+                    live_id!(toggle_media_menu) => Some(keys::AppShortcut::ToggleSetup),
+                    live_id!(toggle_inspector_menu) => Some(keys::AppShortcut::ToggleAdjust),
+                    live_id!(toggle_timeline_menu) => Some(keys::AppShortcut::ToggleTime),
+                    live_id!(save_menu) => Some(keys::AppShortcut::Save),
+                    live_id!(preferences_menu) => Some(keys::AppShortcut::Preferences),
+                    _ => None,
+                };
+                if let Some(shortcut) = shortcut {
+                    self.run_shortcut(cx, shortcut);
+                }
             }
             Event::NetworkResponses(responses) => self.network_responses(cx, responses),
             Event::Signal => {

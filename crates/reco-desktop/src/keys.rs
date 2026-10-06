@@ -38,17 +38,43 @@ pub const KEY_ZOOM: f32 = 5.0;
 /// Seconds a bracket key seeks.
 pub const BRACKET_SEEK: f64 = 5.0;
 
-/// Whether `key` is Save (⌘S on macOS, Ctrl+S elsewhere): it saves the
-/// calibration wherever the keyboard is. The macOS menu bar has it too;
-/// the window sees the key as well, so injected keys (the checks) and
-/// systems without a menu bar save the same way.
-pub fn is_save_shortcut(key: KeyCode, modifiers: &KeyModifiers) -> bool {
+/// What a menu shortcut asks of the app.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AppShortcut {
+    /// ⌘S: save the calibration.
+    Save,
+    /// ⌘,: Preferences.
+    Preferences,
+    /// ⌘1: the Setup panel.
+    ToggleSetup,
+    /// ⌘2: the Adjust panel.
+    ToggleAdjust,
+    /// ⌘3: the time panel's lanes.
+    ToggleTime,
+}
+
+/// The menu shortcut `key` makes with ⌘ (Ctrl off macOS) and nothing else
+/// held. The macOS menu bar lists these, and the app also reads them as
+/// keys, wherever the keyboard is: injected keys (the checks) and a menu
+/// whose key equivalents don't fire (as on the owner's Mac) work the same.
+/// A key the menu takes never reaches the window, so nothing runs twice.
+pub fn app_shortcut(key: KeyCode, modifiers: &KeyModifiers) -> Option<AppShortcut> {
     let command = if cfg!(target_os = "macos") {
         modifiers.logo && !modifiers.control
     } else {
         modifiers.control && !modifiers.logo
     };
-    key == KeyCode::KeyS && command && !modifiers.shift && !modifiers.alt
+    if !command || modifiers.shift || modifiers.alt {
+        return None;
+    }
+    Some(match key {
+        KeyCode::KeyS => AppShortcut::Save,
+        KeyCode::Comma => AppShortcut::Preferences,
+        KeyCode::Key1 => AppShortcut::ToggleSetup,
+        KeyCode::Key2 => AppShortcut::ToggleAdjust,
+        KeyCode::Key3 => AppShortcut::ToggleTime,
+        _ => return None,
+    })
 }
 
 /// The command for `key`, or `None`. Keys held with ⌘, Ctrl or Option are
@@ -287,27 +313,51 @@ mod tests {
     }
 
     #[test]
-    fn command_s_saves_the_calibration() {
+    fn command_keys_are_the_menu_shortcuts() {
         let mac = cfg!(target_os = "macos");
         let command = KeyModifiers {
             logo: mac,
             control: !mac,
             ..KeyModifiers::default()
         };
-        assert!(is_save_shortcut(KeyCode::KeyS, &command));
-        assert!(
-            !is_save_shortcut(KeyCode::KeyS, &KeyModifiers::default()),
+        for (key, shortcut, listed) in [
+            (KeyCode::KeyS, AppShortcut::Save, "⌘S"),
+            (KeyCode::Comma, AppShortcut::Preferences, "⌘,"),
+            (KeyCode::Key1, AppShortcut::ToggleSetup, "⌘1"),
+            (KeyCode::Key2, AppShortcut::ToggleAdjust, "⌘2"),
+            (KeyCode::Key3, AppShortcut::ToggleTime, "⌘3"),
+        ] {
+            assert_eq!(app_shortcut(key, &command), Some(shortcut), "{listed}");
+            assert!(
+                SHORTCUTS
+                    .iter()
+                    .any(|s| s.menu && s.keys.split_whitespace().any(|k| k == listed)),
+                "the sheet lists {listed} with the menus' keys"
+            );
+        }
+        assert_eq!(
+            app_shortcut(KeyCode::KeyS, &KeyModifiers::default()),
+            None,
             "S alone does nothing"
         );
-        assert!(!is_save_shortcut(KeyCode::KeyA, &command));
+        assert_eq!(app_shortcut(KeyCode::KeyA, &command), None);
         let shifted = KeyModifiers {
             shift: true,
             ..command
         };
-        assert!(!is_save_shortcut(KeyCode::KeyS, &shifted), "⇧⌘S isn't Save");
-        assert!(
-            SHORTCUTS.iter().any(|s| s.keys == "⌘S" && s.menu),
-            "the sheet lists it with the menus' keys"
+        assert_eq!(
+            app_shortcut(KeyCode::KeyS, &shifted),
+            None,
+            "⇧⌘S isn't Save"
+        );
+        let option = KeyModifiers {
+            alt: true,
+            ..command
+        };
+        assert_eq!(
+            app_shortcut(KeyCode::Key1, &option),
+            None,
+            "⌥⌘1 isn't Setup"
         );
     }
 
