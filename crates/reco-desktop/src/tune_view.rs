@@ -100,6 +100,12 @@ impl App {
         self.show_outline(cx, values.roi_points);
         let unsaved = values.dirty && self.project.calibration.is_some();
         self.set_visible(cx, ids!(calibration_unsaved), unsaved);
+        // Reset layout only when there is a layout to go back to.
+        let changed = self
+            .loaded_values
+            .as_ref()
+            .is_some_and(|loaded| values.layout_differs(loaded));
+        self.set_button_enabled(cx, ids!(reset_layout), changed);
         self.latest_values = Some(values);
     }
 

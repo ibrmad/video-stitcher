@@ -109,9 +109,53 @@ pub struct CalibrationValues {
     pub opened: u64,
 }
 
+impl CalibrationValues {
+    /// The layout (overlap, axis offset, vertical shift: what Reset layout
+    /// restores) differs from `loaded`'s.
+    pub fn layout_differs(&self, loaded: &CalibrationValues) -> bool {
+        (self.intersect, self.axis_offset, self.x_ty)
+            != (loaded.intersect, loaded.axis_offset, loaded.x_ty)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_layout_differs_by_its_three_values() {
+        let loaded = CalibrationValues {
+            intersect: 0.5,
+            axis_offset: 0.25,
+            x_ty: 0.0,
+            ..CalibrationValues::default()
+        };
+        let tilted = CalibrationValues {
+            tilt: 2.0,
+            dirty: true,
+            ..loaded.clone()
+        };
+        assert!(
+            !tilted.layout_differs(&loaded),
+            "the tilt is not the layout"
+        );
+        for changed in [
+            CalibrationValues {
+                intersect: 0.6,
+                ..loaded.clone()
+            },
+            CalibrationValues {
+                axis_offset: 0.3,
+                ..loaded.clone()
+            },
+            CalibrationValues {
+                x_ty: 0.01,
+                ..loaded.clone()
+            },
+        ] {
+            assert!(changed.layout_differs(&loaded), "{changed:?}");
+        }
+    }
 
     #[test]
     fn changes_stay_inside_their_sliders() {

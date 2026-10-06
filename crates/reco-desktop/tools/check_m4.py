@@ -162,13 +162,16 @@ def check_tune():
         expect(bool(saving) and panel is not None and panel[0] <= saving[0] and saving[1] < panel[1] + 28,
                f"tune: in the Adjust panel's title row, beside the tuning ({saving} in {panel})")
         expect(app.rect("calibration_unsaved") is not None, "tune: the title row says Unsaved")
+        expect(app.enabled("reset_layout") is False, "tune: Reset layout waits while the layout is the file's (Slint's cal-dirty)")
         slide(app, "intersect", 0.3)
+        expect(wait_for(lambda: app.enabled("reset_layout"), 3) is True, "tune: a changed overlap enables Reset layout")
         expect(text_of(app, "intersect_value") not in (None, "", f"{loaded['params']['intersect']:.3f}"),
                f"tune: the overlap follows its slider ({text_of(app, 'intersect_value')})")
         click(app, "reset_layout")
         time.sleep(0.5)
         expect(text_of(app, "intersect_value") == f"{loaded['params']['intersect']:.3f}",
                f"tune: Reset layout restores the file's overlap ({text_of(app, 'intersect_value')})")
+        expect(wait_for(lambda: app.enabled("reset_layout") is False, 3), "tune: and waits again")
         app.key("KeyS", cmd=1)
         saved = wait_for(lambda: title_rect(app, "Calibration saved"), 10)
         expect(bool(saved), "tune: ⌘S saves it, and a toast says so")
