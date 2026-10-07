@@ -208,14 +208,16 @@ box and an 8 pt gap (`reco_check_label`); `check_export.py` and
 `check_prefs.py` measure the gap. The ask: the label offset follows the
 mark's size.
 
-### A disabled checkbox still takes clicks
+### Disabled checkboxes and dropdowns still take input
 
-`CheckBox::set_disabled` only plays the disabled look: its event handler
-has no gate, unlike `Button`, which has `enabled`. The export sheet's
-"Follow the play" looks disabled until the machine can run the detector,
-and the sheet puts it back off when a click or Space flips it then. The
-ask: a disabled widget ignores input, or `CheckBox` gets an `enabled` as
-`Button` has.
+`CheckBox::set_disabled` and `DropDown::set_disabled` only play the
+disabled look: their event handlers have no gate, unlike `Button`, which
+has `enabled`. The export sheet's "Follow the play" looks disabled until
+the machine can run the detector, and the sheet puts it back off when a
+click or Space flips it then. Its codec looks disabled while a whole field
+wider than H.264 goes forces HEVC, and the sheet puts HEVC back when a
+pick changes it. The ask: a disabled widget ignores input, or `CheckBox`
+and `DropDown` get an `enabled` as `Button` has.
 
 ### Resizing a window doesn't keep it on the displays
 

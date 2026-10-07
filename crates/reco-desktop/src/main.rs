@@ -318,6 +318,14 @@ pub struct App {
     /// opening); it keeps what is chosen after that.
     #[rust]
     export_sheet_filled: bool,
+    /// The whole field's sizes for the open match (half, then full), set
+    /// as the sheet opens.
+    #[rust]
+    whole_sizes: Option<[(u32, u32); 2]>,
+    /// The codec chosen before a whole field wider than H.264 goes forced
+    /// HEVC; it comes back when the size allows it.
+    #[rust]
+    codec_before_forced: Option<String>,
     /// A benchmark run (automation builds), and its pause between runs.
     #[rust]
     auto_run: Option<AutoRun>,

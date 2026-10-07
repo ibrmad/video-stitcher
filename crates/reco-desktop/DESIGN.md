@@ -195,6 +195,19 @@ The render thread lives in `reco-app` (`src/preview/worker.rs`); the
   replay and events are remembered in `desktop.json` for the next export;
   choices made in the sheet and not exported are still there when it opens
   again.
+- The View row picks Camera (the view that follows the play or holds a
+  pose) or Whole field (180°): one fixed panorama of the pitch, goal line
+  to goal line, trimmed to the field outline (`PanoramaLayout` in
+  reco-core). Its Size row offers Half (the default: half the cameras'
+  detail, rendered with 2×2 samples per pixel) and Full (every camera
+  pixel), each labelled with the size the match's saved calibration gives.
+  Whole field hides the camera's Size row and the follow rows, which keep
+  their values for when Camera comes back. A frame wider than H.264
+  encoders take (4096) is written as HEVC: the codec shows HEVC, dimmed,
+  with the reason under it, and the codec chosen before comes back after;
+  it is the one remembered. A machine without HEVC can't export it, and the
+  sheet says why. The export writes `{output}.panorama.json` beside the
+  video, mapping its pixels to Reco's yaw and pitch.
 - Cancel keeps the part written (StitchJob closes the file properly) and
   the notice names it.
 - The last export's speed and where its time goes show in Stats.

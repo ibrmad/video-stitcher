@@ -12,8 +12,8 @@ use makepad_widgets::makepad_platform::thread::SignalToUI;
 use makepad_widgets::*;
 use reco_app::ai::{self, Tracking};
 use reco_app::export::{
-    self, ExportEvent, ExportJob, ExportOptions, ExportRange, MatchCalibration, QUALITIES,
-    RESOLUTIONS,
+    self, ExportEvent, ExportJob, ExportOptions, ExportRange, MatchCalibration, PanoramaDetail,
+    QUALITIES, RESOLUTIONS, VIEWS, WHOLE_SIZES,
 };
 use reco_app::preview::playback::PlayState;
 use reco_app::preview::worker::PreviewCommand;
@@ -86,6 +86,9 @@ impl App {
         let shown = self.shown_codec(cx);
         self.export_codecs = codecs;
         self.show_codecs(cx, shown);
+        if self.export_sheet_filled {
+            self.show_forced_codec(cx);
+        }
     }
 
     /// The codec the sheet shows, once it has been filled in: it stays
@@ -188,8 +191,98 @@ impl App {
         }
         self.show_export_error(cx, None);
         self.refresh_ai_rows(cx);
+        self.fill_whole_sizes(cx);
+        self.show_view_rows(cx);
         self.show_export_range(cx);
         self.ui.modal(cx, ids!(export_sheet)).open(cx);
+    }
+
+    /// The whole field's sizes for the open match into its Size row (the
+    /// sizes its saved calibration gives).
+    fn fill_whole_sizes(&mut self, cx: &mut Cx) {
+        let calibration = self
+            .live
+            .as_ref()
+            .and_then(|l| MatchCalibration::from_file(&l.files.calibration).ok());
+        self.whole_sizes = calibration.as_ref().map(export::whole_field_sizes);
+        let labels = ["Half", "Full"]
+            .iter()
+            .enumerate()
+            .map(|(k, name)| match self.whole_sizes {
+                Some(sizes) => size_label(name, sizes[k].0, sizes[k].1),
+                None => (*name).to_string(),
+            })
+            .collect();
+        let dropdown = self.ui.drop_down(cx, ids!(export_whole_size));
+        let row = dropdown.selected_item();
+        dropdown.set_labels(cx, labels);
+        dropdown.set_selected_item(cx, row);
+    }
+
+    /// The whole field's size chosen in the sheet, or `None` for the
+    /// camera.
+    pub(crate) fn sheet_whole_field(&self, cx: &mut Cx) -> Option<PanoramaDetail> {
+        let view = self.ui.drop_down(cx, ids!(export_view)).selected_item();
+        let size = self
+            .ui
+            .drop_down(cx, ids!(export_whole_size))
+            .selected_item();
+        export::whole_field_from(
+            VIEWS[view.min(VIEWS.len() - 1)],
+            WHOLE_SIZES[size.min(WHOLE_SIZES.len() - 1)],
+        )
+    }
+
+    /// The width of a whole field at `detail` for the open match (0 for the
+    /// camera, or when its calibration couldn't be read).
+    fn whole_width(&self, detail: Option<PanoramaDetail>) -> u32 {
+        match (detail, self.whole_sizes) {
+            (Some(PanoramaDetail::Full), Some(sizes)) => sizes[1].0,
+            (Some(_), Some(sizes)) => sizes[0].0,
+            _ => 0,
+        }
+    }
+
+    /// The rows of the view chosen: the camera's size and the follow rows,
+    /// or the whole field's size. Hidden rows keep their values.
+    fn show_view_rows(&mut self, cx: &mut Cx) {
+        let whole = self.sheet_whole_field(cx).is_some();
+        self.set_visible(cx, ids!(camera_size_row), !whole);
+        self.set_visible(cx, ids!(follow_rows), !whole);
+        self.set_visible(cx, ids!(whole_size_row), whole);
+        self.show_forced_codec(cx);
+    }
+
+    /// A whole field wider than H.264 goes is written as HEVC: the codec
+    /// shows HEVC, dimmed, with the reason under it, and the codec chosen
+    /// before comes back when the size allows it. Without an HEVC encoder
+    /// the reason says why it can't be exported; Export follows.
+    fn show_forced_codec(&mut self, cx: &mut Cx) {
+        let whole = self.sheet_whole_field(cx);
+        let width = self.whole_width(whole);
+        let codecs = self.codecs();
+        let forced = whole.is_some() && export::codec_for_export("h264", width) == "hevc";
+        let dropdown = self.ui.drop_down(cx, ids!(export_codec));
+        if forced {
+            if self.codec_before_forced.is_none() {
+                self.codec_before_forced = codecs.get(dropdown.selected_item()).cloned();
+            }
+            if let Some(row) = codecs.iter().position(|c| c == "hevc") {
+                dropdown.set_selected_item(cx, row);
+            }
+        } else if let Some(before) = self.codec_before_forced.take() {
+            let row = codecs.iter().position(|c| *c == before).unwrap_or(0);
+            dropdown.set_selected_item(cx, row);
+        }
+        self.ui
+            .widget(cx, ids!(export_codec))
+            .set_disabled(cx, forced);
+        let refusal = export::export_refusal(whole, width, &codecs);
+        self.set_label(cx, ids!(codec_refused), refusal.as_deref().unwrap_or(""));
+        self.set_visible(cx, ids!(codec_note), forced);
+        self.set_visible(cx, ids!(codec_forced), forced && refusal.is_none());
+        self.set_visible(cx, ids!(codec_refused), refusal.is_some());
+        self.show_export_enabled(cx);
     }
 
     /// The saved size, codec, quality, extras and AI choices into the sheet.
@@ -203,6 +296,20 @@ impl App {
                 .collect(),
         );
         size.set_selected_item(cx, export::size_index(&self.settings.export_size));
+        let view = VIEWS
+            .iter()
+            .position(|v| *v == self.settings.export_view)
+            .unwrap_or(0);
+        self.ui
+            .drop_down(cx, ids!(export_view))
+            .set_selected_item(cx, view);
+        let whole = WHOLE_SIZES
+            .iter()
+            .position(|v| *v == self.settings.export_whole_size)
+            .unwrap_or(0);
+        self.ui
+            .drop_down(cx, ids!(export_whole_size))
+            .set_selected_item(cx, whole);
         self.show_codecs(cx, None);
         let quality = QUALITIES
             .iter()
@@ -250,8 +357,15 @@ impl App {
             .trim()
             .is_empty();
         let something = self.export_range.is_some_and(|r| !r.is_empty());
-        let tracks = !self.ai_blocks_export(cx);
-        self.set_button_enabled(cx, ids!(sheet_export), named && something && tracks);
+        let whole = self.sheet_whole_field(cx);
+        let tracks = whole.is_some() || !self.ai_blocks_export(cx);
+        let encodes =
+            export::export_refusal(whole, self.whole_width(whole), &self.codecs()).is_none();
+        self.set_button_enabled(
+            cx,
+            ids!(sheet_export),
+            named && something && tracks && encodes,
+        );
     }
 
     fn show_export_error(&mut self, cx: &mut Cx, error: Option<&str>) {
@@ -321,6 +435,33 @@ impl App {
                 self.show_export_range(cx);
             }
         }
+        if self
+            .ui
+            .drop_down(cx, ids!(export_view))
+            .changed(actions)
+            .is_some()
+        {
+            self.show_view_rows(cx);
+        }
+        if self
+            .ui
+            .drop_down(cx, ids!(export_whole_size))
+            .changed(actions)
+            .is_some()
+        {
+            self.show_forced_codec(cx);
+        }
+        // Makepad's dropdown takes input while it looks disabled: a forced
+        // codec goes back to HEVC.
+        if self
+            .ui
+            .drop_down(cx, ids!(export_codec))
+            .changed(actions)
+            .is_some()
+            && self.codec_before_forced.is_some()
+        {
+            self.show_forced_codec(cx);
+        }
         if self.ui.button(cx, ids!(sheet_cancel)).clicked(actions) {
             self.ui.modal(cx, ids!(export_sheet)).close(cx);
         }
@@ -371,18 +512,41 @@ impl App {
             .min(QUALITIES.len() - 1)];
         let replay = self.ui.check_box(cx, ids!(export_replay)).active(cx);
         let events = self.ui.check_box(cx, ids!(export_events)).active(cx);
-        let tracking = self.sheet_tracking(cx);
+        let whole = self.sheet_whole_field(cx);
+        if let Some(why) = export::export_refusal(whole, self.whole_width(whole), &self.codecs()) {
+            return self.show_export_error(cx, Some(&why));
+        }
+        // The whole field is a fixed view: the follow rows keep their
+        // choices but don't apply.
+        let chosen_tracking = self.sheet_tracking(cx);
+        let tracking = chosen_tracking.clone().filter(|_| whole.is_none());
         if let Some(problem) = tracking.as_ref().and_then(Tracking::problem) {
             return self.show_export_error(cx, Some(&problem));
         }
-        // The choices are the next export's.
-        let (name, width, height) = RESOLUTIONS[size];
+        // The choices are the next export's (the codec chosen, not the
+        // HEVC a wide whole field forces).
+        let (name, camera_width, camera_height) = RESOLUTIONS[size];
+        let (width, height) = match (whole, self.whole_sizes) {
+            (Some(PanoramaDetail::Full), Some(sizes)) => sizes[1],
+            (Some(_), Some(sizes)) => sizes[0],
+            _ => (camera_width, camera_height),
+        };
         self.settings.export_size = name.into();
-        self.settings.export_codec = codec.clone();
+        self.settings.export_codec = self
+            .codec_before_forced
+            .clone()
+            .unwrap_or_else(|| codec.clone());
         self.settings.export_quality = quality.into();
         self.settings.export_replay = replay;
         self.settings.export_events = events;
-        self.remember_ai(tracking.as_ref());
+        let view = self.ui.drop_down(cx, ids!(export_view)).selected_item();
+        self.settings.export_view = VIEWS[view.min(VIEWS.len() - 1)].into();
+        let whole_size = self
+            .ui
+            .drop_down(cx, ids!(export_whole_size))
+            .selected_item();
+        self.settings.export_whole_size = WHOLE_SIZES[whole_size.min(WHOLE_SIZES.len() - 1)].into();
+        self.remember_ai(chosen_tracking.as_ref());
         self.save_settings();
         self.ui.modal(cx, ids!(export_sheet)).close(cx);
 
@@ -415,7 +579,7 @@ impl App {
                 replay,
                 events,
                 tracking: tracking.clone(),
-                whole_field: None,
+                whole_field: whole,
             },
             job: None,
             tracking: None,

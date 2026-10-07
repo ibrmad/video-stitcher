@@ -213,7 +213,9 @@ def drag(app, slider_id, by):
 def reveal(app, widget_id):
     """Scroll the sheet until the widget is wholly in its visible part; its
     rect then, or None. Rows out of sight aren't drawn (nor in the
-    snapshot), so look down first, then up."""
+    snapshot), so look down first, then up. The snapshot gives a clipped
+    widget's visible part, so one at the view's edge may be cut off: it
+    counts once a step further that way moves nothing (the sheet's end)."""
     view = app.rect("export_rows")
     if view is None:
         return None
@@ -223,7 +225,13 @@ def reveal(app, widget_id):
         for _ in range(30):
             r = app.rect(widget_id)
             if r is not None and r[1] >= top and r[1] + r[3] <= bottom:
-                return r
+                at_bottom, at_top = r[1] + r[3] >= bottom - 1, r[1] <= top + 1
+                if not (at_bottom or at_top):
+                    return r
+                app.scroll(x, y, 40 if at_bottom else -40)
+                if app.rect(widget_id) == r:
+                    return r
+                continue
             if r is not None:
                 direction = 40 if r[1] + r[3] > bottom else -40
             app.scroll(x, y, direction)
@@ -438,7 +446,7 @@ def check_ai():
                f"ai: Broadcast, every 15 frames to start ({text_of(app, 'ai_preset')}, {text_of(app, 'ai_interval')})")
         reveal(app, "ai_advanced")
         open_advanced(app, "ai_advanced")
-        expect(bool(wait_for(lambda: app.rect("ai_dead_zone"), 3)), "ai: Advanced opens")
+        expect(bool(wait_for(lambda: reveal(app, "ai_dead_zone"), 3)), "ai: Advanced opens")
         # Rows out of the sheet's view aren't drawn: reveal each value read.
         reveal(app, "ai_dead_zone_value")
         dead = text_of(app, "ai_dead_zone_value")
@@ -708,9 +716,92 @@ def check_kept():
         expect(not app.errors(), f"kept: no errors in the app log {app.errors()[:3]}")
 
 
+def scaled_calibration(path, k):
+    """Rewrite a calibration with the same lens in `k` times the pixels: the
+    picture is the same (the shader works in normalized intrinsics), but the
+    whole field's Full size grows with the pixel density."""
+    with open(path) as f:
+        cal = json.load(f)
+    for side in ("left_uniforms", "right_uniforms"):
+        for key in ("width", "height"):
+            cal[side][key] = int(cal[side][key] * k)
+        for key in ("fx", "fy", "cx", "cy"):
+            cal[side][key] = cal[side][key] * k
+    with open(path, "w") as f:
+        json.dump(cal, f)
+
+
+def check_whole_field():
+    """Whole field (180°): the View row swaps the camera's Size row and the
+    follow rows for the whole field's Size row; Full is wider than H.264
+    goes, so the codec shows HEVC, fixed, with the reason; going back puts
+    the codec, the camera's size and the follow rows back as they were
+    (Rule 9); a short export writes the panorama at the Half size shown and
+    its .panorama.json beside it, and the choices are remembered."""
+    _, files = linked("whole")
+    # The fixtures' cameras are 1280 wide: in 5K pixels the same lens makes
+    # Full wider than 4096, as the user's GoPros do.
+    scaled_calibration(files[2], 4)
+    out_dir = tempfile.mkdtemp(prefix="reco-export-out-")
+    answered = os.path.join(out_dir, "whole")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
+    with launch(files, ["--export-range", "0-1"], config, {"export": [answered]}) as app:
+        face = open_sheet(app)
+        expect(face is not None, "whole: Export opens the sheet")
+        if face is None:
+            return
+        wait_for(lambda: logged(app, "export codecs:"), 10)
+        size_before, codec_before = text_of(app, "export_size"), text_of(app, "export_codec")
+        ai_before = checked(app, "ai_enable")
+        expect(text_of(app, "export_view") == "Camera", f"whole: the view starts on Camera ({text_of(app, 'export_view')})")
+        pick_row(app, "export_view", 1)
+        expect(reveal(app, "export_whole_size") is not None, "whole: Whole field shows its Size row")
+        expect(app.rect("export_size") is None, "whole: the camera's Size row hides")
+        expect(app.rect("ai_enable") is None, "whole: the follow rows hide")
+        half = text_of(app, "export_whole_size") or ""
+        expect(half.startswith("Half · "), f"whole: Half is the default and shows its size ({half})")
+        expect(text_of(app, "export_codec") == codec_before and app.enabled("export_codec") is True,
+               f"whole: at Half the codec is the user's ({text_of(app, 'export_codec')})")
+        pick_row(app, "export_whole_size", 1)
+        full = text_of(app, "export_whole_size") or ""
+        expect(full.startswith("Full · "), f"whole: Full shows its size ({full})")
+        expect(text_of(app, "export_codec") == "HEVC", f"whole: Full shows HEVC ({text_of(app, 'export_codec')})")
+        expect(app.enabled("export_codec") is False, "whole: at Full the codec can't be changed")
+        expect(reveal(app, "codec_forced") is not None, "whole: the reason shows under the codec")
+        save_shot(app, "whole_full")
+        pick_row(app, "export_whole_size", 0)
+        expect(text_of(app, "export_codec") == codec_before and app.enabled("export_codec") is True,
+               f"whole: back at Half the codec comes back ({text_of(app, 'export_codec')})")
+        expect(app.rect("codec_forced") is None, "whole: the reason goes")
+        pick_row(app, "export_view", 0)
+        expect(text_of(app, "export_size") == size_before,
+               f"whole: Camera brings its size back ({text_of(app, 'export_size')})")
+        expect(reveal(app, "ai_enable") is not None and checked(app, "ai_enable") == ai_before,
+               "whole: the follow rows come back as they were")
+        pick_row(app, "export_view", 1)
+        save_shot(app, "whole_half")
+        click(app, "export_browse")
+        expect(wait_for(lambda: text_of(app, "export_output") == answered + ".mp4", 5),
+               "whole: Save to… sets the file")
+        click(app, "sheet_export")
+        expect(bool(wait_for(lambda: logged(app, "export: done"), 120)), "whole: the export finishes")
+        expect(not app.errors(), f"whole: no errors in the app log {app.errors()[:3]}")
+    width, height, frames = probe(answered + ".mp4")
+    shown = re.findall(r"(\d+) × (\d+)", half)
+    expect(bool(shown) and (width, height) == tuple(int(v) for v in shown[0]),
+           f"whole: the export is the Half size shown ({width}x{height} vs {half})")
+    expect(25 <= frames <= 35, f"whole: about a second at 30 fps ({frames} frames)")
+    expect(os.path.exists(answered + ".panorama.json"), "whole: the .panorama.json sits beside the video")
+    saved = json.load(open(os.path.join(config, "desktop.json")))
+    expect((saved.get("export_view"), saved.get("export_whole_size"), saved.get("export_codec"))
+           == ("whole_field", "half", "h264"), f"whole: the choices are remembered ({saved.get('export_view')}, "
+           f"{saved.get('export_whole_size')}, {saved.get('export_codec')})")
+
+
 CHECKS = {"export": check_export, "cancel": check_cancel, "rules": check_rules,
           "ai": check_ai, "ai_short": check_ai_short, "ai_unavailable": check_ai_unavailable,
-          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept, "starting": check_starting, "export_figures": check_export_figures}
+          "ai_figures": check_ai_figures, "ai_fold": check_ai_fold, "kept": check_kept, "starting": check_starting, "export_figures": check_export_figures,
+          "whole_field": check_whole_field}
 
 
 def main():

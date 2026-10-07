@@ -390,6 +390,21 @@ pub fn codec_label(code: &str) -> String {
     }
 }
 
+/// The views, as settings name them, in the sheet's order: the camera
+/// (following the play or holding a pose) and the whole field.
+pub const VIEWS: [&str; 2] = ["camera", "whole_field"];
+
+/// The whole field's sizes, as settings name them, in the sheet's order.
+pub const WHOLE_SIZES: [&str; 2] = ["half", "full"];
+
+/// The whole field's frame sizes for this calibration: half, then full.
+pub fn whole_field_sizes(calibration: &MatchCalibration) -> [(u32, u32); 2] {
+    [
+        whole_field_size(calibration, PanoramaDetail::Half),
+        whole_field_size(calibration, PanoramaDetail::Full),
+    ]
+}
+
 /// The whole-field size the saved choices name: `None` for the camera
 /// view, else half size unless "full".
 pub fn whole_field_from(view: &str, size: &str) -> Option<PanoramaDetail> {
@@ -750,6 +765,27 @@ mod tests {
             None
         );
         assert_eq!(export_refusal(None, 3840, &h264), None);
+    }
+
+    #[test]
+    fn the_sheet_names_are_the_saved_names() {
+        assert_eq!(whole_field_from(VIEWS[0], WHOLE_SIZES[1]), None);
+        assert_eq!(
+            whole_field_from(VIEWS[1], WHOLE_SIZES[0]),
+            Some(PanoramaDetail::Half)
+        );
+        assert_eq!(
+            whole_field_from(VIEWS[1], WHOLE_SIZES[1]),
+            Some(PanoramaDetail::Full)
+        );
+        let cal = some_calibration();
+        assert_eq!(
+            whole_field_sizes(&cal),
+            [
+                whole_field_size(&cal, PanoramaDetail::Half),
+                whole_field_size(&cal, PanoramaDetail::Full)
+            ]
+        );
     }
 
     #[test]
