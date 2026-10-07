@@ -69,6 +69,10 @@ pub struct StitchArgs<'a> {
     pub panner_config_path: Option<&'a str>,
     /// Named panner preset (base config); JSON overlays on top.
     pub panner_preset: Option<&'a str>,
+    /// Export the whole field as a fixed panorama (see `--whole-field`).
+    pub whole_field: bool,
+    /// With `whole_field`: every camera pixel instead of half.
+    pub full_size: bool,
 }
 
 /// Run the stitch subcommand.
@@ -95,6 +99,42 @@ pub fn run_stitch(args: StitchArgs<'_>, interrupted: &Arc<AtomicBool>) -> anyhow
     // only consumed under the autocam feature; a leading underscore
     // silences the unused-var lint on `--no-default-features` builds.
     let cal = reco_core::calibration::MatchCalibration::from_file(Path::new(args.calibration))?;
+
+    // The whole field is a fixed view: no tracking, no lookahead, and the
+    // panorama decides the frame size.
+    let mut args = args;
+    let whole_field = args.whole_field.then(|| {
+        use reco_core::projection::{PanoramaDetail, PanoramaLayout};
+        if args.model_path.is_some() || args.trajectory_path.is_some() || args.lookahead > 0.0 {
+            log::warn!("--whole-field is a fixed view: tracking and lookahead are off");
+        }
+        args.model_path = None;
+        args.trajectory_path = None;
+        args.tracking_mode = "none";
+        args.lookahead = 0.0;
+        let detail = if args.full_size {
+            PanoramaDetail::Full
+        } else {
+            PanoramaDetail::Half
+        };
+        let layout = PanoramaLayout::for_field(&cal, detail);
+        log::info!(
+            "Whole field ({}): {}x{}, trimmed to {}",
+            if args.full_size {
+                "full size"
+            } else {
+                "half size"
+            },
+            layout.width,
+            layout.height,
+            if cal.field_roi.is_some() {
+                "the field outline"
+            } else {
+                "the cameras' coverage (no field outline)"
+            },
+        );
+        layout
+    });
     #[cfg_attr(not(feature = "autocam"), allow(unused_variables))]
     let field_roi = cal.field_roi.clone();
 
@@ -134,6 +174,9 @@ pub fn run_stitch(args: StitchArgs<'_>, interrupted: &Arc<AtomicBool>) -> anyhow
         progress.report_with_elapsed(p.frames_completed, p.elapsed);
     });
 
+    if let Some(layout) = whole_field {
+        job = job.panorama(layout);
+    }
     if let Some(t) = args.start_time {
         job = job.start_time(t);
     }

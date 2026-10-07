@@ -82,6 +82,29 @@ pub struct StitchJob {
     /// `JsonlSink` to the session that records every detection,
     /// filter decision, and pan decision for offline analysis.
     events_path: Option<std::path::PathBuf>,
+
+    /// Export the whole field as this fixed panorama (its size replaces
+    /// the resolution); a `.panorama.json` sidecar maps its pixels.
+    panorama: Option<reco_core::projection::PanoramaLayout>,
+}
+
+/// The widest frame Apple's hardware H.264 encoder takes.
+const H264_MAX_WIDTH: u32 = 4096;
+
+/// The codec a frame `width` pixels wide is encoded with: H.264 becomes
+/// HEVC past [`H264_MAX_WIDTH`], where the hardware H.264 encoders stop.
+pub fn codec_for_width(codec: Codec, width: u32) -> Codec {
+    if codec == Codec::H264 && width > H264_MAX_WIDTH {
+        Codec::HEVC
+    } else {
+        codec
+    }
+}
+
+/// Where a whole-field export's sidecar goes: `match.mp4` →
+/// `match.panorama.json`.
+pub fn sidecar_path(output: &Path) -> PathBuf {
+    output.with_extension("panorama.json")
 }
 
 /// Configuration for optional replay recording (see
@@ -266,6 +289,7 @@ impl StitchJob {
             force_cpu_decode: false,
             lookahead_secs: 0.0,
             events_path: None,
+            panorama: None,
         }
     }
 
@@ -311,6 +335,23 @@ impl StitchJob {
     pub fn resolution(mut self, width: u32, height: u32) -> Self {
         self.resolution = Some((width, height));
         self
+    }
+
+    /// Export the whole field as `layout`'s fixed panorama: its size
+    /// replaces the resolution, the pose and FOV no longer matter, and a
+    /// sidecar beside the video maps its pixels ([`sidecar_path`]).
+    pub fn panorama(mut self, layout: reco_core::projection::PanoramaLayout) -> Self {
+        self.panorama = Some(layout);
+        self
+    }
+
+    /// The frame size: the panorama's, else the resolution asked for,
+    /// else 1920×1080.
+    fn output_size(&self) -> (u32, u32) {
+        match self.panorama {
+            Some(layout) => (layout.width, layout.height),
+            None => self.resolution.unwrap_or((1920, 1080)),
+        }
     }
 
     /// Set the audio mode. Default: copy audio from the first input.
@@ -561,6 +602,7 @@ impl StitchJob {
     pub fn run(mut self, interrupted: &AtomicBool) -> Result<StitchResult, StitchError> {
         crate::init();
         let start = std::time::Instant::now();
+        let (out_w, out_h) = self.output_size();
 
         // Load calibration
         let cal = match self.calibration {
@@ -570,6 +612,7 @@ impl StitchJob {
             }
             CalibrationSource::Memory(cal) => *cal,
         };
+        let sidecar_calibration = self.panorama.map(|_| cal.clone());
         let effective_sync = self.sync_offset.unwrap_or(cal.sync_offset);
         if self.sync_offset.is_none() && cal.sync_offset != 0 {
             log::info!("Sync offset: {} frames (from calibration)", effective_sync);
@@ -587,8 +630,13 @@ impl StitchJob {
             crate::SmartFileSource::open(&self.left, &self.right, &gpu, effective_sync)?
         };
         let info = source.info();
-        let (out_w, out_h) = self.resolution.unwrap_or((1920, 1080));
-        if self.resolution.is_none() {
+        if let Some(layout) = &self.panorama {
+            log::info!(
+                "Whole field: {out_w}x{out_h} panorama, {:.1} px/deg, {} sample(s) per axis",
+                layout.px_per_rad.to_radians(),
+                layout.samples
+            );
+        } else if self.resolution.is_none() {
             log::info!("Output resolution not specified, defaulting to {out_w}x{out_h}");
         }
         let decode_mode = source.decode_mode().to_string();
@@ -608,6 +656,7 @@ impl StitchJob {
             color_match: self.color_match,
             rig_tilt: cal.rig_tilt as f32,
             rig_roll: cal.rig_roll as f32,
+            panorama: self.panorama,
             ..Default::default()
         };
         let session_config = reco_core::session::types::SessionConfig {
@@ -720,9 +769,15 @@ impl StitchJob {
             );
         }
 
+        let codec = codec_for_width(self.codec, out_w);
+        if codec != self.codec {
+            log::warn!(
+                "{out_w} px is wider than H.264 encoders take ({H264_MAX_WIDTH}); encoding HEVC"
+            );
+        }
         let enc_config = crate::ffmpeg::encoder::EncoderConfig {
             encoder_name: self.encoder_name.clone(),
-            codec: self.codec.into(),
+            codec: codec.into(),
             quality_preset: quality,
             quality: self.quality_value,
             preset: self.preset.clone(),
@@ -1021,6 +1076,18 @@ impl StitchJob {
             }
         }
 
+        if let (Some(layout), Some(calibration)) = (self.panorama, sidecar_calibration) {
+            let path = sidecar_path(&self.output);
+            let sidecar = layout.sidecar(&calibration, self.blend_width, fps);
+            match serde_json::to_string_pretty(&sidecar) {
+                Ok(json) => match std::fs::write(&path, json) {
+                    Ok(()) => log::info!("Whole field: pixel mapping in {}", path.display()),
+                    Err(e) => log::warn!("could not write {} ({e})", path.display()),
+                },
+                Err(e) => log::warn!("could not describe the panorama ({e})"),
+            }
+        }
+
         Ok(StitchResult {
             frames_processed: frame_count,
             elapsed: start.elapsed(),
@@ -1035,6 +1102,46 @@ impl StitchJob {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Apple's hardware H.264 encoder refuses frames wider than 4096; a
+    /// whole-field panorama goes past that, so it switches to HEVC.
+    #[test]
+    fn wide_frames_use_hevc() {
+        assert_eq!(codec_for_width(Codec::H264, 4096), Codec::H264);
+        assert_eq!(codec_for_width(Codec::H264, 4112), Codec::HEVC);
+        assert_eq!(codec_for_width(Codec::HEVC, 7680), Codec::HEVC);
+        assert_eq!(codec_for_width(Codec::AV1, 7680), Codec::AV1);
+    }
+
+    /// A panorama sets the frame size, whatever resolution was asked for.
+    #[test]
+    fn a_panorama_sets_the_frame_size() {
+        let layout = reco_core::projection::PanoramaLayout {
+            width: 3600,
+            height: 1104,
+            px_per_rad: 1197.5,
+            yaw_left: 1.6,
+            pitch_top: 0.15,
+            samples: 2,
+        };
+        let job = StitchJob::new("l.mp4", "r.mp4", "match.json", "out.mp4")
+            .resolution(1920, 1080)
+            .panorama(layout);
+        assert_eq!(job.output_size(), (3600, 1104));
+        let plain = StitchJob::new("l.mp4", "r.mp4", "match.json", "out.mp4");
+        assert_eq!(plain.output_size(), (1920, 1080));
+        let sized = plain.resolution(1280, 720);
+        assert_eq!(sized.output_size(), (1280, 720));
+    }
+
+    /// The sidecar sits beside the video: `match.mp4` → `match.panorama.json`.
+    #[test]
+    fn the_sidecar_goes_beside_the_video() {
+        assert_eq!(
+            sidecar_path(Path::new("/m/match.mp4")),
+            PathBuf::from("/m/match.panorama.json")
+        );
+    }
 
     #[test]
     fn all_paths_returns_every_chained_segment() {

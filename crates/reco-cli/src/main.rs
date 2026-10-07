@@ -279,6 +279,19 @@ enum Commands {
         /// Named panner preset: broadcast (default), action, frame_all.
         #[arg(long = "panner-preset")]
         panner_preset: Option<String>,
+
+        /// Export the whole field as one fixed 180° panorama, trimmed to
+        /// the calibration's field outline, at half the lenses' detail
+        /// (about 3900 px wide). Writes OUTPUT's `.panorama.json` beside
+        /// it, mapping pixels to yaw/pitch. --width/--height and tracking
+        /// don't apply.
+        #[arg(long = "whole-field")]
+        whole_field: bool,
+
+        /// With --whole-field: keep every camera pixel (about 7800 px
+        /// wide, always HEVC).
+        #[arg(long = "full-size", requires = "whole_field")]
+        full_size: bool,
     },
 
     /// Open an interactive preview window to debug the stitch.
@@ -781,6 +794,8 @@ fn main() -> anyhow::Result<()> {
             trajectory,
             panner_config,
             panner_preset,
+            whole_field,
+            full_size,
         } => stitch::run_stitch(
             stitch::StitchArgs {
                 left: &left,
@@ -813,6 +828,8 @@ fn main() -> anyhow::Result<()> {
                 trajectory_path: trajectory.as_deref(),
                 panner_config_path: panner_config.as_deref(),
                 panner_preset: panner_preset.as_deref(),
+                whole_field,
+                full_size,
             },
             &interrupted,
         ),
@@ -1156,5 +1173,39 @@ fn main() -> anyhow::Result<()> {
 
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whole_field_flags_parse() {
+        let base = ["reco", "stitch", "l.mp4", "r.mp4", "-c", "cal.json"];
+        let parsed = |extra: &[&str]| Cli::try_parse_from(base.iter().chain(extra.iter()));
+        match parsed(&["--whole-field", "--full-size"])
+            .expect("parses")
+            .command
+        {
+            Commands::Stitch {
+                whole_field,
+                full_size,
+                ..
+            } => assert!(whole_field && full_size),
+            _ => panic!("not stitch"),
+        }
+        match parsed(&[]).expect("parses").command {
+            Commands::Stitch {
+                whole_field,
+                full_size,
+                ..
+            } => assert!(!whole_field && !full_size),
+            _ => panic!("not stitch"),
+        }
+        assert!(
+            parsed(&["--full-size"]).is_err(),
+            "--full-size only means something with --whole-field"
+        );
     }
 }
