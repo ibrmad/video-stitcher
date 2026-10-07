@@ -34,6 +34,11 @@ pub struct DesktopSettings {
     pub export_replay: bool,
     /// Also save the pipeline's events with an export.
     pub export_events: bool,
+    /// What the export shows: "camera" (the view that follows the play or
+    /// holds a pose) or "whole_field" (the fixed 180° panorama).
+    pub export_view: String,
+    /// The whole field's size: "half" or "full".
+    pub export_whole_size: String,
     /// The codec recordings use: "h264", "hevc" or "av1".
     pub recording_codec: String,
     /// The AI tracking's model (an .onnx file), once chosen.
@@ -109,6 +114,8 @@ impl Default for DesktopSettings {
             export_quality: "balanced".into(),
             export_replay: false,
             export_events: false,
+            export_view: "camera".into(),
+            export_whole_size: "half".into(),
             recording_codec: "h264".into(),
             ai_model_path: None,
             telemetry_enabled: false,
@@ -237,6 +244,21 @@ mod tests {
         assert_eq!(
             old.export_codec, "h264",
             "a file from before exports still loads"
+        );
+    }
+
+    #[test]
+    fn whole_field_choices_default_to_the_camera_view_at_half_size() {
+        let d = DesktopSettings::default();
+        assert_eq!(
+            (d.export_view.as_str(), d.export_whole_size.as_str()),
+            ("camera", "half")
+        );
+        let old: DesktopSettings = serde_json::from_str(r#"{"export_size":"4K"}"#).unwrap();
+        assert_eq!(
+            (old.export_view.as_str(), old.export_whole_size.as_str()),
+            ("camera", "half"),
+            "a file from before the whole field still loads"
         );
     }
 

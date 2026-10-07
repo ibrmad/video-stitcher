@@ -9,6 +9,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
 pub use reco_core::calibration::MatchCalibration;
+pub use reco_core::projection::PanoramaDetail;
 use reco_io::ffmpeg::encoder::{VideoCodec, available_encoders};
 use reco_io::output::{Codec, Format, Quality};
 use reco_io::stitch_job::{InputPath, StitchError, StitchJob};
@@ -47,6 +48,10 @@ pub struct ExportOptions {
     pub events: bool,
     /// AI tracking, when on.
     pub tracking: Option<crate::ai::Tracking>,
+    /// The whole field as a fixed 180° panorama at this size, instead of
+    /// the camera view: `size` and `tracking` don't apply, and a
+    /// `{output}.panorama.json` beside the video maps its pixels.
+    pub whole_field: Option<PanoramaDetail>,
 }
 
 /// What an export reports.
@@ -385,6 +390,46 @@ pub fn codec_label(code: &str) -> String {
     }
 }
 
+/// The whole-field size the saved choices name: `None` for the camera
+/// view, else half size unless "full".
+pub fn whole_field_from(view: &str, size: &str) -> Option<PanoramaDetail> {
+    (view == "whole_field").then(|| {
+        if size == "full" {
+            PanoramaDetail::Full
+        } else {
+            PanoramaDetail::Half
+        }
+    })
+}
+
+/// The whole field's frame size for this calibration.
+pub fn whole_field_size(calibration: &MatchCalibration, detail: PanoramaDetail) -> (u32, u32) {
+    let layout = reco_core::projection::PanoramaLayout::for_field(calibration, detail);
+    (layout.width, layout.height)
+}
+
+/// The codec a frame `width` pixels wide is written with: past the
+/// width hardware H.264 encoders take, HEVC.
+pub fn codec_for_export(chosen: &str, width: u32) -> &'static str {
+    match reco_io::stitch_job::codec_for_width(chosen.parse().unwrap_or_default(), width) {
+        Codec::HEVC => "hevc",
+        Codec::AV1 => "av1",
+        _ => "h264",
+    }
+}
+
+/// Why a whole-field export of this width can't run on this machine (it
+/// needs HEVC and `codecs` lacks it), or `None`.
+pub fn export_refusal(
+    whole_field: Option<PanoramaDetail>,
+    width: u32,
+    codecs: &[String],
+) -> Option<String> {
+    let needs_hevc = whole_field.is_some() && codec_for_export("h264", width) == "hevc";
+    (needs_hevc && !codecs.iter().any(|c| c == "hevc"))
+        .then(|| "This Mac can't encode HEVC, which a whole field this wide needs.".to_string())
+}
+
 /// The codecs this machine can encode ("h264", "hevc", "av1"); h264 when
 /// none answer. Blocking (it asks each encoder): run it off the UI thread.
 pub fn available_codecs() -> Vec<String> {
@@ -449,6 +494,9 @@ fn run(
         return ExportEvent::Failed(problem);
     }
     let field_roi = calibration.field_roi.clone();
+    let whole_field = options
+        .whole_field
+        .map(|detail| reco_core::projection::PanoramaLayout::for_field(&calibration, detail));
     let (start, end) = options.range;
     let total = ((end - start) * options.fps).round().max(0.0) as u64;
     let codec: Codec = options.codec.parse().unwrap_or_default();
@@ -463,6 +511,9 @@ fn run(
         .end_time(end);
     if start > 0.0 {
         job = job.start_time(start);
+    }
+    if let Some(layout) = whole_field {
+        job = job.panorama(layout);
     }
     if options.replay {
         job = job.with_replay_recording(output.with_extension("replay.mkv"));
@@ -480,7 +531,9 @@ fn run(
             FIGURES_EVERY,
         );
     });
-    if let Some(tracking) = options.tracking.clone() {
+    if let Some(tracking) = options.tracking.clone()
+        && whole_field.is_none()
+    {
         job = with_tracking(job, tracking, field_roi, out.clone());
     }
     // The rate counts from the first frame: opening and seeking to the
@@ -675,7 +728,92 @@ mod tests {
             replay: false,
             events: false,
             tracking: None,
+            whole_field: None,
         }
+    }
+
+    #[test]
+    fn whole_field_rules() {
+        assert_eq!(codec_for_export("h264", 3760), "h264");
+        assert_eq!(codec_for_export("h264", 7504), "hevc");
+        assert_eq!(codec_for_export("hevc", 7504), "hevc");
+        let h264 = vec!["h264".to_string()];
+        let both = vec!["h264".to_string(), "hevc".to_string()];
+        let refusal = export_refusal(Some(PanoramaDetail::Full), 7504, &h264);
+        assert!(refusal.is_some_and(|r| r.contains("HEVC")));
+        assert_eq!(
+            export_refusal(Some(PanoramaDetail::Full), 7504, &both),
+            None
+        );
+        assert_eq!(
+            export_refusal(Some(PanoramaDetail::Half), 3760, &h264),
+            None
+        );
+        assert_eq!(export_refusal(None, 3840, &h264), None);
+    }
+
+    #[test]
+    fn whole_field_choices_read_from_their_names() {
+        assert_eq!(whole_field_from("camera", "full"), None);
+        assert_eq!(
+            whole_field_from("whole_field", "half"),
+            Some(PanoramaDetail::Half)
+        );
+        assert_eq!(
+            whole_field_from("whole_field", "full"),
+            Some(PanoramaDetail::Full)
+        );
+        assert_eq!(
+            whole_field_from("whole_field", "?"),
+            Some(PanoramaDetail::Half)
+        );
+        assert_eq!(whole_field_from("?", "half"), None);
+    }
+
+    #[test]
+    fn whole_field_size_is_the_layout() {
+        let cal = some_calibration();
+        for detail in [PanoramaDetail::Half, PanoramaDetail::Full] {
+            let layout = reco_core::projection::PanoramaLayout::for_field(&cal, detail);
+            assert_eq!(
+                whole_field_size(&cal, detail),
+                (layout.width, layout.height)
+            );
+        }
+    }
+
+    #[test]
+    fn a_whole_field_export_writes_the_video_and_its_sidecar() {
+        let _heavy = fixtures::heavy();
+        let Some((left, right, cal)) = fixtures::fast_set() else {
+            return;
+        };
+        let calibration = MatchCalibration::from_file(&cal).unwrap();
+        let size = whole_field_size(&calibration, PanoramaDetail::Half);
+        let output =
+            std::env::temp_dir().join(format!("reco-app-whole-{}.mp4", std::process::id()));
+        let job = ExportJob::start(
+            InputPath::Single(left),
+            InputPath::Single(right),
+            calibration,
+            ExportOptions {
+                whole_field: Some(PanoramaDetail::Half),
+                ..options(output.clone(), (0.0, 1.0))
+            },
+            Arc::new(|| {}),
+        );
+        let events = until_done(&job, 120, false);
+        let Some(ExportEvent::Done { path, .. }) = events.last() else {
+            panic!("{events:?}")
+        };
+        let video = VideoDecoder::open(path).expect("a playable file");
+        assert_eq!((video.width(), video.height()), size);
+        let sidecar = output.with_extension("panorama.json");
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&sidecar).expect("a sidecar")).unwrap();
+        assert_eq!(json["width"], size.0);
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(sidecar);
     }
 
     /// A calibration for jobs that never open the videos.

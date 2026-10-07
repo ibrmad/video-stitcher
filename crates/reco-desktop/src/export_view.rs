@@ -415,6 +415,7 @@ impl App {
                 replay,
                 events,
                 tracking: tracking.clone(),
+                whole_field: None,
             },
             job: None,
             tracking: None,
