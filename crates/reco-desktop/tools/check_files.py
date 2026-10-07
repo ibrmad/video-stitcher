@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Module 3 check: files and calibration (PARITY.md, Module 3).
+"""Files and calibration check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Starts the app
 without files and drives it through Makepad's --remote control. Native file
@@ -7,7 +7,7 @@ dialogs are answered from RECO_DESKTOP_DIALOG_ANSWERS (a JSON file the
 check writes), through the same path a real pick takes. Videos are linked
 into temporary folders, so a saved calibration never lands beside the
 fixtures. Each launch gets its own settings folder (drive.launch_env).
-Screenshots go to target/desktop-checks/m3/. `check_m3.py NAME...` runs the
+Screenshots go to target/desktop-checks/files/. `check_files.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed. The
 `calibrate` check also calibrates the real match pair (under a minute in the
 desktop build) unless RECO_CHECK_SKIP_REAL is set.
@@ -23,7 +23,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m3")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "files")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -91,7 +91,7 @@ def click(app, widget_id):
 def linked(name, files=FAST, names=("cam0.mp4", "cam1.mp4"), calibration=False):
     """A fresh folder with the pair linked in (and its calibration copied
     beside the left video as `{stem}_calibration.json` when asked)."""
-    folder = tempfile.mkdtemp(prefix=f"reco-m3-{name}-")
+    folder = tempfile.mkdtemp(prefix=f"reco-files-{name}-")
     for source, link in zip(files[:2], names):
         os.symlink(source, os.path.join(folder, link))
     if calibration:
@@ -103,7 +103,7 @@ def linked(name, files=FAST, names=("cam0.mp4", "cam1.mp4"), calibration=False):
 def answers(**picks):
     """A dialog answers file: each dialog ("left", "right", "calibration")
     answers with its list of paths."""
-    fd, path = tempfile.mkstemp(prefix="reco-m3-answers-", suffix=".json")
+    fd, path = tempfile.mkstemp(prefix="reco-files-answers-", suffix=".json")
     with os.fdopen(fd, "w") as f:
         json.dump(picks, f)
     return path
@@ -181,7 +181,7 @@ def names_of(app, prefix):
 def check_list():
     """A camera's files: recording order, remove, drag to reorder, keys,
     Remove all."""
-    folder = tempfile.mkdtemp(prefix="reco-m3-list-")
+    folder = tempfile.mkdtemp(prefix="reco-files-list-")
     for name in ("GX030001.MP4", "GX010001.MP4", "GX020001.MP4"):
         os.symlink(FAST[0], os.path.join(folder, name))
     os.symlink(FAST[1], os.path.join(folder, "GX010002.MP4"))
@@ -385,11 +385,11 @@ def main():
     for name in names:
         CHECKS[name]()
     if FAILURES:
-        print(f"\nModule 3 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nFiles check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 3 check passed. Screenshots: {OUT}")
+    print(f"Files check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

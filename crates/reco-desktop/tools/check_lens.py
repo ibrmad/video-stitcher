@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Module 5 check: camera and lens (PARITY.md, Module 5).
+"""Camera and lens check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair with a temporary copy of its calibration (so saving never
 touches the fixture). Each launch gets its own settings folder.
-Screenshots go to target/desktop-checks/m5/. `check_m5.py NAME...` runs the
+Screenshots go to target/desktop-checks/lens/. `check_lens.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed.
 """
 import json
@@ -18,7 +18,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m5")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "lens")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -100,7 +100,7 @@ def frame_pixels(app, name):
 
 
 def calibration_copy():
-    folder = tempfile.mkdtemp(prefix="reco-m5-")
+    folder = tempfile.mkdtemp(prefix="reco-lens-")
     cal = os.path.join(folder, "match.json")
     shutil.copyfile(FAST[2], cal)
     return (FAST[0], FAST[1], cal)
@@ -111,7 +111,7 @@ def launch(files, answers=None, env=None):
     args = ["--window-size", "1280x980", "--left", left, "--right", right, "--calibration", cal]
     env = dict(env) if env else None
     if answers is not None:
-        fd, path = tempfile.mkstemp(prefix="reco-m5-answers-", suffix=".json")
+        fd, path = tempfile.mkstemp(prefix="reco-lens-answers-", suffix=".json")
         with os.fdopen(fd, "w") as f:
             json.dump(answers, f)
         env = {**(env or {}), "RECO_DESKTOP_DIALOG_ANSWERS": path}
@@ -444,10 +444,10 @@ def press_drag(app, x, y, dx):
 
 
 def check_cursor():
-    """Sliders show the arrow, as macOS's own sliders do (the owner chose it
-    over Makepad's open and closed hand), never the text cursor (Makepad's
-    slider holds a number field for typing its value: Reco hides its
-    readout, and the owner saw the I-beam over the empty field). A press
+    """Sliders show the arrow, as macOS's own sliders do (not Makepad's open
+    and closed hand), never the text cursor (Makepad's slider holds a number
+    field for typing its value: Reco hides its readout, and the I-beam once
+    showed over the empty field). A press
     anywhere on the slider's box drags it, the track's ends and edges too
     (the empty field took presses at the right end). RECO_DESKTOP_LOG_CURSOR
     logs each cursor change."""
@@ -480,7 +480,7 @@ def check_cursor():
 
 
 def check_fine_tune_opens():
-    """As in Slint, showing one camera (the lens preview) opens Fine-tune,
+    """Showing one camera (the lens preview) opens Fine-tune,
     where its lens is tuned."""
     files = calibration_copy()
     with launch(files) as app:
@@ -504,7 +504,7 @@ def main():
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed")
         sys.exit(1)
-    print(f"Module 5 check passed. Screenshots: {OUT}")
+    print(f"Lens check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

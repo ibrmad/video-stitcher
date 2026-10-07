@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Module 1 check: the live preview (PARITY.md, Module 1).
+"""Live preview check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair (RECO_FIXTURE_LEFT/RIGHT/CAL, else the alfheim set) through
 --left/--right/--calibration, zero-copy and then with --preview-readback,
 and drives it through Makepad's --remote control. With the 5.3K match pair
 present it also reports the real-footage frame rate. Screenshots go to
-target/desktop-checks/m1/. Exits non-zero if any check failed.
+target/desktop-checks/preview/. Exits non-zero if any check failed.
 """
 import os
 import sys
@@ -16,7 +16,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m1")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "preview")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -319,11 +319,11 @@ def main():
     check_bad_video()
     check_real()
     if FAILURES:
-        print(f"\nModule 1 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nPreview check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 1 check passed. Screenshots: {OUT}")
+    print(f"Preview check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

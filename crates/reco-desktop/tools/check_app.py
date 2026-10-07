@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Module 8 check: the parity sweep's performance pass (PARITY.md, Module 8;
-DESIGN.md Rule 8).
+"""App check: startup and performance (DESIGN.md Rule 8), sheets and
+shortcuts (Rule 9), quitting with unsaved edits and the log file.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair (RECO_FIXTURE_LEFT/RIGHT/CAL, else the alfheim set) and the
 5.3K match pair, each with a copy of its calibration, through
 --left/--right/--calibration and drives the app through Makepad's --remote
 control. Each launch gets its own settings folder (drive.launch_env).
-Screenshots go to target/desktop-checks/m8/. `check_m8.py NAME...` runs the
+Screenshots go to target/desktop-checks/app/. `check_app.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed.
 """
 import json
@@ -23,7 +23,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m8")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "app")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -53,7 +53,7 @@ def expect(ok, message):
 def calibration_copy(files):
     """The pair with its calibration copied to a temp folder: nothing is
     ever written beside the fixtures."""
-    folder = tempfile.mkdtemp(prefix="reco-m8-")
+    folder = tempfile.mkdtemp(prefix="reco-app-")
     cal = os.path.join(folder, os.path.basename(files[2]))
     shutil.copyfile(files[2], cal)
     return (files[0], files[1], cal)
@@ -324,8 +324,7 @@ def asks(app):
 
 
 def check_unsaved():
-    """Quitting with unsaved calibration edits asks first (owner,
-    2026-10-06): Cancel stays, Save saves and quits, Don't Save quits and
+    """Quitting with unsaved calibration edits asks first: Cancel stays, Save saves and quits, Don't Save quits and
     leaves the file; with nothing unsaved it quits at once."""
     with launch(FAST) as app:
         wait_for(lambda: app.rect("preview"), 30)
@@ -363,9 +362,9 @@ def check_unsaved():
 
 
 def check_logfile():
-    """A log file as the Slint app kept: the engine's lines and the app's,
+    """The log file: the engine's lines and the app's,
     kept across runs, RUST_LOG filtering them."""
-    path = os.path.join(tempfile.mkdtemp(prefix="reco-m8-log-"), "reco-desktop.log")
+    path = os.path.join(tempfile.mkdtemp(prefix="reco-app-log-"), "reco-desktop.log")
     with launch(FAST, env={"RECO_DESKTOP_LOG_FILE": path}) as app:
         wait_for(lambda: app.rect("preview"), 30)
     first = open(path).read() if os.path.exists(path) else ""
@@ -399,11 +398,11 @@ def main():
     for name in names:
         CHECKS[name]()
     if FAILURES:
-        print(f"\nModule 8 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nApp check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 8 check passed. Screenshots: {OUT}")
+    print(f"App check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

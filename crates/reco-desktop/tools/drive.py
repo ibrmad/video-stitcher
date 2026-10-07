@@ -5,7 +5,7 @@ Used by the module checks (tools/check_m<N>.py). Standard library only.
 
     with App.launch(BIN, ["--window-size", "1280x820"]) as app:
         app.click_id("toggle_media")
-        png = app.grab("target/desktop-checks/m0/media-closed.png")
+        png = app.grab("target/desktop-checks/shell/media-closed.png")
 
 Input routes are sent with wait=1, so the next request sees the frame that
 followed the input; no sleeps are needed between steps.
@@ -166,7 +166,7 @@ def read_png(path):
 def launch_env(base, env, hidden):
     """The environment for a launched app: hidden windows if asked, a fresh
     settings folder (RECO_CONFIG_DIR) and log file (RECO_DESKTOP_LOG_FILE)
-    unless given, so checks never read or write the owner's, and no
+    unless given, so checks never read or write the user's, and no
     network, browser or
     clipboard (each request, link or copy is a log line) unless env sets
     RECO_DESKTOP_NO_NETWORK, _NO_BROWSER or _NO_CLIPBOARD to None."""

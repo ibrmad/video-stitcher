@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Module 7 check: preferences and help (PARITY.md, Module 7).
+"""Preferences and help check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Each launch gets
 its own settings folder and no network (drive.launch_env): requests are log
 lines, and RECO_DESKTOP_FAKE_RELEASE stands in for GitHub's latest release.
 Dialogs are answered through RECO_DESKTOP_DIALOG_ANSWERS. Screenshots go to
-target/desktop-checks/m7/. `check_m7.py NAME...` runs the named checks (all
+target/desktop-checks/prefs/. `check_prefs.py NAME...` runs the named checks (all
 by default); exits non-zero if any failed.
 """
 import json
@@ -20,7 +20,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m7")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "prefs")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -161,7 +161,7 @@ def menu(app, row):
 
 
 def answers_file(answers):
-    fd, path = tempfile.mkstemp(prefix="reco-m7-answers-", suffix=".json")
+    fd, path = tempfile.mkstemp(prefix="reco-prefs-answers-", suffix=".json")
     with os.fdopen(fd, "w") as f:
         json.dump(answers, f)
     return path
@@ -204,8 +204,8 @@ def check_prefs():
     folder is refused with the reason; Save keeps and applies every choice,
     and turns usage data on (an app_open event, no network); a new launch
     shows them."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
-    folder = tempfile.mkdtemp(prefix="reco-m7-recordings-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
+    folder = tempfile.mkdtemp(prefix="reco-prefs-recordings-")
     with launch(config, answers={"recording_folder": [folder]}) as app:
         colour = open_prefs(app)
         expect(colour is not None, "prefs: the app menu opens Preferences")
@@ -273,10 +273,10 @@ def check_prefs():
 def check_blend():
     """A first calibration starts at seam blend 0.05: a default saved by an
     older Preferences (it had one) no longer applies."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"default_blend": 0.12}, f)
-    folder = tempfile.mkdtemp(prefix="reco-m7-blend-")
+    folder = tempfile.mkdtemp(prefix="reco-prefs-blend-")
     files = []
     for source, name in zip(FAST[:2], ("cam0.mp4", "cam1.mp4")):
         os.symlink(source, os.path.join(folder, name))
@@ -306,7 +306,7 @@ def texts(app, widget_id):
 def check_shortcuts():
     """Keyboard shortcuts lists the keys the app answers, Website and Forum
     open their pages (logged in checks), and Close or Escape closes it."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with launch(config) as app:
         wait_for(lambda: app.rect("app_menu"), 15)
         menu(app, SHORTCUTS)
@@ -347,8 +347,8 @@ def check_bug():
     details; with usage data on, Send sends it (no network in checks) with
     the version, the GPU, the files' names and the log, the home folder as
     ~, and says so."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
-    clipboard = tempfile.mkdtemp(prefix="reco-m7-clipboard-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
+    clipboard = tempfile.mkdtemp(prefix="reco-prefs-clipboard-")
     with launch(config, env={"RECO_DESKTOP_NO_CLIPBOARD": clipboard}) as app:
         wait_for(lambda: app.rect("app_menu"), 15)
         menu(app, REPORT_BUG)
@@ -382,10 +382,10 @@ def check_bug():
         expect(bool(wait_for(lambda: app.rect("prefs_save"), 3)), "bug: and opens Preferences")
         expect(not app.errors(), f"bug: no errors in the app log {app.errors()[:3]}")
 
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"telemetry_enabled": True}, f)
-    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
+    sent = tempfile.mkdtemp(prefix="reco-prefs-sent-")
     with launch(config, FAST, env={"RECO_DESKTOP_NO_NETWORK": sent}) as app:
         expect(wait_for(lambda: app.rect("preview"), 30) is not None, "bug: the preview opens")
         wait_for(lambda: logged(app, "network: would send context"), 10)
@@ -433,11 +433,11 @@ def check_usage():
     """Usage data goes out only when opted in: with it on, an opened match
     sends its source info, an export its outcome, and a failed calibration
     its error (no network in checks); with it off, nothing at all."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"telemetry_enabled": True}, f)
-    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
-    out = os.path.join(tempfile.mkdtemp(prefix="reco-m7-export-"), "short")
+    sent = tempfile.mkdtemp(prefix="reco-prefs-sent-")
+    out = os.path.join(tempfile.mkdtemp(prefix="reco-prefs-export-"), "short")
     with launch(config, FAST, answers={"export": [out]}, env={"RECO_DESKTOP_NO_NETWORK": sent},
                 extra=["--export-range", "0-1"]) as app:
         expect(wait_for(lambda: app.rect("preview"), 30) is not None, "usage: the preview opens")
@@ -465,19 +465,19 @@ def check_usage():
         expect(len(events(sent, "source_info")) == 1, "usage: source info once per open")
         expect(not app.errors(), f"usage: no errors in the app log {app.errors()[:3]}")
 
-    quiet = tempfile.mkdtemp(prefix="reco-m7-quiet-")
-    with launch(tempfile.mkdtemp(prefix="reco-m7-config-"), FAST, env={"RECO_DESKTOP_NO_NETWORK": quiet}) as app:
+    quiet = tempfile.mkdtemp(prefix="reco-prefs-quiet-")
+    with launch(tempfile.mkdtemp(prefix="reco-prefs-config-"), FAST, env={"RECO_DESKTOP_NO_NETWORK": quiet}) as app:
         expect(wait_for(lambda: app.rect("preview"), 30) is not None, "usage: off, the preview opens")
         time.sleep(2)
         expect(os.listdir(quiet) == [] and not logged(app, "network: would send"),
                f"usage: with it off, nothing is sent ({os.listdir(quiet)})")
 
-    folder = tempfile.mkdtemp(prefix="reco-m7-calibrate-")
+    folder = tempfile.mkdtemp(prefix="reco-prefs-calibrate-")
     files = []
     for source_file, name in zip(FAST[:2], ("cam0.mp4", "cam1.mp4")):
         os.symlink(source_file, os.path.join(folder, name))
         files.append(os.path.join(folder, name))
-    sent = tempfile.mkdtemp(prefix="reco-m7-sent-")
+    sent = tempfile.mkdtemp(prefix="reco-prefs-sent-")
     with launch(config, answers={"left": [files[0]], "right": [files[1]]}, env={"RECO_DESKTOP_NO_NETWORK": sent}) as app:
         wait_for(lambda: app.rect("add_left"), 15)
         app.click_id("add_left")
@@ -494,7 +494,7 @@ def check_update():
     Download, which opens the release page only when clicked; the same
     version, or a tag that isn't a plain name, shows nothing; offline,
     nothing is asked."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with launch(config, env={"RECO_DESKTOP_FAKE_RELEASE": "v9.9.9"}) as app:
         expect(bool(wait_for(lambda: title_rect(app, "Update available: v9.9.9"), 10)),
                "update: a newer release shows a notice")
@@ -533,7 +533,7 @@ def check_persist():
     """The window's size and the side panels' widths come back after a
     restart (saved a quiet second after a change); --window-size still
     wins."""
-    config = tempfile.mkdtemp(prefix="reco-m7-config-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-config-")
     with launch(config, FAST, size="1440x900") as app:
         expect(wait_for(lambda: app.rect("preview"), 30) is not None, "persist: the preview opens")
         # A stitched match opens the Adjust panel by itself.
@@ -569,11 +569,11 @@ def check_persist():
 
 
 def check_keys():
-    """The menu bar's shortcuts work as keys too (the owner pressed ⌘1, ⌘2,
-    ⌘3 and ⌘, and nothing happened): each toggles its panel or opens
+    """The menu bar's shortcuts work as keys too (a menu's key equivalents
+    can fail to fire): ⌘1, ⌘2 and ⌘3 each toggle their panel and ⌘, opens
     Preferences, wherever the keyboard is."""
-    config = tempfile.mkdtemp(prefix="reco-m7-keys-")
-    folder = tempfile.mkdtemp(prefix="reco-m7-keys-cal-")
+    config = tempfile.mkdtemp(prefix="reco-prefs-keys-")
+    folder = tempfile.mkdtemp(prefix="reco-prefs-keys-cal-")
     cal = os.path.join(folder, "match.json")
     shutil.copyfile(FAST[2], cal)
     with launch(config, files=(FAST[0], FAST[1], cal)) as app:
@@ -604,11 +604,11 @@ def main():
     for name in names:
         CHECKS[name]()
     if FAILURES:
-        print(f"\nModule 7 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nPreferences check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 7 check passed. Screenshots: {OUT}")
+    print(f"Preferences check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

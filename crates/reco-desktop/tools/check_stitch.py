@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Module 4 check: stitching and calibration (PARITY.md, Module 4).
+"""Stitching and calibration check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair with a temporary copy of its calibration (so saving never
 touches the fixture), tunes the stitch in the Adjust panel, saves, and
 reopens. Each launch gets its own settings folder (drive.launch_env).
-Screenshots go to target/desktop-checks/m4/. `check_m4.py NAME...` runs the
+Screenshots go to target/desktop-checks/stitch/. `check_stitch.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed.
 """
 import json
@@ -20,7 +20,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m4")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "stitch")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -96,7 +96,7 @@ def launch(files=None, extra=(), config_dir=None, answers_file=None, more_env=No
 
 def calibration_copy():
     """The fast pair with a calibration copied into a temporary folder."""
-    folder = tempfile.mkdtemp(prefix="reco-m4-")
+    folder = tempfile.mkdtemp(prefix="reco-stitch-")
     cal = os.path.join(folder, "match.json")
     shutil.copyfile(FAST[2], cal)
     return (FAST[0], FAST[1], cal)
@@ -162,7 +162,7 @@ def check_tune():
         expect(bool(saving) and panel is not None and panel[0] <= saving[0] and saving[1] < panel[1] + 28,
                f"tune: in the Adjust panel's title row, beside the tuning ({saving} in {panel})")
         expect(app.rect("calibration_unsaved") is not None, "tune: the title row says Unsaved")
-        expect(app.enabled("reset_layout") is False, "tune: Reset layout waits while the layout is the file's (Slint's cal-dirty)")
+        expect(app.enabled("reset_layout") is False, "tune: Reset layout waits while the layout is the file's")
         slide(app, "intersect", 0.3)
         expect(wait_for(lambda: app.enabled("reset_layout"), 3) is True, "tune: a changed overlap enables Reset layout")
         expect(text_of(app, "intersect_value") not in (None, "", f"{loaded['params']['intersect']:.3f}"),
@@ -240,7 +240,7 @@ def ink_columns(app, widget_id, name):
 
 
 def check_values():
-    """Every slider's number can be typed (plans/2026-10-06-value-fields.md):
+    """Every slider's number can be typed:
     a click selects the digits; Return applies it as a drag would and gives
     the keyboard back; Escape puts the value back; the unit is optional and a
     decimal comma reads; a value past an end goes to that end; text that
@@ -326,7 +326,7 @@ def check_roi():
     checks), a pasted outline is used and saved, bad text says why, and
     Remove outline clears it."""
     files = calibration_copy()
-    cache = tempfile.mkdtemp(prefix="reco-m4-cache-")
+    cache = tempfile.mkdtemp(prefix="reco-stitch-cache-")
     env = {"XDG_CACHE_HOME": cache, "RECO_DESKTOP_NO_BROWSER": "1"}
     with launch(files, more_env=env) as app:
         expect(ready(app) is not None, "roi: the preview opens")
@@ -378,11 +378,11 @@ def main():
     for name in names:
         CHECKS[name]()
     if FAILURES:
-        print(f"\nModule 4 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nStitch check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 4 check passed. Screenshots: {OUT}")
+    print(f"Stitch check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

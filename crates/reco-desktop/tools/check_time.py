@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Module 2 check: the time panel and status (PARITY.md, Module 2).
+"""Time panel and status check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair (RECO_FIXTURE_LEFT/RIGHT/CAL, else the alfheim set) through
 --left/--right/--calibration and drives the app through Makepad's --remote
 control. Each launch gets its own settings folder (drive.launch_env).
-Screenshots go to target/desktop-checks/m2/. `check_m2.py NAME...` runs the
+Screenshots go to target/desktop-checks/time/. `check_time.py NAME...` runs the
 named checks (all by default); exits non-zero if any check failed.
 """
 import json
@@ -20,7 +20,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m2")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "time")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -302,7 +302,7 @@ def follows(app, gap, state):
 def check_toasts_follow():
     """Toasts keep to the viewer's edge, on screen and not only in the
     layout, whatever moves it: a panel's slide, a dragged edge, a narrow
-    window (the owner saw one left under the Adjust panel after a
+    window (one was once left under the Adjust panel after a
     calibration opened it)."""
     with launch(extra=("--toast-demo",)) as app:
         ready(app)
@@ -524,11 +524,11 @@ def main():
     for name in names:
         CHECKS[name]()
     if FAILURES:
-        print(f"\nModule 2 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nTime panel check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 2 check passed. Screenshots: {OUT}")
+    print(f"Time panel check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

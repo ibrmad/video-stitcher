@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Module 6 check: export (PARITY.md, Module 6).
+"""Export check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Opens the fast
 fixture pair, linked into a temporary folder with a copy of its calibration
 (so the default export file lands there, never beside the fixtures), and
 exports short ranges through the export sheet. The Save dialog is answered
 through RECO_DESKTOP_DIALOG_ANSWERS. Each launch gets its own settings
-folder. Screenshots go to target/desktop-checks/m6/. `check_m6.py NAME...`
+folder. Screenshots go to target/desktop-checks/export/. `check_export.py NAME...`
 runs the named checks (all by default); exits non-zero if any failed.
 """
 import json
@@ -22,7 +22,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m6")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "export")
 HOME = os.path.expanduser("~")
 FAST = (
     os.environ.get("RECO_FIXTURE_LEFT", f"{HOME}/dev/pitchcam-data/alfheim/cam0.mp4"),
@@ -95,7 +95,7 @@ def logged(app, needle):
 
 def linked(name):
     """A fresh folder with the pair linked in and a copy of the calibration."""
-    folder = tempfile.mkdtemp(prefix=f"reco-m6-{name}-")
+    folder = tempfile.mkdtemp(prefix=f"reco-export-{name}-")
     names = []
     for source, link in zip(FAST[:2], ("cam0.mp4", "cam1.mp4")):
         os.symlink(source, os.path.join(folder, link))
@@ -112,7 +112,7 @@ def launch(files, extra=(), config_dir=None, answers=None, size="1280x820", env=
     if config_dir:
         env["RECO_CONFIG_DIR"] = config_dir
     if answers is not None:
-        fd, path = tempfile.mkstemp(prefix="reco-m6-answers-", suffix=".json")
+        fd, path = tempfile.mkstemp(prefix="reco-export-answers-", suffix=".json")
         with os.fdopen(fd, "w") as f:
             json.dump(answers, f)
         env["RECO_DESKTOP_DIALOG_ANSWERS"] = path
@@ -252,9 +252,9 @@ def check_export():
     seconds at 1080p while the card shows progress; the preview stays where
     it was; the choices are remembered."""
     folder, files = linked("export")
-    out_dir = tempfile.mkdtemp(prefix="reco-m6-out-")
+    out_dir = tempfile.mkdtemp(prefix="reco-export-out-")
     answered = os.path.join(out_dir, "final")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     with launch(files, ["--export-range", "0-2"], config, {"export": [answered]}) as app:
         face = open_sheet(app)
         expect(face is not None, "export: Export opens the sheet")
@@ -314,7 +314,7 @@ def check_cancel():
     """Cancel on the card stops the export; the notice says what was
     written, and playback comes back."""
     folder, files = linked("cancel")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     # 4K over the whole match: long enough to cancel.
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"export_size": "4K"}, f)
@@ -400,8 +400,8 @@ def check_ai():
         expect(False, f"ai: the fixture model is missing ({MODEL})")
         return
     folder, files = linked("ai")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
-    out_dir = tempfile.mkdtemp(prefix="reco-m6-out-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
+    out_dir = tempfile.mkdtemp(prefix="reco-export-out-")
     answered = os.path.join(out_dir, "tracked")
     answers = {"model": [MODEL], "export": [answered]}
     with launch(files, ["--export-range", "0-2"], config, answers) as app:
@@ -530,7 +530,7 @@ def check_ai_short():
     stays inside the window, Export included, and scrolls to its last
     row."""
     folder, files = linked("ai-short")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"ai_enabled": True}, f)
     with launch(files, config_dir=config, size="720x600") as app:
@@ -555,7 +555,7 @@ def check_ai_unavailable():
     """A machine that can't run the detector: the status says why, Enable
     stays off and its rows hidden, and the export goes on without it."""
     folder, files = linked("ai-off")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"ai_enabled": True}, f)
     env = {"RECO_DESKTOP_FAKE_AI": "no inference engine loads on this machine"}
@@ -582,7 +582,7 @@ def check_ai_figures():
         expect(False, f"figures: the fixture model is missing ({MODEL})")
         return
     folder, files = linked("ai-figures")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"ai_enabled": True, "ai_model_path": MODEL, "ai_lookahead": 0.0}, f)
     with launch(files, ["--export-range", "0-2"], config) as app:
@@ -610,7 +610,7 @@ def check_ai_figures():
 
 
 def check_export_figures():
-    """As Slint's Stats: an export's speed and where its time goes, kept
+    """Stats: an export's speed and where its time goes, kept
     after it ends."""
     folder, files = linked("export-figures")
     with launch(files, ["--export-range", "0-2"]) as app:
@@ -641,9 +641,9 @@ def check_export_figures():
 def check_ai_fold():
     """The closed Advanced tier looks closed when the sheet opens with AI
     tracking on. (A fold's first draw shows its body whole, Makepad
-    measuring it; the owner saw the tier open until a scroll closed it.)"""
+    measuring it; the tier once showed open until a scroll closed it.)"""
     folder, files = linked("ai-fold")
-    config = tempfile.mkdtemp(prefix="reco-m6-config-")
+    config = tempfile.mkdtemp(prefix="reco-export-config-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"ai_enabled": True}, f)
     with launch(files, config_dir=config) as app:
@@ -658,8 +658,8 @@ def check_ai_fold():
 
 
 def check_starting():
-    """An export that starts far in says where while it seeks (Slint said
-    "Seeking to …"; it read "Starting…" and looked stalled)."""
+    """An export that starts far in says where while it seeks (a bare
+    "Starting…" looked stalled)."""
     _, files = linked("starting")
     with launch(files, ["--export-range", "30-40"]) as app:
         expect(open_sheet(app) is not None, "starting: Export opens the sheet")
@@ -680,8 +680,8 @@ def checked(app, widget_id):
 
 def check_kept():
     """DESIGN.md Rule 9: choices made in the sheet and not exported are
-    there when it opens again (until Module 8 the sheet refilled them from
-    the saved settings each time, as Slint did)."""
+    there when it opens again (the sheet doesn't refill them from the saved
+    settings each time)."""
     _, files = linked("kept")
     with launch(files) as app:
         face = open_sheet(app)
@@ -721,7 +721,7 @@ def main():
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed")
         sys.exit(1)
-    print(f"Module 6 check passed. Screenshots: {OUT}")
+    print(f"Export check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

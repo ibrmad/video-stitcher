@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Module 0 check: shell and look (PARITY.md, Module 0).
+"""Shell and look check.
 
 Run after `cargo build --profile desktop -p reco-desktop`. Walks every
---look-preview state, saves screenshots to target/desktop-checks/m0/ and
+--look-preview state, saves screenshots to target/desktop-checks/shell/ and
 exits non-zero if any check failed. Every failure is listed, not just the
 first.
 
@@ -20,7 +20,7 @@ import drive
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 BIN = os.path.join(ROOT, "target", "desktop", "reco-desktop")
-OUT = os.path.join(ROOT, "target", "desktop-checks", "m0")
+OUT = os.path.join(ROOT, "target", "desktop-checks", "shell")
 
 PANEL = "#0d0d0d"
 BAND = "#212121"
@@ -45,7 +45,7 @@ RULER, LANE_HEIGHT = 18, 18
 # A row (theme.reco_row): section bands and control rows.
 ROW = 28
 # The view bar and the panels' title rows: 32 pt, so a 26 pt control keeps
-# 3 pt above and below (at 28 it kept 1; the owner found them tight).
+# 3 pt above and below (at 28 it kept 1, which looked tight).
 BAR = 32
 
 # Every --look-preview state in job order; None is a fresh start.
@@ -104,7 +104,7 @@ def shown(state):
 
 def takes_input(state):
     """Which gated controls take input (Makepad's own enabled flag). An
-    export locks playback (Module 6): the transport and the ruler wait."""
+    export locks playback: the transport and the ruler wait."""
     stitched = state in STITCHED
     gates = {
         "export_button": state == "ready",
@@ -262,8 +262,8 @@ def check_state(size, state):
         if adjust and view:
             expect(abs(view[1] - adjust[1] - BAR) <= 0.5,
                    f"{name}: Adjust's title row is {BAR} pt ({view[1] - adjust[1]})")
-        # The top bar's controls keep room above and below (the owner found
-        # Export tight at 3 pt).
+        # The top bar's controls keep room above and below (Export looked
+        # tight at 3 pt).
         top = app.rect("top_bar")
         for wid in ("app_menu_button", "export_button", "toggle_media", "toggle_timeline", "toggle_inspector"):
             r = app.rect(wid)
@@ -272,8 +272,8 @@ def check_state(size, state):
                 expect(min(above, below) >= 4.5,
                        f"{name}: `{wid}` has room above and below in the top bar ({above:.1f}, {below:.1f})")
         # Row icons: the hover face is drawn whole, with room above and below
-        # (the owner found Recent's tight: 3 pt in its title row and its right
-        # side cut; band icons had 1 pt).
+        # (Recent's looked tight at 3 pt in its title row and its right side
+        # was cut; band icons had 1 pt).
         recent = app.rect("recent_button")
         if recent and media:
             above, below = recent[1] - media[1], media[1] + BAR - (recent[1] + recent[3])
@@ -489,7 +489,7 @@ def between(samples, a, b):
 
 
 def check_motion():
-    """Panels slide (plans/2026-10-06-panel-motion.md): the picture's edge
+    """Panels slide: the picture's edge
     passes through points between open and closed; the moving panel keeps
     its width (nothing re-wraps); a toggle mid-slide turns it around; a
     dragged width comes back."""
@@ -652,7 +652,7 @@ def check_dropdowns():
     """A dropdown's menu opens below it, rows where they always are: a click
     on each row picks that row whatever was chosen, and no row lies in the
     title bar (where a real press drags the window and never reaches the
-    menu; the owner found the top row unclickable)."""
+    menu, so such a row can't be clicked)."""
     with launch((1280, 820), "ready") as app:
         r = app.rect("aspect")
         bottom = r[1] + r[3]
@@ -686,7 +686,7 @@ def badge_drawn(app, widget_id, colour, png, scale):
 def check_stepper():
     """The next-step stepper's badges are drawn beside their words wherever
     the empty state is laid out: after a panel slides and after a resize
-    (the owner saw the circles left behind, away from their words)."""
+    (the circles were once left behind, away from their words)."""
     def drawn(name):
         png = app.grab(os.path.join(OUT, f"stepper-{name}.png"))
         scale = png.width / app.get("/s")["w"][0]["sz"][0]
@@ -715,7 +715,7 @@ def check_stepper():
         app.quit()
     # The saved window size, restored at start (no --window-size: the
     # checks' size skips this path).
-    config = tempfile.mkdtemp(prefix="reco-m0-stepper-")
+    config = tempfile.mkdtemp(prefix="reco-shell-stepper-")
     with open(os.path.join(config, "desktop.json"), "w") as f:
         json.dump({"window_size": [1800, 1100]}, f)
     app = drive.App.launch(BIN, [], env={"RECO_CONFIG_DIR": config})
@@ -734,11 +734,11 @@ def main():
         for name in sys.argv[1:]:
             named[name]()
         if FAILURES:
-            print(f"\nModule 0 check FAILED: {len(FAILURES)} failure(s):")
+            print(f"\nShell check FAILED: {len(FAILURES)} failure(s):")
             for message in FAILURES:
                 print(f"  - {message}")
             sys.exit(1)
-        print("Module 0 check passed.")
+        print("Shell check passed.")
         return
     for state in STATES:
         check_state((1280, 820), state)
@@ -752,11 +752,11 @@ def main():
     check_menus()
     check_dropdowns()
     if FAILURES:
-        print(f"\nModule 0 check FAILED: {len(FAILURES)} failure(s):")
+        print(f"\nShell check FAILED: {len(FAILURES)} failure(s):")
         for message in FAILURES:
             print(f"  - {message}")
         sys.exit(1)
-    print(f"Module 0 check passed. Screenshots: {OUT}")
+    print(f"Shell check passed. Screenshots: {OUT}")
 
 
 if __name__ == "__main__":

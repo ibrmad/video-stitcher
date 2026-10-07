@@ -6,7 +6,7 @@ sys.path.insert(0, "crates/reco-desktop/tools")
 import drive
 app = drive.App.launch("target/desktop/reco-desktop")
 try:
-    png = app.grab("target/desktop-checks/m0/theme-smoke.png")
+    png = app.grab("target/desktop-checks/shell/theme-smoke.png")
     corner = png.pixel(png.width - 4, png.height - 4)
     errors = app.errors()
 finally:
