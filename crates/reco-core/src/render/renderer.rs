@@ -75,6 +75,20 @@ pub(crate) struct GpuUniforms {
     /// Per-channel tone curve for colour matching, applied when
     /// `color_scale[3]` is 1. See [`color_match`].
     tone_curve: ToneCurve,
+    /// Whole-field panorama: x = 1 to draw it, y = pixels per radian,
+    /// z = yaw at the left edge, w = Mercator ordinate of the top edge.
+    pano: [f32; 4],
+    /// x = samples per pixel along each axis.
+    pano_samples: [f32; 4],
+    /// World to this plane's texture UV (x, y) and plane height (z).
+    plane_to_uv: [[f32; 4]; 4],
+    /// The virtual camera's eye (w = 1).
+    eye: [f32; 4],
+    /// Forward, right and up after the rig tilt and roll: yaw turns about
+    /// up, then pitch about the yaw-turned right.
+    axis_forward: [f32; 4],
+    axis_right: [f32; 4],
+    axis_up: [f32; 4],
 }
 
 impl GpuUniforms {
@@ -940,6 +954,21 @@ impl Renderer {
         );
         right_uniforms.lens_preview[0] = correction;
 
+        // The whole field: a fixed panorama, whatever the pose and FOV.
+        if let Some(layout) = &viewport.config.panorama {
+            let basis = crate::projection::PanoramaBasis::with_rig(
+                &scene.camera_position,
+                viewport.config.rig_tilt,
+                viewport.config.rig_roll,
+            );
+            for (uniforms, model) in [
+                (&mut left_uniforms, scene.model_matrix_left()),
+                (&mut right_uniforms, scene.model_matrix_right()),
+            ] {
+                set_panorama(uniforms, layout, &basis, &model, scene.plane_aspect);
+            }
+        }
+
         let curves = viewport
             .config
             .color_match
@@ -1347,7 +1376,49 @@ pub(crate) fn build_gpu_uniforms(
         // overrides this field for the single-camera preview mode.
         lens_preview: [1.0, 0.0, 0.0, 0.0],
         tone_curve: color_match::identity_curve(),
+        pano: [0.0; 4],
+        pano_samples: [1.0, 0.0, 0.0, 0.0],
+        plane_to_uv: [[0.0; 4]; 4],
+        eye: [0.0; 4],
+        axis_forward: [0.0; 4],
+        axis_right: [0.0; 4],
+        axis_up: [0.0; 4],
     }
+}
+
+/// Switch a plane's uniforms to the whole-field panorama: each output
+/// pixel becomes a ray through the follow camera's basis, met with this
+/// plane (`model`, quad aspect `plane_aspect`).
+fn set_panorama(
+    uniforms: &mut GpuUniforms,
+    layout: &crate::projection::PanoramaLayout,
+    basis: &crate::projection::PanoramaBasis,
+    model: &Matrix4<f32>,
+    plane_aspect: f32,
+) {
+    // The quad spans x in ±0.5 and y in ±0.5 / aspect, with texture UV
+    // u = x + 0.5 and v = 0.5 - y * aspect (see `quad_vertices`).
+    #[rustfmt::skip]
+    let to_uv = Matrix4::new(
+        1.0, 0.0, 0.0, 0.5,
+        0.0, -plane_aspect, 0.0, 0.5,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    );
+    let inverse = model.try_inverse().unwrap_or_else(Matrix4::identity);
+    let vec4 = |v: &nalgebra::Vector3<f32>, w: f32| [v.x, v.y, v.z, w];
+    uniforms.pano = [
+        1.0,
+        layout.px_per_rad as f32,
+        layout.yaw_left as f32,
+        crate::projection::mercator(layout.pitch_top) as f32,
+    ];
+    uniforms.pano_samples = [layout.samples.max(1) as f32, 0.0, 0.0, 0.0];
+    uniforms.plane_to_uv = matrix4_to_columns(&(to_uv * inverse));
+    uniforms.eye = vec4(&basis.eye, 1.0);
+    uniforms.axis_forward = vec4(&basis.forward, 0.0);
+    uniforms.axis_right = vec4(&basis.right, 0.0);
+    uniforms.axis_up = vec4(&basis.up, 0.0);
 }
 
 /// Convert a nalgebra `Matrix4` to column-major `[[f32; 4]; 4]` for wgpu.
@@ -1419,6 +1490,23 @@ mod tests {
         // Point at Z = 1 (OpenGL far) should map to Z = 1 (wgpu far)
         let p = m * nalgebra::Vector4::new(0.0, 0.0, 1.0, 1.0);
         assert!((p.z - 1.0).abs() < 1e-5);
+    }
+
+    /// The Rust uniforms and the WGSL `Uniforms` agree field by field
+    /// (WGSL lays vec4s and mat4s out at 16-byte steps).
+    #[test]
+    fn uniforms_match_the_shader_layout() {
+        use std::mem::{offset_of, size_of};
+        assert_eq!(size_of::<GpuUniforms>(), 832);
+        assert_eq!(offset_of!(GpuUniforms, lens_preview), 144);
+        assert_eq!(offset_of!(GpuUniforms, tone_curve), 160);
+        assert_eq!(offset_of!(GpuUniforms, pano), 672);
+        assert_eq!(offset_of!(GpuUniforms, pano_samples), 688);
+        assert_eq!(offset_of!(GpuUniforms, plane_to_uv), 704);
+        assert_eq!(offset_of!(GpuUniforms, eye), 768);
+        assert_eq!(offset_of!(GpuUniforms, axis_forward), 784);
+        assert_eq!(offset_of!(GpuUniforms, axis_right), 800);
+        assert_eq!(offset_of!(GpuUniforms, axis_up), 816);
     }
 
     /// The whole-field panorama and the follow camera agree on where a

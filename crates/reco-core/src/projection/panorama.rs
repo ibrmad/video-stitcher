@@ -374,6 +374,21 @@ impl PanoramaLayout {
         }
     }
 
+    /// Where camera pixel `(nx, ny)` (normalized, as detections are)
+    /// appears in the panorama, in pixel coordinates.
+    pub fn camera_to_pixel(
+        &self,
+        basis: &PanoramaBasis,
+        calibration: &MatchCalibration,
+        camera: CameraId,
+        nx: f64,
+        ny: f64,
+    ) -> Option<(f64, f64)> {
+        let dir = camera_ray(calibration, &scene_of(calibration), camera, nx, ny)?;
+        let (yaw, pitch) = basis.yaw_pitch(&dir);
+        Some(self.yaw_pitch_to_pixel(yaw, pitch))
+    }
+
     /// The sidecar describing this layout for a match exported at `fps`
     /// with a seam blend of `blend`.
     pub fn sidecar(&self, calibration: &MatchCalibration, blend: f32, fps: f64) -> PanoramaSidecar {

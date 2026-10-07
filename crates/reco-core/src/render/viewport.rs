@@ -52,6 +52,9 @@ pub struct ViewportConfig {
     /// (see `render::color_match`). Default: `true`. The
     /// `RECO_COLOR_MATCH=0` environment variable turns it off everywhere.
     pub color_match: bool,
+    /// Draw the whole field as this fixed panorama instead of the
+    /// perspective view at the pose (the pose and FOV are then unused).
+    pub panorama: Option<crate::projection::PanoramaLayout>,
 }
 
 impl Default for ViewportConfig {
@@ -65,6 +68,7 @@ impl Default for ViewportConfig {
             rig_roll: 0.0,
             lens_correction_amount: 1.0,
             color_match: true,
+            panorama: None,
         }
     }
 }

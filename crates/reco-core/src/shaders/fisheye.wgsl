@@ -32,6 +32,20 @@ struct Uniforms {
     // Per-channel tone curve (RGB in xyz) at 32 even steps over [0, 1],
     // set by the automatic colour matching between the cameras.
     tone_curve: array<vec4<f32>, 32>,
+    // Whole-field panorama: x = 1 to draw it, y = pixels per radian,
+    // z = yaw at the left edge, w = Mercator ordinate of the top edge.
+    pano: vec4<f32>,
+    // x = samples per pixel along each axis.
+    pano_samples: vec4<f32>,
+    // World to this plane's texture UV (x, y) and plane height (z).
+    plane_to_uv: mat4x4<f32>,
+    // The virtual camera's eye (w = 1).
+    eye: vec4<f32>,
+    // Forward, right and up after the rig tilt and roll: yaw turns about
+    // up, then pitch about the yaw-turned right.
+    axis_forward: vec4<f32>,
+    axis_right: vec4<f32>,
+    axis_up: vec4<f32>,
 };
 
 // YUV420P plane textures (Y = full res R8Unorm, U/V = half res R8Unorm)
@@ -54,7 +68,12 @@ struct VertexOutput {
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.clip_position = u.mvp * vec4<f32>(in.position, 1.0);
+    if u.pano.x > 0.5 {
+        // The panorama covers the whole target: each pixel casts its own ray.
+        out.clip_position = vec4<f32>(in.uv.x * 2.0 - 1.0, 1.0 - in.uv.y * 2.0, 0.0, 1.0);
+    } else {
+        out.clip_position = u.mvp * vec4<f32>(in.position, 1.0);
+    }
     out.uv = in.uv;
     return out;
 }
@@ -117,24 +136,24 @@ fn sample_yuv(uv: vec2<f32>) -> vec4<f32> {
     // for delivering the triple in (R, G, B) order - swizzling BGRA is
     // handled at upload time so the shader only sees R-in-red.
     if u.flags.y == 2u {
-        let rgba = textureSample(t_y, s_video, sample_uv);
+        let rgba = textureSampleLevel(t_y, s_video, sample_uv, 0.0);
         return vec4<f32>(rgba.rgb, 1.0);
     }
 
-    let y_raw = textureSample(t_y, s_video, sample_uv).r;
+    let y_raw = textureSampleLevel(t_y, s_video, sample_uv, 0.0).r;
 
     var u_raw: f32;
     var v_raw: f32;
 
     if u.flags.y == 1u {
         // NV12: t_u is Rg8Unorm (or Rg16Unorm for 10-bit) with interleaved (U, V)
-        let uv_sample = textureSample(t_u, s_video, sample_uv);
+        let uv_sample = textureSampleLevel(t_u, s_video, sample_uv, 0.0);
         u_raw = uv_sample.r;
         v_raw = uv_sample.g;
     } else {
         // YUV420P: separate R8 textures
-        u_raw = textureSample(t_u, s_video, sample_uv).r;
-        v_raw = textureSample(t_v, s_video, sample_uv).r;
+        u_raw = textureSampleLevel(t_u, s_video, sample_uv, 0.0).r;
+        v_raw = textureSampleLevel(t_v, s_video, sample_uv, 0.0).r;
     }
 
     // BT.709 YCbCr -> R'G'B'. Range scaling depends on flags.w:
@@ -167,14 +186,72 @@ fn sample_yuv(uv: vec2<f32>) -> vec4<f32> {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    if u.pano.x > 0.5 {
+        return panorama(in.clip_position.xy);
+    }
     // Remap UV from [0,1] to [-0.5, 1.5] in the fragment shader.
     // This extends the coordinate space so the undistortion can
     // map points outside the plane back to valid texture coords.
     // (Done here instead of the vertex shader because some embedded
     // GPU drivers pass vertex attributes directly to the fragment
     // stage, ignoring vertex shader output for user-defined varyings.)
-    let uv = in.uv * 2.0 - vec2<f32>(0.5);
+    return shade(in.uv * 2.0 - vec2<f32>(0.5));
+}
 
+/// Turn `v` about the unit axis `k` by `angle` (right-hand rule).
+fn rotate(v: vec3<f32>, k: vec3<f32>, angle: f32) -> vec3<f32> {
+    let c = cos(angle);
+    let s = sin(angle);
+    return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c);
+}
+
+/// The whole-field panorama at a pixel (`frag` is its centre, in pixels):
+/// the plane's colour averaged over an s×s grid of rays, weighted by
+/// coverage and seam alpha so the blend stage averages the blends.
+fn panorama(frag: vec2<f32>) -> vec4<f32> {
+    let samples = max(u32(u.pano_samples.x), 1u);
+    let up = normalize(u.axis_up.xyz);
+    let eye = u.plane_to_uv * vec4<f32>(u.eye.xyz, 1.0);
+    var rgb = vec3<f32>(0.0);
+    var weight = 0.0;
+    for (var j = 0u; j < samples; j = j + 1u) {
+        for (var i = 0u; i < samples; i = i + 1u) {
+            let offset = (vec2<f32>(f32(i), f32(j)) + vec2<f32>(0.5)) / f32(samples);
+            let p = frag - vec2<f32>(0.5) + offset;
+            // Mercator in Reco's yaw/pitch (yaw falls to the right).
+            let yaw = u.pano.z - p.x / u.pano.y;
+            let pitch = atan(sinh(u.pano.w - p.y / u.pano.y));
+            // The follow camera's centre ray at (yaw, pitch).
+            let turned = rotate(u.axis_forward.xyz, up, yaw);
+            let right = normalize(rotate(u.axis_right.xyz, up, yaw));
+            let dir = rotate(turned, right, pitch);
+            // Meet the plane (z = 0 in plane_to_uv space) ahead of the eye.
+            let along = u.plane_to_uv * vec4<f32>(dir, 0.0);
+            if abs(along.z) < 1e-7 {
+                continue;
+            }
+            let t = -eye.z / along.z;
+            if t <= 0.0 {
+                continue;
+            }
+            let tex = eye.xy + along.xy * t;
+            if tex.x < 0.0 || tex.x > 1.0 || tex.y < 0.0 || tex.y > 1.0 {
+                continue;
+            }
+            let c = shade(tex * 2.0 - vec2<f32>(0.5));
+            rgb = rgb + c.rgb * c.a;
+            weight = weight + c.a;
+        }
+    }
+    if weight <= 0.0 {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+    return vec4<f32>(rgb / weight, weight / f32(samples * samples));
+}
+
+/// A plane's colour and seam alpha at extended plane UV `uv`
+/// ([-0.5, 1.5]): lens, YUV, colour transfer and tone curve.
+fn shade(uv: vec2<f32>) -> vec4<f32> {
     // Raw mode: negative correction bypasses all projection math
     // and samples the input texture directly at the fragment UV.
     if u.lens_preview.x < 0.0 {

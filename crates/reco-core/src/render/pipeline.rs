@@ -1055,6 +1055,279 @@ mod tests {
         buffer.slice(..).get_mapped_range().to_vec()
     }
 
+    /// Cameras for the whole-field tests: 512×288 equidistant fisheyes
+    /// (fx 240, about 120° across) in the 2026-10-03 rig's layout.
+    fn wide_calibration(rig_tilt: f64, rig_roll: f64) -> MatchCalibration {
+        let cam = crate::calibration::CameraParams {
+            width: 512,
+            height: 288,
+            fx: 240.0,
+            fy: 240.0,
+            cx: 256.0,
+            cy: 144.0,
+            d: [0.0; 4],
+        };
+        MatchCalibration {
+            left: cam.clone(),
+            right: cam,
+            layout: crate::calibration::PlaneLayout {
+                camera_axis_offset: 0.2405,
+                intersect: 0.5366,
+                x_ty: -0.0089,
+                x_rz: -0.0407,
+                z_rx: -0.0444,
+                x_rx: 0.0,
+                z_rz: 0.0,
+            },
+            rig_tilt,
+            rig_roll,
+            sync_offset: 0,
+            field_roi: None,
+            lens_correction_amount: 1.0,
+            blend_width: 0.05,
+        }
+    }
+
+    /// A 512×288 YUV420P frame: black, with white 5×5 dots centred on
+    /// the given pixels.
+    fn dots(at: &[(u32, u32)]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let (w, h) = (512u32, 288u32);
+        let mut y = vec![0u8; (w * h) as usize];
+        for &(cx, cy) in at {
+            for py in cy - 2..=cy + 2 {
+                for px in cx - 2..=cx + 2 {
+                    y[(py * w + px) as usize] = 255;
+                }
+            }
+        }
+        let chroma = vec![128; (w / 2 * h / 2) as usize];
+        (y, chroma.clone(), chroma)
+    }
+
+    /// A 512×288 frame full of detail: a fine checker over a ramp.
+    fn busy() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let (w, h) = (512u32, 288u32);
+        let y = (0..w * h)
+            .map(|i| {
+                let (x, row) = (i % w, i / w);
+                let checker = if (x + row) % 2 == 0 { 70 } else { 0 };
+                (x * 120 / w + checker + 30) as u8
+            })
+            .collect();
+        let chroma = vec![128; (w / 2 * h / 2) as usize];
+        (y, chroma.clone(), chroma)
+    }
+
+    /// Render with `draw` into a `width × height` target and read its
+    /// BGRA pixels back (rows unpadded).
+    fn drawn_sized(
+        gpu: &GpuContext,
+        width: u32,
+        height: u32,
+        draw: impl FnOnce(&wgpu::TextureView),
+    ) -> Vec<u8> {
+        let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test target"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        draw(&texture.create_view(&Default::default()));
+        let row = (width * 4).div_ceil(256) * 256;
+        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test readback"),
+            size: u64::from(row * height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        gpu.queue.submit(Some(encoder.finish()));
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        gpu.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .expect("GPU poll");
+        let padded = buffer.slice(..).get_mapped_range().to_vec();
+        padded
+            .chunks(row as usize)
+            .flat_map(|r| r[..(width * 4) as usize].to_vec())
+            .collect()
+    }
+
+    /// A pipeline that renders the whole field through `layout`.
+    fn panorama_pipeline(
+        gpu: &GpuContext,
+        cal: &MatchCalibration,
+        layout: crate::projection::PanoramaLayout,
+    ) -> StitchPipeline {
+        StitchPipeline::with_gpu(
+            gpu.clone(),
+            cal.clone(),
+            ViewportConfig {
+                width: layout.width,
+                height: layout.height,
+                rig_tilt: cal.rig_tilt as f32,
+                rig_roll: cal.rig_roll as f32,
+                color_match: false,
+                panorama: Some(layout),
+                ..ViewportConfig::default()
+            },
+            512,
+            288,
+            wgpu::TextureFormat::Bgra8Unorm,
+            InputFormat::Yuv420p,
+        )
+        .expect("pipeline")
+    }
+
+    /// The brightness-weighted centre of what is lit within 12 px of
+    /// `near` (pixel coordinates, centres at +0.5).
+    fn lit_centre(bgra: &[u8], width: u32, near: (f64, f64)) -> Option<(f64, f64)> {
+        let height = bgra.len() as u32 / 4 / width;
+        let (mut sum, mut sx, mut sy) = (0.0, 0.0, 0.0);
+        let (x0, y0) = (near.0 as i64 - 12, near.1 as i64 - 12);
+        for y in y0.max(0)..(y0 + 25).min(i64::from(height)) {
+            for x in x0.max(0)..(x0 + 25).min(i64::from(width)) {
+                let i = ((y as u32 * width + x as u32) * 4) as usize;
+                let lit =
+                    (f64::from(bgra[i]) + f64::from(bgra[i + 1]) + f64::from(bgra[i + 2])) / 3.0;
+                if lit > 40.0 {
+                    sum += lit;
+                    sx += lit * (x as f64 + 0.5);
+                    sy += lit * (y as f64 + 0.5);
+                }
+            }
+        }
+        (sum > 0.0).then(|| (sx / sum, sy / sum))
+    }
+
+    #[test]
+    #[ignore = "requires a GPU (wgpu adapter init)"]
+    fn dots_land_where_the_mapping_says() {
+        use crate::detect::detector::CameraId;
+        use crate::projection::{PanoramaBasis, PanoramaDetail, PanoramaLayout};
+        let gpu = GpuContext::new_blocking().expect("GPU init");
+        let black = dots(&[]);
+        // Away from the seam: the left camera's left side, the right's right side.
+        let (left_dot, right_dot) = ((150, 150), (360, 120));
+        for (tilt, roll) in [(0.0, 0.0), (0.05, -0.03)] {
+            let cal = wide_calibration(tilt, roll);
+            let basis = PanoramaBasis::new(&cal);
+            for detail in [PanoramaDetail::Half, PanoramaDetail::Full] {
+                let layout = PanoramaLayout::for_field(&cal, detail);
+                let pipeline = panorama_pipeline(&gpu, &cal, layout);
+                for (camera, dot) in [(CameraId::Left, left_dot), (CameraId::Right, right_dot)] {
+                    let lit = dots(&[dot]);
+                    let (l, r) = match camera {
+                        CameraId::Left => (&lit, &black),
+                        CameraId::Right => (&black, &lit),
+                    };
+                    let image = drawn_sized(&gpu, layout.width, layout.height, |view| {
+                        pipeline
+                            .render_to_view(&planes(l), &planes(r), 0.0, 0.0, view)
+                            .expect("render");
+                    });
+                    let (nx, ny) = (
+                        (f64::from(dot.0) + 0.5) / 512.0,
+                        (f64::from(dot.1) + 0.5) / 288.0,
+                    );
+                    let expected = layout
+                        .camera_to_pixel(&basis, &cal, camera, nx, ny)
+                        .expect("the dot is in the picture");
+                    let found = lit_centre(&image, layout.width, expected).unwrap_or_else(|| {
+                        panic!("no dot near {expected:?} ({camera:?} {detail:?} tilt {tilt})")
+                    });
+                    let miss =
+                        ((found.0 - expected.0).powi(2) + (found.1 - expected.1).powi(2)).sqrt();
+                    // Measured 0.02-0.11 px; a 0.004 rad slip is 0.5 px here.
+                    assert!(
+                        miss < 0.25,
+                        "{camera:?} {detail:?} tilt {tilt} roll {roll}: found {found:?}, mapping says {expected:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires a GPU (wgpu adapter init)"]
+    fn half_matches_full_box_filtered() {
+        use crate::projection::{PanoramaDetail, PanoramaLayout};
+        let gpu = GpuContext::new_blocking().expect("GPU init");
+        let cal = wide_calibration(0.0, 0.0);
+        let half = PanoramaLayout::for_field(&cal, PanoramaDetail::Half);
+        let full = PanoramaLayout {
+            width: half.width * 2,
+            height: half.height * 2,
+            px_per_rad: half.px_per_rad * 2.0,
+            samples: 1,
+            ..half
+        };
+        let single = PanoramaLayout { samples: 1, ..half };
+        let frame = busy();
+        let render = |layout: PanoramaLayout| {
+            let pipeline = panorama_pipeline(&gpu, &cal, layout);
+            drawn_sized(&gpu, layout.width, layout.height, |view| {
+                pipeline
+                    .render_to_view(&planes(&frame), &planes(&frame), 0.0, 0.0, view)
+                    .expect("render");
+            })
+        };
+        let (fine, smooth, aliased) = (render(full), render(half), render(single));
+        let (w, h) = (half.width as usize, half.height as usize);
+        let mut boxed = vec![0.0f64; w * h * 4];
+        for y in 0..h {
+            for x in 0..w {
+                for c in 0..4 {
+                    let at = |dx: usize, dy: usize| {
+                        f64::from(fine[((2 * y + dy) * 2 * w + 2 * x + dx) * 4 + c])
+                    };
+                    boxed[(y * w + x) * 4 + c] = (at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1)) / 4.0;
+                }
+            }
+        }
+        let error = |image: &[u8]| {
+            image
+                .iter()
+                .zip(&boxed)
+                .map(|(a, b)| (f64::from(*a) - b).abs())
+                .sum::<f64>()
+                / boxed.len() as f64
+        };
+        let (smooth_error, aliased_error) = (error(&smooth), error(&aliased));
+        assert!(
+            smooth_error <= 2.0,
+            "half differs from full box-filtered by {smooth_error:.2}"
+        );
+        assert!(
+            aliased_error > smooth_error * 2.0,
+            "one sample per pixel ({aliased_error:.2}) should be visibly worse than 2×2 ({smooth_error:.2})"
+        );
+    }
+
     #[test]
     #[ignore = "requires a GPU (wgpu adapter init)"]
     fn render_uploaded_to_view_draws_the_last_upload() {
