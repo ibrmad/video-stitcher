@@ -1,6 +1,5 @@
-//! The sliders' value fields in the App (plans/2026-10-06-value-fields.md):
-//! a typed or stepped value goes through its slider, which keeps it in its
-//! range, then on the path a drag takes.
+//! The sliders' value fields in the App: a typed or stepped value goes through
+//! its slider, which keeps it in its range, then on the path a drag takes.
 
 use makepad_widgets::*;
 

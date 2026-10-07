@@ -1,7 +1,6 @@
-//! The Keyboard shortcuts sheet, after the Slint app's dialog: every key
-//! the app answers (from the table the key handler is tested against), and
-//! the project's Website and Forum. Escape, Close or a press outside closes
-//! it.
+//! The Keyboard shortcuts sheet: every key the app answers (from the table the
+//! key handler is tested against), and the project's Website and Forum.
+//! Escape, Close or a press outside closes it.
 
 use makepad_widgets::*;
 

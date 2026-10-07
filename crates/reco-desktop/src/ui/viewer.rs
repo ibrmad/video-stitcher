@@ -1,10 +1,10 @@
 //! The viewer, after a Rerun view: a 32 pt view bar (the view's name, the
-//! preview aspect, Record and its menu) over a black canvas. Until a stitched preview
-//! exists the canvas shows the next step of the job under the panorama
+//! preview aspect, Record and its menu) over a black canvas. Until a stitched
+//! preview exists the canvas shows the next step of the job under the panorama
 //! frame, with a stepper that says where the user is; calibration shows its
-//! progress in that column. An export shows a progress card over the
-//! picture. Both have Cancel. Module 1 draws the stitched video where the
-//! placeholder pitch is.
+//! progress in that column. An export shows a progress card over the picture.
+//! Both have Cancel. The stitched video is drawn where the placeholder pitch
+//! is.
 
 use makepad_widgets::*;
 
@@ -84,7 +84,7 @@ script_mod! {
             draw_bg.color: theme.reco_viewport
 
             // Placeholder pitch (a letterboxed panorama) for --look-preview,
-            // until Module 1 draws the stitched video here.
+            // standing in for the stitched video.
             sample_frame := View{
                 visible: false
                 width: Fill height: Fill
@@ -126,7 +126,7 @@ script_mod! {
                 }
             }
 
-            // The live stitched preview (Module 1).
+            // The live stitched preview.
             preview := RecoPreview{visible: false}
 
             // The next step of the job. Text wraps and centres inside the
@@ -217,7 +217,7 @@ script_mod! {
             }
 
             // Notices, bottom right: clear of the Adjust panel and the time
-            // panel (Module 2).
+            // panel.
             toasts := RecoToasts{}
         }
     }

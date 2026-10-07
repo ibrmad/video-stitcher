@@ -1,6 +1,6 @@
-//! Asks before quitting with unsaved calibration edits (owner, 2026-10-06):
-//! Save saves and then quits, Don't Save quits as the file was, Cancel (or
-//! Escape, or a press outside) stays.
+//! Asks before quitting with unsaved calibration edits: Save saves and then
+//! quits, Don't Save quits as the file was, Cancel (or Escape, or a press
+//! outside) stays.
 
 use makepad_widgets::*;
 

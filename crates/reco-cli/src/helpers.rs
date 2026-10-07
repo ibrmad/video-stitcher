@@ -35,7 +35,7 @@ pub struct ProgressReporter {
     /// Last `(frame_count, elapsed)` checkpoint — used to compute
     /// the recent-window fps as a delta against the previous
     /// report. Cell makes this interior-mutable without forcing
-    /// `&mut self` on `report*` (ergonomic in Slint/session
+    /// `&mut self` on `report*` (ergonomic in session
     /// callback closures that capture by value).
     last_checkpoint: Cell<Option<(u64, std::time::Duration)>>,
 }

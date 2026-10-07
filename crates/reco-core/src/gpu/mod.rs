@@ -44,7 +44,7 @@ impl From<OutputFormat> for wgpu::TextureFormat {
 /// Errors that can occur during GPU initialization.
 ///
 /// All variants are `Clone + Send + Sync` so callers that post
-/// results to worker-thread channels (reco-gui export thread,
+/// results to worker-thread channels (the desktop app's export thread,
 /// live-calibration worker) can carry the error as a typed enum
 /// rather than the legacy `Result<_, String>` pattern. The wgpu
 /// request errors are flattened to `String` at the `From` boundary
@@ -250,11 +250,11 @@ impl GpuContext {
     /// platform defaults: DX12 on Windows, Vulkan on Linux, Metal
     /// on macOS.
     ///
-    /// Public so windowed consumers (reco-gui, rig-calib) that let Slint
-    /// create the shared `wgpu::Instance` can apply the same policy via
-    /// `WGPUConfiguration::Automatic::backends`, instead of falling back to
-    /// Slint's own default (which tries Vulkan first on Windows and can hit
-    /// driver/loader bugs this function's platform defaults are chosen to avoid).
+    /// Public so windowed consumers (rig-calib, UI toolkits) that create the
+    /// shared `wgpu::Instance` themselves can apply the same policy, instead
+    /// of falling back to the toolkit's own default (which can try Vulkan
+    /// first on Windows and hit driver/loader bugs this function's platform
+    /// defaults are chosen to avoid).
     pub fn select_backends() -> wgpu::Backends {
         if let Ok(val) = std::env::var("WGPU_BACKEND") {
             match val.to_lowercase().as_str() {

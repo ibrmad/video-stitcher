@@ -19,7 +19,7 @@ pub fn size_label(name: &str, width: u32, height: u32) -> String {
 }
 
 /// The card's line before the first frame: where the export starts (one
-/// far in seeks first, and would look stalled; Slint said "Seeking to …").
+/// far in seeks first, and a bare "Starting…" would look stalled).
 pub fn starting_line(start_secs: f64) -> String {
     if start_secs < 1.0 {
         "Starting…".into()

@@ -1,10 +1,10 @@
 //! The time panel, after Rerun's: a control row (step, play, the time and a
 //! status line), then the time ruler with one lane per camera. A lane shows
 //! the camera's files as blocks with a gap at each file boundary; the white
-//! playhead crosses ruler and lanes. It shows only what exists: the lanes
-//! once a camera has video, the time once there is a stitch to play. The
-//! lanes also fold away with the panel toggle. Module 0 shows sample data;
-//! Module 2 wires playback and scrubbing.
+//! playhead crosses ruler and lanes. It shows only what exists: the lanes once
+//! a camera has video, the time once there is a stitch to play. The lanes also
+//! fold away with the panel toggle. `--look-preview` fills it with sample
+//! data; in use it follows playback and takes scrubbing.
 
 use std::time::{Duration, Instant};
 

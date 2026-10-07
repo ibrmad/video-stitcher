@@ -1,8 +1,8 @@
-//! The Preferences sheet: the app-wide settings only, the recording codec
-//! and folder and the usage-data opt-in. (The Slint app's export and
-//! recording defaults, seam blend and AI model live where they are used:
-//! the export sheet, the view bar and Adjust.) Save keeps them; Cancel,
-//! Escape or a press outside leaves everything as it was.
+//! The Preferences sheet: the app-wide settings only, the recording codec and
+//! folder and the usage-data opt-in. (The export and recording defaults, seam
+//! blend and AI model live where they are used: the export sheet, the view bar
+//! and Adjust.) Save keeps them; Cancel, Escape or a press outside leaves
+//! everything as it was.
 
 use makepad_widgets::*;
 

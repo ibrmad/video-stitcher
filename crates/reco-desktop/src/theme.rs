@@ -289,7 +289,7 @@ script_mod! {
         reco_panorama_max_width: 520.0
         reco_panorama_radius: 3.0
 
-        // Placeholder pitch shown by --look-preview until Module 1 draws the
+        // Placeholder pitch shown by --look-preview, standing in for the
         // stitched video.
         reco_grass_a: #x1d5a3a
         reco_grass_b: #x1a5235
@@ -306,8 +306,8 @@ script_mod! {
 
         // Type (points): 13 px for everything (macOS's own size), 12 px for
         // small print, one 22 px title for the next step. Rerun's 12 px
-        // and 24 pt rows read too small on a 1x display (owner,
-        // 2026-10-05), so the design has more room than Rerun's.
+        // and 24 pt rows read too small on a 1x display, so the design has
+        // more room than Rerun's.
         reco_font_body: 9.75
         reco_font_small: 9.0
         reco_font_display: 16.5

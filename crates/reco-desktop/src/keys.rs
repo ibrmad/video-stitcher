@@ -1,5 +1,5 @@
-//! The preview's keyboard shortcuts (PARITY.md Module 1, from reco-gui's
-//! FocusScope): one pure mapping from a key to what it asks of the preview.
+//! The preview's keyboard shortcuts: one pure mapping from a key to what it
+//! asks of the preview.
 
 use makepad_widgets::*;
 
@@ -56,7 +56,7 @@ pub enum AppShortcut {
 /// The menu shortcut `key` makes with ⌘ (Ctrl off macOS) and nothing else
 /// held. The macOS menu bar lists these, and the app also reads them as
 /// keys, wherever the keyboard is: injected keys (the checks) and a menu
-/// whose key equivalents don't fire (as on the owner's Mac) work the same.
+/// whose key equivalents don't fire (as on some Macs) work the same.
 /// A key the menu takes never reaches the window, so nothing runs twice.
 pub fn app_shortcut(key: KeyCode, modifiers: &KeyModifiers) -> Option<AppShortcut> {
     let command = if cfg!(target_os = "macos") {
@@ -108,7 +108,7 @@ pub fn command_for_key(key: KeyCode, modifiers: &KeyModifiers) -> Option<KeyComm
 
 /// The preview's command for a typed character: R, F, + = - _ [ ] and
 /// the keypad's + and − are matched by what they type, so they follow the
-/// keyboard's layout (as the Slint app matched the typed text).
+/// keyboard's layout.
 pub fn command_for_text(text: &str) -> Option<KeyCommand> {
     Some(match text {
         "+" | "=" => KeyCommand::Zoom { degrees: -KEY_ZOOM },
@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn maps_the_slint_shortcuts() {
+    fn maps_the_preview_shortcuts() {
         assert_eq!(plain(KeyCode::Space), Some(KeyCommand::TogglePlay));
         assert_eq!(
             plain(KeyCode::ArrowLeft),
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn keys_that_type_follow_the_layout() {
         // Their places differ by layout ("+" is the US "]" key on a German
-        // keyboard): the typed character decides, as in Slint.
+        // keyboard): the typed character decides.
         for key in [
             KeyCode::Equals,
             KeyCode::Minus,

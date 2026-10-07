@@ -83,9 +83,9 @@ fn adopt(
     Err("zero-copy frames need Metal".into())
 }
 
-/// Degrees of FOV per point of wheel scroll. reco-gui zooms by −dy / 40
-/// with macOS's sign (positive away); Makepad's `scroll.y` is the negated
-/// delta, so scrolling away (negative here) zooms in.
+/// Degrees of FOV per point of wheel scroll. Makepad's `scroll.y` is the
+/// negated macOS delta (positive away), so scrolling away (negative here)
+/// zooms in.
 const WHEEL_DEG_PER_POINT: f64 = 1.0 / 40.0;
 
 /// The live preview widget.

@@ -2,15 +2,14 @@
 //!
 //! The trivial transport: consumers push [`ControlIntent`] values
 //! onto an internal ring as they decode their native keyboard events
-//! (Slint key handler, OBS hotkey API, terminal `termion`, etc.),
+//! (a GUI key handler, OBS hotkey API, terminal `termion`, etc.),
 //! and [`KeyboardTransport::poll`] drains them into the caller's
 //! buffer.
 //!
 //! This transport exists mostly to prove that the abstraction is
 //! usable — the real payoff is uniform dispatch at the consumer
-//! boundary: the same `ControlIntent` stream drives reco-obs,
-//! reco-gui, and future remote clients without per-consumer event
-//! translation.
+//! boundary: the same `ControlIntent` stream drives reco-obs and future
+//! remote clients without per-consumer event translation.
 
 use std::collections::VecDeque;
 

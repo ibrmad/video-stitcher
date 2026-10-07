@@ -5,7 +5,7 @@
 //!
 //! # Purpose
 //!
-//! Every consumer (reco-gui, reco-cli preview, reco-obs) turns a
+//! Every consumer (reco-cli preview, reco-obs) turns a
 //! transport's [`ControlIntent`] stream into calls on
 //! [`PoseControl`](crate::pose_control::PoseControl) plus domain-specific side effects (start encoder,
 //! swap detector model, change codec). Before this type, each
@@ -16,7 +16,7 @@
 //! Non-pose intents (quality / capture / model-select) route to
 //! consumer-provided closures; those slots are `Option<Box<dyn FnMut>>`
 //! rather than trait objects on the translator itself, matching the
-//! Slint-callback shape most consumers already use.
+//! callback shape most consumers already use.
 //!
 //! # Lifetime and threading
 //!

@@ -3,7 +3,7 @@
 //! Maps N logical YUV420P camera frames into a single grid-layout
 //! frame (and back). Used by:
 //!
-//! - **Replay recording**: reco-obs / reco-gui write the live
+//! - **Replay recording**: reco-obs / reco-desktop write the live
 //!   source tuples to a single video file during the session; the
 //!   replay tool reads one file and recovers N camera streams.
 //! - **Web panorama input**: a single uploaded file carries every

@@ -1,6 +1,6 @@
-//! AI tracking in the export sheet (Module 6b): whether this machine can
-//! run it, the rows' rules, Choose…, the style presets, the lookahead's
-//! zones, and the tracking an export runs.
+//! AI tracking in the export sheet: whether this machine can run it, the rows'
+//! rules, Choose…, the style presets, the lookahead's zones, and the tracking
+//! an export runs.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -147,7 +147,7 @@ impl App {
     }
 
     /// A benchmark run's tracking (automation.rs): on, `model`, the field
-    /// mode and `lookahead` seconds, as the Slint app's hook set them.
+    /// mode and `lookahead` seconds.
     pub(crate) fn set_auto_tracking(&mut self, cx: &mut Cx, model: &Path, lookahead: f64) {
         self.ui
             .check_box(cx, ids!(ai_enable))

@@ -1,7 +1,7 @@
-//! A panel's slide: a value eased from one size to another over a fixed
-//! time (plans/2026-10-06-panel-motion.md). No Makepad types.
+//! A panel's slide: a value eased from one size to another over a fixed time.
+//! No Makepad types.
 
-/// How long a panel takes to slide open or closed (owner's choice).
+/// How long a panel takes to slide open or closed.
 pub const PANEL_SECS: f64 = 0.2;
 
 /// Ease-out cubic: quick to start, settling at the end.

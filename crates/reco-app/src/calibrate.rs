@@ -1,7 +1,6 @@
 //! Auto-calibration as a job: it runs Reco's calibration on its own thread,
 //! reports each step, can be cancelled, and saves the result beside the
-//! first left file (`Project::sibling_calibration`, where the Slint app
-//! saved it) before it reports.
+//! first left file (`Project::sibling_calibration`) before it reports.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -15,8 +14,7 @@ use reco_core::calibration::{CameraParams, MatchCalibration};
 use crate::files::save_atomically;
 use crate::lens::{Lens, LensInfo};
 
-/// Below this confidence a warning says the stitch may be poor (the Slint
-/// app's threshold).
+/// Below this confidence a warning says the stitch may be poor.
 pub const LOW_CONFIDENCE: f64 = 0.5;
 
 /// The steps a calibration reports.
@@ -25,7 +23,7 @@ pub const STEPS: usize = 7;
 /// The frame counts the Frames dropdown offers.
 pub const FRAME_CHOICES: [usize; 4] = [2, 4, 6, 8];
 
-/// The Advanced options (the Slint app's defaults).
+/// The Advanced options.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CalibrationOptions {
     /// Frame pairs to match (2, 4, 6 or 8).
@@ -145,8 +143,7 @@ pub enum CalibrationEvent {
 
 /// What a recalibration keeps: the lenses (and seam blend) of a
 /// calibration file, with the lenses in use on top when they differ from
-/// the file's (a picked profile or fine-tuning not yet saved; the Slint app
-/// kept its in-memory calibration).
+/// the file's (a picked profile or fine-tuning not yet saved).
 #[derive(Clone, Debug)]
 pub struct KeptLens {
     /// The calibration file.

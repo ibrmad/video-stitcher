@@ -1,9 +1,8 @@
-//! A panel's frame while it slides (plans/2026-10-06-panel-motion.md). Its
-//! content can be held at one width, so nothing re-wraps as the room around
-//! it narrows: anchored to its end, Setup slides out to the left; Adjust,
-//! anchored to its start, slides out to the right. Its own height can be set
-//! (the lanes, cut from the bottom), and it notes its natural height for the
-//! way back.
+//! A panel's frame while it slides. Its content can be held at one width, so
+//! nothing re-wraps as the room around it narrows: anchored to its end, Setup
+//! slides out to the left; Adjust, anchored to its start, slides out to the
+//! right. Its own height can be set (the lanes, cut from the bottom), and it
+//! notes its natural height for the way back.
 
 use makepad_widgets::*;
 

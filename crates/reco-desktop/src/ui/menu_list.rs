@@ -60,7 +60,7 @@ script_mod! {
     // `content`. Escape or a press outside closes it.
     mod.widgets.RecoMenu = PopoverFlat{
         // The anchor doesn't clip its button: a row icon's face reaches past
-        // its box, so its ink ends on the content edge (Rule 11).
+        // its box, so its ink ends on the content edge.
         clip_x: false clip_y: false
         placement: BottomStart
         trap_focus: true

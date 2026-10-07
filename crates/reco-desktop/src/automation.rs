@@ -1,10 +1,10 @@
-//! The Slint app's benchmark hooks, built only with the `automation`
-//! feature (off in releases): `RECO_AUTOLOAD` opens a match,
-//! `RECO_AUTOEXPORT` exports it (`_MODEL` with AI tracking, `_LOOKAHEAD`
-//! seconds of lookahead, `_REPEAT` runs back to back as `out_1.mp4`,
-//! `out_2.mp4`, …, logging the GPU's memory after each so a leak across
-//! exports shows), then quits; `RECO_VRAM_BUDGET_GB` sets the lookahead's
-//! memory budget, to reach its risk zones on a large GPU.
+//! The benchmark hooks, built only with the `automation` feature (off in
+//! releases): `RECO_AUTOLOAD` opens a match, `RECO_AUTOEXPORT` exports it
+//! (`_MODEL` with AI tracking, `_LOOKAHEAD` seconds of lookahead, `_REPEAT`
+//! runs back to back as `out_1.mp4`, `out_2.mp4`, …, logging the GPU's memory
+//! after each so a leak across exports shows), then quits;
+//! `RECO_VRAM_BUDGET_GB` sets the lookahead's memory budget, to reach its risk
+//! zones on a large GPU.
 
 use std::path::{Path, PathBuf};
 
@@ -149,7 +149,7 @@ impl App {
         self.start_auto_run(cx, 1);
     }
 
-    /// Run `n`: the sheet filled as the Slint app filled it, and Export.
+    /// Run `n`: the sheet filled from the environment, and Export.
     fn start_auto_run(&mut self, cx: &mut Cx, n: u32) {
         let Some(export) = self.auto_run.as_ref().map(|r| r.export.clone()) else {
             return;
@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn the_export_reads_as_slint_read_it() {
+    fn the_export_reads_its_environment_variables() {
         assert_eq!(auto_export(env(&[])), None);
         assert_eq!(
             auto_export(env(&[("RECO_AUTOEXPORT", "/out/run.mp4")])),

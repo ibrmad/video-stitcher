@@ -315,7 +315,7 @@ impl DetectorFrame<'_> {
 ///
 /// Per the plan-execution-2026-04-18 doc §2.7 and deep-review-2026-
 /// 04-18 Agent 5 finding: today's split into three separate traits
-/// forces consumers (reco-cli, reco-gui, reco-obs) to know which
+/// forces consumers (reco-cli, reco-desktop, reco-obs) to know which
 /// backend they have and wire it into a per-platform `set_*_detector`
 /// method. A unified trait moves platform dispatch behind the
 /// backend constructor, where it belongs.

@@ -1,7 +1,7 @@
-//! Anonymous usage data, opt-in in Preferences: the events the Slint app
-//! sent, in its JSON, for the reco-telemetry service. No names, no paths,
-//! no pictures: a random client id, the app's version, and each event's
-//! figures. Pure; the app does the sending.
+//! Anonymous usage data, opt-in in Preferences: the events and their JSON
+//! for the reco-telemetry service. No names, no paths, no pictures: a
+//! random client id, the app's version, and each event's figures. Pure; the
+//! app does the sending.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,7 +29,7 @@ pub enum UsageEvent {
         os: String,
         /// The GPU's name.
         gpu: String,
-        /// The AI tracking's state, as the Slint app put it.
+        /// The AI tracking's state.
         ai: String,
     },
     /// A match opened.
@@ -178,7 +178,7 @@ pub fn iso_time(at: SystemTime) -> String {
 }
 
 /// The date `days` after 1970-01-01: Howard Hinnant's algorithm (public
-/// domain), as the Slint app used it.
+/// domain).
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -260,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn a_batch_is_the_slint_apps_json() {
+    fn a_batch_is_the_services_json() {
         let text = batch_json(
             &UsageEvent::ExportComplete {
                 frames: 1800,

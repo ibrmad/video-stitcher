@@ -1,11 +1,11 @@
-//! Panels slide open and closed (plans/2026-10-06-panel-motion.md): a
-//! toggle starts a slide, each frame moves the splitter's bar (or sets the
-//! lanes' height), and the end folds the panel or leaves it open.
+//! Panels slide open and closed: a toggle starts a slide, each frame moves the
+//! splitter's bar (or sets the lanes' height), and the end folds the panel or
+//! leaves it open.
 //!
-//! A splitter keeps a pane's width at its floor while it is open, so a
-//! slide relaxes the floors for its 0.2 s and puts them back from the theme
-//! after. A script apply sets a widget's other values back to its DSL, so
-//! the bar and the fold are set again after each one.
+//! A splitter keeps a pane's width at its floor while it is open, so a slide
+//! relaxes the floors for its 0.2 s and puts them back from the theme after. A
+//! script apply sets a widget's other values back to its DSL, so the bar and
+//! the fold are set again after each one.
 
 use makepad_widgets::*;
 

@@ -1,8 +1,8 @@
 //! The report Report a bug sends or copies: what went wrong, how to reach
 //! the person, and, when they agree, what helps find it (the version, the
 //! system, the open files' names, the preview's figures, the last
-//! calibration run, the log's newest lines). Markdown, as the Slint app
-//! wrote it; the home folder reads as `~`, so paths name no one.
+//! calibration run, the log's newest lines). Markdown; the home folder
+//! reads as `~`, so paths name no one.
 
 use std::path::Path;
 

@@ -22,8 +22,8 @@ load-dynamic = ["ai", "reco-app/load-dynamic"]
 tensorrt-native = ["reco-app/tensorrt-native"]
 ncnn = ["reco-app/ncnn"]
 profiling = ["reco-app/profiling"]
-# Benchmark hooks, kept from the Slint app (RECO_AUTOLOAD, RECO_AUTOEXPORT,
-# RECO_VRAM_BUDGET_GB; automation.rs). Off in releases.
+# Benchmark hooks (RECO_AUTOLOAD, RECO_AUTOEXPORT, RECO_VRAM_BUDGET_GB;
+# automation.rs). Off in releases.
 automation = []
 
 [[bin]]
@@ -38,7 +38,7 @@ identifier = "org.reco-project.reco"
 
 [dependencies]
 # Pinned per DESIGN.md Rule 3. The widget families are opt-in; the core
-# has every widget Module 0 uses.
+# has every widget the app uses.
 makepad-widgets = { git = "https://github.com/makepad/makepad", rev = "62691a290eb58f7d5234960524429aaada3e572c", default-features = false }
 reco-app = { path = "../reco-app", default-features = false }
 reco-io = { path = "../reco-io" }

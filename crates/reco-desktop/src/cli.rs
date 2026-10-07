@@ -11,15 +11,15 @@ pub struct Args {
     /// Initial window size in points, from `--window-size WxH`.
     pub window_size: Option<(f64, f64)>,
     /// Show the shell in one of its states with sample content, from
-    /// `--look-preview[=STATE]` (default `ready`). For design review until the
-    /// engine drives these states (Modules 1-6).
+    /// `--look-preview[=STATE]` (default `ready`). For design review; a real
+    /// session is driven by the engine.
     pub look_preview: Option<LookPreview>,
     /// Camera files to open into the live preview.
     pub files: Option<FileArgs>,
     /// Read frames back instead of sharing textures (`--preview-readback`).
     pub preview_readback: bool,
     /// The export range to tint on the ruler, from `--export-range START-END`
-    /// in seconds (checks; Module 6's export dialog sets it).
+    /// in seconds (checks; the export sheet sets it).
     pub export_range: Option<(f64, f64)>,
     /// Show sample toasts, `--toast-demo` (checks and design review).
     pub toast_demo: bool,
@@ -32,8 +32,8 @@ pub struct Args {
     pub dpi: Option<f64>,
 }
 
-/// Camera files and calibration to open at startup (the Slint app's
-/// `RECO_AUTOLOAD`): `--left a.mp4[;b.mp4] --right … --calibration c.json`.
+/// Camera files and calibration to open at startup (also what
+/// `RECO_AUTOLOAD` sets): `--left a.mp4[;b.mp4] --right … --calibration c.json`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileArgs {
     /// The left camera's files, in order.

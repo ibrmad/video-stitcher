@@ -118,8 +118,8 @@ pub(crate) struct FrameLoopContext {
 }
 
 /// Errors from [`StitchSession`](super::StitchSession). `Clone + Send + Sync` so consumers
-/// posting session results across thread boundaries (reco-gui export
-/// thread, reco-obs async init) can keep the typed enum instead of
+/// posting session results across thread boundaries (the desktop app's
+/// export thread, reco-obs async init) can keep the typed enum instead of
 /// falling back to `Result<_, String>`.
 #[derive(Debug, Clone, Error)]
 pub enum SessionError {
@@ -163,7 +163,7 @@ pub enum SessionError {
 
 // Compile-time assertion (plan step 7): every error type reachable
 // from the public session API is `Clone + Send + Sync`, so consumers
-// that post results to worker-thread channels (reco-gui export
+// that post results to worker-thread channels (the desktop app's export
 // thread, reco-obs async init) carry the typed error across the
 // boundary instead of stringifying. Regresses if a future variant
 // introduces a non-Clone wrapped error.

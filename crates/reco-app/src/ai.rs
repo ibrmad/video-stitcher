@@ -1,7 +1,7 @@
-//! AI tracking for an export (Module 6b): the sheet's choices, the engine's
-//! tracking config built from them (the style preset as the base and the
-//! visible knobs over it, as the Slint app built it), the lookahead's VRAM
-//! zones, and whether this machine can run the detector.
+//! AI tracking for an export: the sheet's choices, the engine's tracking
+//! config built from them (the style preset as the base and the visible
+//! knobs over it), the lookahead's VRAM zones, and whether this machine can
+//! run the detector.
 
 use std::path::PathBuf;
 
@@ -67,8 +67,7 @@ impl PannerKnobs {
         }
     }
 
-    /// Without the engine (a build without AI): the Slint app's starting
-    /// values, which are Broadcast's.
+    /// Without the engine (a build without AI): Broadcast's values.
     #[cfg(not(feature = "ai"))]
     pub fn of_preset(_name: &str) -> Self {
         Self {
@@ -128,7 +127,7 @@ impl Tracking {
 
     /// The engine's config: the preset with the knobs over it, the mode,
     /// the interval, the field outline, and a higher confidence floor for a
-    /// ball-only model (as the Slint app and the CLI set it).
+    /// ball-only model (as the CLI sets it).
     #[cfg(feature = "ai")]
     pub fn config(
         &self,
@@ -227,7 +226,7 @@ pub fn zones_for_budget(budget: usize, size: (u32, u32), fps: f64) -> Option<Loo
 }
 
 /// The lookahead the sheet starts at: the saved one, or the comfortable
-/// ceiling when the saved one doesn't fit (as the Slint app lowered it).
+/// ceiling when the saved one doesn't fit.
 pub fn fitted_lookahead(saved: f64, zones: Option<LookaheadZones>) -> f64 {
     match zones {
         Some(zones) if saved > zones.max => zones.safe,
@@ -252,8 +251,8 @@ pub fn availability_line(availability: &Availability) -> String {
     }
 }
 
-/// Where AI tracking runs, for usage data and the bug report (the Slint
-/// app's "AI: …" line); `None` while the machine hasn't answered.
+/// Where AI tracking runs, for usage data and the bug report (an "AI: …"
+/// line); `None` while the machine hasn't answered.
 pub fn capability_line(availability: Option<&Availability>) -> String {
     match availability {
         Some(Availability::Ready(engines)) => format!("AI: runs on {engines}"),
@@ -412,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn broadcast_is_the_slint_apps_starting_point() {
+    fn broadcast_is_the_default_preset() {
         assert_eq!(
             PannerKnobs::of_preset("broadcast"),
             PannerKnobs {

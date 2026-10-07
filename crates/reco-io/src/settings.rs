@@ -216,7 +216,7 @@ pub fn delete(namespace: &str) -> Result<bool, SettingsError> {
 }
 
 // Compile-time bound check: `SettingsError` is `Clone + Send + Sync`
-// so consumer worker threads (reco-gui save-on-drop, future settings
+// so consumer worker threads (a save-on-drop, a future settings
 // autosave) can send results across mpsc channels without
 // stringifying. Regresses if a future variant wraps a non-Clone type.
 const _: fn() = || {

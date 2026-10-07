@@ -101,7 +101,7 @@ impl LensPreviewRenderer {
     ///
     /// `width`/`height` are the input frame dimensions.
     /// `output_format` should match the UI's expected texture format
-    /// (e.g. `Rgba8Unorm` for Slint).
+    /// (e.g. `Rgba8Unorm`).
     pub fn new(
         gpu: &GpuContext,
         width: u32,
@@ -265,7 +265,7 @@ impl LensPreviewRenderer {
     /// Render one camera frame and return the output texture.
     ///
     /// The returned texture has `RENDER_ATTACHMENT | TEXTURE_BINDING` and
-    /// can be passed to `slint::Image::try_from(wgpu::Texture)`.
+    /// can be handed to a UI toolkit as a texture.
     ///
     /// `correction_amount`: 0.0 = raw input, 1.0 = full KB4 correction.
     pub fn render_yuv(

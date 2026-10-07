@@ -85,7 +85,7 @@ impl App {
     }
 
     /// Where a recalibration starts: the preview's time, when both cameras'
-    /// first files reach it (as the Slint app did); else the start.
+    /// first files reach it; else the start.
     fn calibration_start(&self) -> f64 {
         let Some((frame, fps)) = self
             .live

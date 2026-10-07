@@ -1,5 +1,4 @@
-//! Video playback for the preview, ported from reco-gui's `playback.rs`
-//! (no Slint dependency there either): play/pause/step/seek over an
+//! Video playback for the preview: play/pause/step/seek over an
 //! `FfmpegFileSource`, paced by a [`FrameClock`].
 
 use std::time::{Duration, Instant};

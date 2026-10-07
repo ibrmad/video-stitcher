@@ -9,8 +9,8 @@
 //!   only inside what it shows (its header).
 //! - First draw: FoldHeader draws a body it has never measured whole, to
 //!   measure it, whatever its state, and a closed fold first drawn in view
-//!   showed open until the next redraw (the owner saw the export sheet's
-//!   Advanced tier open until a scroll closed it). A closed fold's first
+//!   showed open until the next redraw (the export sheet's Advanced tier
+//!   showed open until a scroll closed it). A closed fold's first
 //!   draw is clipped to its header, and it draws again, measured and
 //!   closed, on the next frame.
 

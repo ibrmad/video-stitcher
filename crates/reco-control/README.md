@@ -10,7 +10,7 @@ Every operator surface — keyboard shortcuts, GoPro USB buttons, a mobile compa
 
 - **`ControlIntent` enum** — `Hotkey`, `Pose`, `Quality`, `Capture`, `ModelSelect`, plus `Extension(Box<dyn Any>)` for forward-compat.
 - **`ControlTransport` trait** — any transport (keyboard, USB, mobile, WebSocket) is a stream of `ControlIntent`.
-- **`KeyboardTransport`** (`keyboard` feature, default) — the one shipping transport today: reco-obs and reco-gui key events become `ControlIntent`s, dispatched to `PoseControl` / `StitchCore` / encoder.
+- **`KeyboardTransport`** (`keyboard` feature, default) — the one shipping transport today: reco-obs key events become `ControlIntent`s, dispatched to `PoseControl` / `StitchCore` / encoder.
 
 ## Placeholder transports
 

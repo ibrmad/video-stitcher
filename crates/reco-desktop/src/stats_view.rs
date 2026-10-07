@@ -1,7 +1,7 @@
 //! The Adjust panel's Stats section in the App: the preview's frame figures
 //! once a second, the GPU, the last calibration's confidence, the last
-//! export's speed and stages (as Slint's Stats), and how AI tracking did in
-//! the last export that measured it.
+//! export's speed and stages, and how AI tracking did in the last export that
+//! measured it.
 
 use makepad_widgets::*;
 use reco_app::export::{AiFigures, ExportFigures};

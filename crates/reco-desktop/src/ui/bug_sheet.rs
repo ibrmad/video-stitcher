@@ -1,8 +1,7 @@
-//! The Report a bug sheet, after the Slint app's dialog: what went wrong,
-//! a way to reach the person, and whether to include the system's details
-//! and the log. Send goes to Reco's developers with usage data on; Copy
-//! report puts the report on the clipboard to post on the forum. Escape,
-//! Cancel or a press outside closes it.
+//! The Report a bug sheet: what went wrong, a way to reach the person, and
+//! whether to include the system's details and the log. Send goes to Reco's
+//! developers with usage data on; Copy report puts the report on the clipboard
+//! to post on the forum. Escape, Cancel or a press outside closes it.
 
 use makepad_widgets::*;
 

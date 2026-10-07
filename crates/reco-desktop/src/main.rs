@@ -1,14 +1,14 @@
 //! Reco Desktop: the Makepad 2 desktop app for Reco.
 //!
-//! Module 0 (see `DESIGN.md`): the window shell and the look, after the
-//! Rerun viewer. `--look-preview[=STATE]` shows each state of the job (one
-//! camera, both cameras, calibrating, calibration failed, ready, exporting)
-//! with sample content for design review.
+//! The window shell and the look, after the Rerun viewer (see `DESIGN.md`).
+//! `--look-preview[=STATE]` shows each state of the job (one camera, both
+//! cameras, calibrating, calibration failed, ready, exporting) with sample
+//! content for design review.
 //!
-//! Module 1: `--left/--right/--calibration` open two cameras' videos into
-//! the live stitched preview, rendered by `reco-app`'s worker thread.
+//! `--left/--right/--calibration` open two cameras' videos into the live
+//! stitched preview, rendered by `reco-app`'s worker thread.
 
-// No console window for a Windows release build (as reco-gui); the log
+// No console window for a Windows release build; the log
 // file keeps what it would have shown.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -228,8 +228,8 @@ pub struct App {
     shell: ShellState,
     #[rust]
     args: Args,
-    /// The state shown by `--look-preview` (Module 0 only; the engine drives
-    /// these states from Module 1 on).
+    /// The state shown by `--look-preview`, for design review (a real
+    /// session is driven by the engine).
     #[rust]
     preview: Option<LookPreview>,
     /// The time panel shows only its control row.
@@ -681,7 +681,7 @@ impl App {
         self.ui.widget(cx, id).set_disabled(cx, !enabled);
     }
 
-    /// Sliders show the arrow, as macOS's own do (the owner chose it):
+    /// Sliders show the arrow, as macOS's own do:
     /// Makepad's slider sets an open hand over it and a closed one while
     /// dragging. Only over a slider: the file lists' grips keep their hand.
     /// (Makepad's point lookup starts at widgets that implement it, which

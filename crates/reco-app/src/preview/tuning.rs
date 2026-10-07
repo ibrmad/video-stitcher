@@ -1,6 +1,6 @@
 //! The Adjust panel's stitch settings as the preview session applies them:
 //! one change at a time (`Tuning`), and everything the panel shows
-//! (`CalibrationValues`). Ranges are the Slint app's sliders.
+//! (`CalibrationValues`).
 
 use crate::lens::{Cameras, Lens};
 

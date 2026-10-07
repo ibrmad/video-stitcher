@@ -1,4 +1,4 @@
-//! Toasts: short notices in the viewer's corner (PARITY.md Module 2). Info
+//! Toasts: short notices in the viewer's corner. Info
 //! stays 4 s, a warning 7 s, an error 10 s, or a custom time. At most four
 //! show, the oldest leaving first and the newest at the bottom. A notice
 //! identical to one on screen refreshes it instead of stacking. Pure: the

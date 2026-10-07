@@ -1,6 +1,5 @@
 //! The engine glue for one open camera pair: the calibration, playback,
-//! Reco's `StitchRenderer` and the camera pose (as reco-gui's
-//! `PreviewBridge` and `AppState` pose code, without Slint).
+//! Reco's `StitchRenderer` and the camera pose.
 
 use std::cell::Cell;
 use std::path::Path;
@@ -30,10 +29,9 @@ use reco_core::lens::preview::LensPreviewRenderer;
 /// writes sRGB-encoded values already).
 pub const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-/// Drag sensitivity (reco-gui `DRAG_DEG_PER_PIXEL`: 0.005 rad per point).
+/// Drag sensitivity: 0.005 rad per point.
 pub const DRAG_DEG_PER_PIXEL: f32 = 0.287;
-/// Pose smoothing per 60 Hz frame (reco-gui `POSE_SMOOTHING`, applied once
-/// per frame there); see [`smoothing_for`].
+/// Pose smoothing per 60 Hz frame; see [`smoothing_for`].
 pub const POSE_SMOOTHING: f32 = 0.25;
 /// FOV limits and rest value, in degrees.
 pub const FOV_MIN: f32 = 20.0;
@@ -108,7 +106,7 @@ fn pose_config() -> PoseControlConfig {
         smoothing: POSE_SMOOTHING,
         fov_min_degrees: FOV_MIN,
         fov_max_degrees: FOV_MAX,
-        // reco-gui's PTZ-head feel: drag right turns the camera right.
+        // A PTZ head's feel: drag right turns the camera right.
         invert_drag_x: true,
         rest_pose: ViewportPosition {
             yaw: 0.0,
@@ -224,7 +222,7 @@ impl PreviewSession {
         Ok(session)
     }
 
-    /// Drag by points (X inverted, as reco-gui).
+    /// Drag by points (X inverted).
     pub fn pan(&mut self, dx_pt: f32, dy_pt: f32) {
         self.pose.apply_drag(dx_pt, dy_pt);
         self.clamp();
@@ -456,7 +454,7 @@ impl PreviewSession {
     }
 
     /// The calibration as tuned: the file's, with the live blend, tilt,
-    /// roll, sync offset and field outline folded in (the Slint app's save).
+    /// roll, sync offset and field outline folded in.
     pub fn calibration_to_save(&self) -> MatchCalibration {
         let mut out = self.renderer.calibration().clone();
         let viewport = self.renderer.pipeline().viewport();
@@ -570,7 +568,7 @@ mod tests {
     use crate::preview::fixtures;
     use crate::project::Camera;
 
-    /// One 60 Hz frame, reco-gui's smoothing step.
+    /// One 60 Hz frame, the step `POSE_SMOOTHING` is defined for.
     const FRAME: Duration = Duration::from_micros(16_667);
 
     fn gpu() -> Option<GpuContext> {
@@ -581,7 +579,7 @@ mod tests {
 
     #[test]
     fn easing_speed_does_not_depend_on_the_step_rate() {
-        // reco-gui eased by POSE_SMOOTHING once per 60 Hz frame.
+        // At 60 Hz the pose eases by POSE_SMOOTHING each frame.
         let frame = Duration::from_secs_f64(1.0 / 60.0);
         assert!((smoothing_for(frame) - POSE_SMOOTHING).abs() < 1e-6);
         // 25 steps of 4 ms close the same share of the gap as one of 100 ms.

@@ -254,8 +254,7 @@ impl App {
     }
 
     /// Record or stop. A recording is 1080 rows at the preview aspect, in
-    /// the saved folder or beside the left video, named as the Slint app
-    /// named them.
+    /// the saved folder or beside the left video.
     fn toggle_recording(&mut self) {
         let Some(live) = self.live.as_ref() else {
             return;

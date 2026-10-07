@@ -1,7 +1,5 @@
-//! Quitting (⌘Q, the menu, the window's close) with unsaved calibration
-//! edits asks first (owner, 2026-10-06; the Slint app saved a pasted field
-//! outline at once and lost other edits silently). A termination signal
-//! still quits.
+//! Quitting (⌘Q, the menu, the window's close) with unsaved calibration edits
+//! asks first. A termination signal still quits.
 
 use makepad_widgets::*;
 

@@ -1,9 +1,8 @@
-//! The lookahead slider's track, after the Slint app's VRAM risk slider:
-//! comfortable up to one mark, tight up to the next, too long past it.
-//! The zones show dimmed along the track, and the part up to the knob is
-//! filled in the colour of the zone the knob is in. A knob-only slider
-//! sits over it (`RecoKnobSlider`). Without a reading of the GPU's memory
-//! it is the plain track every slider has, filled in the accent.
+//! The lookahead slider's track: comfortable up to one mark, tight up to the
+//! next, too long past it. The zones show dimmed along the track, and the part
+//! up to the knob is filled in the colour of the zone the knob is in. A
+//! knob-only slider sits over it (`RecoKnobSlider`). Without a reading of the
+//! GPU's memory it is the plain track every slider has, filled in the accent.
 
 use makepad_widgets::*;
 

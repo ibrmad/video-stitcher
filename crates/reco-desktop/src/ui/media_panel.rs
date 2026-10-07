@@ -1,7 +1,6 @@
 //! The Setup panel, after Rerun's side panels: a title row, then collapsible
 //! sections of 24 pt rows. Cameras: the two cameras as a linked pair.
-//! Calibration: its status and actions. Module 0 shows its layout; Module 3
-//! wires it.
+//! Calibration: its status and actions.
 
 use makepad_widgets::*;
 

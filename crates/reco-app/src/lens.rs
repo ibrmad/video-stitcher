@@ -1,7 +1,6 @@
 //! The cameras' lenses as the Adjust panel shows and tunes them: the
 //! intrinsics a slider moves (`Lens`), the fine-tune sliders' ranges, and a
-//! lens profile scaled to the videos' size. The rules are the Slint app's
-//! (`set_lens_sliders`, the lens picker).
+//! lens profile scaled to the videos' size.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -93,11 +92,10 @@ pub struct FineTuneRanges {
 }
 
 impl FineTuneRanges {
-    /// The Slint app's ranges around `lens` for a `width`×`height` picture:
-    /// fx and fy ±15% of the larger focal length, cx and cy ±10% of the
-    /// picture, at least 5 px each; each of k1–k4 ±0.3 around its own value
-    /// (the Slint app's ±0.3 was absolute, which can't show a calibrated k1
-    /// of 0.333).
+    /// The ranges around `lens` for a `width`×`height` picture: fx and fy
+    /// ±15% of the larger focal length, cx and cy ±10% of the picture, at
+    /// least 5 px each; each of k1–k4 ±0.3 around its own value (a fixed
+    /// ±0.3 range couldn't show a calibrated k1 of 0.333).
     pub fn around(lens: &Lens, width: u32, height: u32) -> Self {
         let f = (lens.fx.max(lens.fy) * 0.15).max(5.0);
         let x = (f64::from(width.max(1)) * 0.10).max(5.0);
@@ -291,7 +289,7 @@ impl ProfileSearch {
 }
 
 /// A lens profile (from the database or a file) scaled to a
-/// `width`×`height` video, as the Slint app's picker did.
+/// `width`×`height` video.
 pub fn scaled_to(profile: &CameraParams, width: u32, height: u32) -> CameraParams {
     if profile.width == 0 || profile.height == 0 {
         return profile.clone();
@@ -351,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    fn fine_tune_ranges_are_the_slint_apps() {
+    fn fine_tune_ranges_follow_the_lens() {
         let r = FineTuneRanges::around(&Lens::of(&params()), 1920, 1080);
         // ±15% of max(fx, fy) = 135.
         assert_eq!(r.fx, (765.0, 1035.0));
@@ -359,8 +357,8 @@ mod tests {
         // ±10% of the width and height.
         assert_eq!(r.cx, (768.0, 1152.0));
         assert_eq!(r.cy, (432.0, 648.0));
-        // ±0.3 around each term (the Slint app's ±0.3 was absolute, which
-        // can't show a calibrated k1 of 0.333).
+        // ±0.3 around each term (a fixed range couldn't show a calibrated
+        // k1 of 0.333).
         let k = [0.03, 0.06, -0.07, 0.02];
         for (range, term) in r.k.iter().zip(k) {
             assert!(

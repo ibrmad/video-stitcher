@@ -1,6 +1,6 @@
-//! Drift-free frame timing (from reco-gui's `Playback::tick`): the target
-//! frame is computed from the wall-clock time since play started, so a late
-//! tick is caught up on the next one instead of compounding.
+//! Drift-free frame timing: the target frame is computed from the
+//! wall-clock time since play started, so a late tick is caught up on the
+//! next one instead of compounding.
 
 use std::time::{Duration, Instant};
 

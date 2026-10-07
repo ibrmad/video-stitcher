@@ -295,7 +295,7 @@ script_mod! {
                         }
                         stats_calibration := RecoMeta{text: "—"}
                     }
-                    // The last export's speed and stages, as Slint's Stats.
+                    // The last export's speed and stages.
                     stats_export := View{
                         visible: false
                         width: Fill height: Fit flow: Down

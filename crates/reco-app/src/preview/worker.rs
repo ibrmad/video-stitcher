@@ -50,7 +50,7 @@ const MAX_EASE_STEP: Duration = Duration::from_millis(33);
 const PROBE_POLL: Duration = Duration::from_millis(50);
 
 /// The shortest sleep while playing: a frame that is due but not decoded
-/// yet is polled again after this long (reco-gui's 2 ms timer).
+/// yet is polled again after this long.
 const POLL_FLOOR: Duration = Duration::from_millis(2);
 
 /// How the worker should present frames.

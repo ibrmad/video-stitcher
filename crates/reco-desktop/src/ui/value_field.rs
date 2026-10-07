@@ -1,8 +1,7 @@
-//! A slider's number, typed into (plans/2026-10-06-value-fields.md): a
-//! quiet box with the digits on the right. A click selects the digits;
-//! Return or a click away sends what was typed, Escape puts the value back,
-//! ↑/↓ send steps. The App reads and applies them (`App::slider_input`), so
-//! the field knows nothing of units or ranges.
+//! A slider's number, typed into: a quiet box with the digits on the right. A
+//! click selects the digits; Return or a click away sends what was typed,
+//! Escape puts the value back, ↑/↓ send steps. The App reads and applies them
+//! (`App::slider_input`), so the field knows nothing of units or ranges.
 
 use makepad_widgets::makepad_draw::text::selection::Selection;
 use makepad_widgets::*;

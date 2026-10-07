@@ -1,7 +1,7 @@
-//! The app's log file, as the Slint app kept one: engine lines (the `log`
-//! crate) and the app's own lines, kept across restarts and started afresh
-//! once over 2 MB, filtered by `RUST_LOG`, with panics written to it; the
-//! bug report attaches its tail.
+//! The app's log file: engine lines (the `log` crate) and the app's own
+//! lines, kept across restarts and started afresh once over 2 MB, filtered
+//! by `RUST_LOG`, with panics written to it; the bug report attaches its
+//! tail.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Write};
@@ -18,8 +18,8 @@ pub const LOG_FILE_VAR: &str = "RECO_DESKTOP_LOG_FILE";
 /// A file this large is started afresh when the app starts.
 pub const CUT_AT: u64 = 2_000_000;
 
-/// The filter when `RUST_LOG` isn't set (the Slint app's: ONNX Runtime's
-/// chatter held to warnings).
+/// The filter when `RUST_LOG` isn't set: ONNX Runtime's chatter held to
+/// warnings.
 pub const DEFAULT_FILTER: &str = "info,ort=warn";
 
 /// Which lines are kept: `RUST_LOG`'s `level` and `target=level`
@@ -84,8 +84,7 @@ impl Filter {
 
 /// Where the log lives on `os` (`std::env::consts::OS`): macOS's
 /// `~/Library/Logs`, Linux's state folder, beside the executable on
-/// Windows (the Slint app's places), unless `RECO_DESKTOP_LOG_FILE` names
-/// one.
+/// Windows, unless `RECO_DESKTOP_LOG_FILE` names one.
 pub fn default_path(
     os: &str,
     env: impl Fn(&str) -> Option<String>,

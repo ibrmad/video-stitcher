@@ -1,9 +1,8 @@
-//! The export sheet, after the Slint app's export dialog: a dialog over the
-//! window with the file to write, its size, codec and quality, the part of
-//! the match to export, the replay and event extras, and AI tracking (its
-//! rows show while it is on, the panner's finer knobs in a closed Advanced
-//! tier). The rows scroll in a short window. Escape, Cancel or a press
-//! outside closes it.
+//! The export sheet: a dialog over the window with the file to write, its
+//! size, codec and quality, the part of the match to export, the replay and
+//! event extras, and AI tracking (its rows show while it is on, the panner's
+//! finer knobs in a closed Advanced tier). The rows scroll in a short window.
+//! Escape, Cancel or a press outside closes it.
 
 use makepad_widgets::*;
 

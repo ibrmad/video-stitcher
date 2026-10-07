@@ -1,8 +1,7 @@
 //! The field outline (ROI): where the pitch is in each camera's picture, for
-//! AI tracking. The outline is drawn in the browser editor the Slint app
-//! shipped (`resources/roi_editor.html`): this writes the editor with the
-//! current frames and the calibration, and reads back the JSON the editor
-//! copies.
+//! AI tracking. The outline is drawn in a browser editor
+//! (`resources/roi_editor.html`): this writes the editor with the current
+//! frames and the calibration, and reads back the JSON the editor copies.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

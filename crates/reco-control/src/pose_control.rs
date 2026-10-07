@@ -1,13 +1,9 @@
 //! Unified pose control: mouse / drag / wheel / keyboard → yaw / pitch / FOV.
 //!
-//! Solves the three divergent implementations the 2026-04-18 deep
-//! review found across consumers (reco-cli/preview, reco-gui, reco-obs):
-//! each had its own units (radians vs degrees), FOV clamp
-//! (20-150deg in two of them, no clamp at all in reco-obs), drag
-//! sensitivity (hand-tuned differently), and smoothing factor
-//! (0.3 vs 0.25 vs zero). With PoseControl those all come from
-//! one place, configurable per-consumer but with plan-mandated
-//! defaults (radians internal, degrees for FOV).
+//! Units (radians internally, degrees for FOV), the FOV clamp, drag
+//! sensitivity and the smoothing factor all come from one place here,
+//! configurable per consumer (reco-cli/preview, reco-obs) with shared
+//! defaults, instead of each consumer carrying its own.
 //!
 //! # Usage
 //!
@@ -53,7 +49,7 @@ use reco_core::detect::director::ViewportPosition;
 use reco_core::projection::CoverageBoundary;
 
 /// Hotkey actions consumers bind to their input system (OBS hotkey
-/// API, Slint key events, CLI keyboard, future SDL3 game-pad sidecar,
+/// API, GUI key events, CLI keyboard, future SDL3 game-pad sidecar,
 /// remote `reco-control` transport).
 ///
 /// Consumers translate their native key events to these intents and
@@ -93,10 +89,10 @@ pub enum HotkeyIntent {
 /// or `smoothing` if the feel is wrong on their input device.
 #[derive(Debug, Clone, Copy)]
 pub struct PoseControlConfig {
-    /// Drag sensitivity in degrees-per-pixel for both axes. reco-obs
-    /// shipped `0.1`; reco-gui + reco-cli used hand-tuned multipliers
-    /// that work out to roughly the same after accounting for their
-    /// local radian conversions. `0.1` is the harmonized default.
+    /// Drag sensitivity in degrees-per-pixel for both axes. `0.1` is the
+    /// default: reco-obs uses it as is, and reco-cli's hand-tuned
+    /// multiplier works out to roughly the same after its local radian
+    /// conversion.
     pub drag_deg_per_pixel: f32,
 
     /// Wheel sensitivity in FOV-degrees-per-tick. Positive tick
@@ -112,7 +108,7 @@ pub struct PoseControlConfig {
     pub smoothing: f32,
 
     /// Minimum FOV in degrees (zoomed-in limit). `20.0` matches
-    /// reco-cli + reco-gui.
+    /// reco-cli.
     pub fov_min_degrees: f32,
 
     /// Maximum FOV in degrees (zoomed-out limit), the baseline ceiling.

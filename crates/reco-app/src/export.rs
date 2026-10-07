@@ -1,6 +1,6 @@
 //! Export: the stitched match written to a file by Reco's `StitchJob` on its
 //! own thread, with progress, Cancel and a plain outcome. The options are
-//! the Slint app's export dialog's, without AI tracking (Module 6b).
+//! the export sheet's, and AI tracking is optional.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use reco_io::ffmpeg::encoder::{VideoCodec, available_encoders};
 use reco_io::output::{Codec, Format, Quality};
 use reco_io::stitch_job::{InputPath, StitchError, StitchJob};
 
-/// The export sizes, named as the Slint app named them.
+/// The export sizes, as the export sheet lists them.
 pub const RESOLUTIONS: [(&str, u32, u32); 4] = [
     ("1080p", 1920, 1080),
     ("720p", 1280, 720),
@@ -45,7 +45,7 @@ pub struct ExportOptions {
     pub replay: bool,
     /// Also save the pipeline's events (`{output}.events.jsonl`).
     pub events: bool,
-    /// AI tracking (Module 6b), when on.
+    /// AI tracking, when on.
     pub tracking: Option<crate::ai::Tracking>,
 }
 
@@ -82,7 +82,7 @@ pub enum ExportEvent {
     /// How the tracking is doing (every half second or so).
     AiFigures(AiFigures),
     /// How the export is doing: its speed and where the time goes (every
-    /// half second or so; the Slint app's Stats showed these).
+    /// half second or so; Stats shows these).
     Figures(ExportFigures),
 }
 
@@ -142,7 +142,7 @@ pub struct AiFigures {
 }
 
 /// The figures, once the detector has run (the engine reports zeros
-/// before, and throughout a lookahead: FRICTION.md).
+/// before, and throughout a lookahead: see FRICTION.md).
 #[cfg(any(feature = "ai", test))]
 fn ai_figures(
     detection_ms: f64,

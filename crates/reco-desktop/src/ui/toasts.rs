@@ -64,7 +64,7 @@ script_mod! {
 /// The layer the cards sit in. Each card keeps its own draw list, so it
 /// draws over the picture; a change of the viewer's size doesn't reach those
 /// lists, and a card stayed drawn where it was, under a panel that opened
-/// (the owner saw it after a calibration). The layer notes its room as it
+/// (seen after a calibration). The layer notes its room as it
 /// draws and, when it changes, asks its cards to draw again on the next frame
 /// (a redraw asked for mid-draw is dropped, and a card's area is in the
 /// layer's list, not its own).

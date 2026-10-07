@@ -1,9 +1,8 @@
 //! The character a key types on the keyboard's layout, so the preview's
-//! character keys (R, F, + = - _ [ ]) follow the layout, as the Slint app
-//! matched the typed text (owner's choice, Module 8). Makepad's key events
-//! carry only the key's place; on Windows and Linux its text events carry
-//! the character, but on macOS they come only while a text field has the
-//! input method, so there the layout itself is asked (`UCKeyTranslate`).
+//! character keys (R, F, + = - _ [ ]) follow the layout. Makepad's key events
+//! carry only the key's place; on Windows and Linux its text events carry the
+//! character, but on macOS they come only while a text field has the input
+//! method, so there the layout itself is asked (`UCKeyTranslate`).
 
 use makepad_widgets::{KeyCode, KeyModifiers};
 

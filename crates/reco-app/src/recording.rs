@@ -1,6 +1,5 @@
 //! The choices behind Record: quality, frame size, folder and file name.
-//! The name and folder rules are the Slint app's, so recordings from both
-//! apps sort together.
+//! Recordings are named by their start time, so they sort together.
 
 use std::path::{Path, PathBuf};
 
@@ -93,7 +92,7 @@ pub fn recording_folder(saved: Option<&Path>, first_left: &Path) -> PathBuf {
     std::fs::canonicalize(&folder).unwrap_or(folder)
 }
 
-/// `reco_recording_<unix seconds>.mp4`, the Slint app's name.
+/// `reco_recording_<unix seconds>.mp4`.
 pub fn recording_file_name(unix_secs: u64) -> String {
     format!("reco_recording_{unix_secs}.mp4")
 }
@@ -151,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn names_follow_the_slint_app() {
+    fn names_carry_the_unix_time() {
         assert_eq!(
             recording_file_name(1_700_000_000),
             "reco_recording_1700000000.mp4"

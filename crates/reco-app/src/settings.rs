@@ -1,7 +1,6 @@
 //! The desktop app's settings, kept in `desktop.json` in reco-io's settings
-//! folder (beside the Slint app's `gui.json`; `RECO_CONFIG_DIR` overrides
-//! the folder). Values are stored by name, as the Slint app stored them,
-//! and anything missing or unknown reads as its default.
+//! folder (`RECO_CONFIG_DIR` overrides the folder). Values are stored by
+//! name, and anything missing or unknown reads as its default.
 
 use std::path::PathBuf;
 
@@ -51,7 +50,7 @@ pub struct DesktopSettings {
     pub setup_width: Option<f64>,
     /// The Adjust panel's width, once dragged.
     pub adjust_width: Option<f64>,
-    /// The export's AI tracking (Module 6b): on or off, the mode ("field",
+    /// The export's AI tracking: on or off, the mode ("field",
     /// "ball", "sweep"), detect every N frames, the style preset, the
     /// framing, pitch lock and the lookahead in seconds.
     pub ai_enabled: bool,
@@ -63,7 +62,7 @@ pub struct DesktopSettings {
     pub ai_lookahead: f64,
 }
 
-/// The smallest window the app opens at (the Slint app's minimum).
+/// The smallest window the app opens at.
 pub const MIN_WINDOW: (f64, f64) = (720.0, 600.0);
 
 /// Sessions the Recent menu keeps.
@@ -215,7 +214,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_the_slint_app() {
+    fn defaults_are_the_documented_ones() {
         let d = DesktopSettings::default();
         assert_eq!(d.preview_aspect, "auto");
         assert_eq!(d.recording_quality, "balanced");
@@ -223,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn export_defaults_match_the_slint_app() {
+    fn export_defaults_are_the_documented_ones() {
         let d = DesktopSettings::default();
         assert_eq!(
             (
@@ -242,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn preferences_default_as_the_slint_app() {
+    fn preferences_default_to_h264_and_no_usage_data() {
         let d = DesktopSettings::default();
         assert_eq!(d.recording_codec, "h264");
         assert_eq!(d.ai_model_path, None);
@@ -253,13 +252,13 @@ mod tests {
         let old: DesktopSettings = serde_json::from_str(r#"{"export_codec":"hevc"}"#).unwrap();
         assert_eq!(
             old.recording_codec, "h264",
-            "a file from before Module 7 loads"
+            "a file without the preferences loads"
         );
         assert!(!old.telemetry_enabled);
     }
 
     #[test]
-    fn tracking_choices_default_as_the_slint_app() {
+    fn tracking_choices_default_to_broadcast_and_off() {
         let d = DesktopSettings::default();
         assert!(!d.ai_enabled, "tracking starts off");
         assert_eq!(
@@ -269,7 +268,10 @@ mod tests {
         assert_eq!((d.ai_framing.as_str(), d.ai_lock_pitch), ("action", false));
         assert!((d.ai_lookahead - 2.5).abs() < 1e-9);
         let old: DesktopSettings = serde_json::from_str(r#"{"export_codec":"hevc"}"#).unwrap();
-        assert_eq!(old.ai_preset, "broadcast", "a file from before 6b loads");
+        assert_eq!(
+            old.ai_preset, "broadcast",
+            "a file without tracking choices loads"
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //!
 //! Transport-agnostic control vocabulary for the Reco pipeline.
 //!
-//! Consumers (reco-obs, reco-gui, reco-cli, future standalone
+//! Consumers (reco-obs, reco-cli, future standalone
 //! livestream app) receive a stream of [`ControlIntent`] values and
 //! dispatch them to their local state (pose control, encoder, replay
 //! buffer, model selection). The transport — keyboard, gamepad, GoPro
@@ -12,8 +12,8 @@
 //! # Why this crate
 //!
 //! The deep-review 2026-04-18 Agent 8 finding: consumer input paths
-//! are duplicated three ways across reco-cli/preview, reco-gui, and
-//! reco-obs (different key mappings, different pan sensitivity,
+//! were duplicated across reco-cli/preview and reco-obs (different key
+//! mappings, different pan sensitivity,
 //! different units). [`PoseControl`](pose_control::PoseControl)
 //! fixed the *state-machine* duplication; this crate fixes the
 //! *vocabulary* duplication. A single `ControlIntent` enum describes

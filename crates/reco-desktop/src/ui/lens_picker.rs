@@ -1,7 +1,6 @@
-//! The lens picker, after the Slint app's: a dialog over the window to
-//! search Reco's lens profiles (camera, lens, size) and apply one to both
-//! cameras or one, or load a profile file. Escape, Close or a press outside
-//! closes it.
+//! The lens picker: a dialog over the window to search Reco's lens profiles
+//! (camera, lens, size) and apply one to both cameras or one, or load a
+//! profile file. Escape, Close or a press outside closes it.
 
 use makepad_widgets::*;
 

@@ -1,7 +1,7 @@
 //! The Adjust panel's View and Lens sections in the App: the field of view,
-//! "stay inside" and Reset view; each camera's lens name, lens correction,
-//! and the fine-tune sliders with Reset lens. The sliders run from 0 to 1
-//! over the Slint app's ranges (Makepad's slider has no runtime range).
+//! "stay inside" and Reset view; each camera's lens name, lens correction, and
+//! the fine-tune sliders with Reset lens. The sliders run from 0 to 1 over
+//! each term's range (Makepad's slider has no runtime range).
 
 use std::sync::Arc;
 
@@ -305,7 +305,7 @@ impl App {
         if let Some(index) = self.ui.drop_down(cx, ids!(lens_preview)).changed(actions) {
             let shown = shown_at(index);
             self.send_preview(PreviewCommand::ShowCamera(shown));
-            // One camera on its own is for tuning its lens (as Slint).
+            // One camera on its own is for tuning its lens.
             if shown.is_some() {
                 if let Some(mut fold) = self
                     .ui

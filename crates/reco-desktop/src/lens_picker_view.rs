@@ -1,7 +1,6 @@
-//! The lens picker in the App: the search on a short thread (the newest
-//! query wins), its results, Apply to, and a profile file. A pick tunes the
-//! chosen cameras' lens, names it, and centres the fine-tune sliders on it,
-//! as the Slint app did.
+//! The lens picker in the App: the search on a short thread (the newest query
+//! wins), its results, Apply to, and a profile file. A pick tunes the chosen
+//! cameras' lens, names it, and centres the fine-tune sliders on it.
 
 use std::path::PathBuf;
 use std::sync::Arc;
