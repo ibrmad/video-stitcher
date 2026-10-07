@@ -495,6 +495,8 @@ pub struct VideoEncoder {
     height: u32,
     finished: bool,
     encoder_name: String,
+    /// Output container; decides how [`Self::flush_to_disk`] flushes.
+    container: Container,
     /// Reusable frame buffers to avoid per-frame allocation.
     rgba_frame: VideoFrame,
     yuv_frame: VideoFrame,
@@ -748,6 +750,7 @@ impl VideoEncoder {
                         height,
                         finished: false,
                         encoder_name: name.to_string(),
+                        container: config.container,
                         rgba_frame: VideoFrame::new(Pixel::RGBA, width, height),
                         yuv_frame: VideoFrame::new(staging_pixel_format(*pixel_fmt), width, height),
                         hardware_upload,
@@ -1407,30 +1410,45 @@ impl VideoEncoder {
     /// Flush muxer + AVIO buffers to disk without finalizing the
     /// container.
     ///
-    /// Forces any fragments or packets currently buffered in ffmpeg
-    /// (either the muxer's internal queue or the AVIO output layer)
-    /// out to the file descriptor. A subsequent [`Self::finish`] is
-    /// still required to write the final trailer.
+    /// For Matroska, every packet the encoder has emitted so far
+    /// reaches the file descriptor; frames still inside the encoder
+    /// (frame threads, lookahead, a hardware queue) follow on a
+    /// later call. A subsequent [`Self::finish`] is still required
+    /// to write the final trailer.
     ///
-    /// Needed for write-while-read workflows on fragmented MP4 /
-    /// Matroska where a concurrent reader only sees bytes once
-    /// they've actually hit disk. Call periodically (e.g. every
-    /// keyframe) from the stacked-video replay path.
+    /// Needed for write-while-read workflows where a concurrent
+    /// reader only sees bytes once they've actually hit disk. Call
+    /// periodically (e.g. every keyframe) from the stacked-video
+    /// replay path. Safe to call any number of times after
+    /// `write_header`.
     ///
-    /// `av_write_frame(ctx, NULL)` prompts the muxer to emit any
-    /// queued packets; `avio_flush` then forces the AVIO layer to
-    /// write its buffer to the OS. Both are safe to call multiple
-    /// times and at any point after `write_header`.
+    /// The Matroska muxer builds the open cluster in a buffer of its
+    /// own and, left alone, writes it out only on a keyframe once the
+    /// cluster passes 4 KiB, or after 5 s or 5 MiB. A NULL packet
+    /// (`av_write_frame(ctx, NULL)`, the muxer's flush) ends that
+    /// cluster; `avio_flush` then writes the AVIO buffer to the OS.
+    /// Other containers get only the `avio_flush`: fMP4's
+    /// `frag_keyframe` mode treats a NULL packet as "close current
+    /// fragment", which clashes with the subsequent `write_trailer`
+    /// on finish (observed as AVERROR -105), so its open fragment
+    /// reaches the file at the next keyframe.
     pub fn flush_to_disk(&mut self) -> Result<(), EncodeError> {
+        if self.container == Container::Matroska {
+            // SAFETY: `octx` is a live output context whose header
+            // was written in `new`. A NULL packet only asks the
+            // muxer to write out what it buffers.
+            let ret = unsafe {
+                ffmpeg::sys::av_write_frame(self.octx.as_mut_ptr(), std::ptr::null_mut())
+            };
+            if ret < 0 {
+                return Err(ffmpeg::Error::from(ret).into());
+            }
+        }
         // SAFETY: `octx` is a live output context (created in
         // `new`, never dropped until `Drop` runs). `avio_flush` is
         // safe on any live AVIO and doesn't alter muxer state -
         // just forces the output-layer buffer to the file
-        // descriptor. We intentionally avoid
-        // `av_write_frame(ctx, NULL)` because fMP4's
-        // `frag_keyframe` mode treats that as "close current
-        // fragment" which clashes with the subsequent
-        // `write_trailer` on finish (observed as AVERROR -105).
+        // descriptor.
         unsafe {
             let pb = (*self.octx.as_mut_ptr()).pb;
             if !pb.is_null() {

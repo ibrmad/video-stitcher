@@ -152,33 +152,40 @@ fn roundtrip_matroska_recovers_tiles() {
     assert_eq!(decoded, N_FRAMES, "all frames should round-trip");
 }
 
-/// Write-while-read: open a reader on the same file mid-write and
-/// verify it sees already-flushed fragments. This is the core
-/// guarantee behind replay-during-recording.
+/// Drain a reader and count the tuples it can decode right now. The
+/// reader's handle closes on return, as a replay viewer's does when the
+/// user stops scrubbing.
+fn drain_tuples(mut src: StackedSource) -> usize {
+    let mut seen = 0usize;
+    while let Some(tiles) = src.next_tuple().expect("decode") {
+        assert_eq!(tiles.len(), 2);
+        seen += 1;
+    }
+    seen
+}
+
+/// Matroska write-while-read, the guarantee behind replay during
+/// recording: after `flush()`, a reader opened on the file while the
+/// writer is still running sees every frame the encoder has emitted.
 ///
-/// Fragmented MP4 flushes fragments on keyframes. `libx264` with
-/// `tune=zerolatency` (our Quality::Fast default) uses short GOPs,
-/// so we expect the first fragment to appear within a handful of
-/// frames.
-/// Matroska write-while-read: the load-bearing M6.5-item-3 guarantee.
-/// A reader opened on the same file while the writer is still pushing
-/// frames must see already-flushed clusters. Matroska flushes clusters
-/// periodically (roughly every keyframe with a short GOP), and the
-/// container has no central index that needs the trailer to be
-/// readable - so a concurrent reader sees content as soon as it
-/// hits disk.
+/// The muxer builds the open cluster in memory and only writes it out
+/// by itself on a keyframe once the cluster passes 4 KiB, or after 5 s
+/// or 5 MiB. Until then nothing but `flush()` puts those frames on
+/// disk, and a file with no cluster on disk can't be opened at all.
+/// One keyframe for the whole file keeps every frame in the open
+/// cluster on any encoder, so the test doesn't depend on how big the
+/// encoder's output is. Frames still inside the encoder (libx264's
+/// frame threads, VideoToolbox's queue) show up after a later flush.
 #[test]
 fn matroska_reader_sees_partial_writes() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("stacked.mkv");
     let layout = GridLayout::vstack(TILE_W, TILE_H, 2).expect("even dims");
 
-    let mut enc =
-        StackedEncoder::new(layout, &path, encoder_config(Container::Matroska)).expect("open");
+    let mut config = encoder_config(Container::Matroska);
+    config.inner.gop_size = Some(10 * N_FRAMES as u32);
+    let mut enc = StackedEncoder::new(layout, &path, config).expect("open");
 
-    // Push half the frames and flush so the AVIO layer writes to
-    // disk. Without flush(), ffmpeg buffers several clusters-worth
-    // of packets in memory before a single write.
     for i in 0..(N_FRAMES / 2) {
         let l = synthetic_tile(i, 0);
         let r = synthetic_tile(i, 1);
@@ -186,42 +193,31 @@ fn matroska_reader_sees_partial_writes() {
     }
     enc.flush().expect("flush");
 
-    // Reader opens with a separate file handle while the writer
-    // holds its own. No file locks, no mmap; the OS lets both
-    // coexist.
-    let mut src = StackedSource::open(layout, &path)
-        .expect("reader should open Matroska while writer is still running");
+    // The reader opens its own file handle while the writer holds
+    // its own. No file locks, no mmap; the OS lets both coexist.
+    let seen = drain_tuples(
+        StackedSource::open(layout, &path)
+            .expect("reader should open Matroska while writer is still running"),
+    );
+    assert!(seen > 0, "reader should see the flushed frames");
 
-    // Drain whatever's readable right now. With the drain-on-EOF
-    // decoder fix, this returns every cluster the writer has
-    // flushed.
-    let mut seen = 0usize;
-    while let Some(tiles) = src.next_tuple().expect("decode") {
-        assert_eq!(tiles.len(), 2);
-        seen += 1;
-    }
-    assert!(seen > 0, "reader should see at least one flushed cluster");
-
-    // Drop the reader's handle before finalizing. Matroska doesn't
-    // need this for correctness, but it mirrors the real replay
-    // consumer pattern where the reader closes when the user
-    // stops scrubbing.
-    drop(src);
-
-    // Writer keeps pushing and finalizes cleanly afterwards.
+    // The next flush exposes the frames pushed since.
     for i in (N_FRAMES / 2)..N_FRAMES {
         let l = synthetic_tile(i, 0);
         let r = synthetic_tile(i, 1);
         enc.push(&[Some(&l), Some(&r)]).expect("push");
     }
+    enc.flush().expect("second flush");
+    let seen_later = drain_tuples(StackedSource::open(layout, &path).expect("reopen mid-write"));
+    assert!(
+        seen_later > seen,
+        "a later flush should expose newer frames (saw {seen}, then {seen_later})"
+    );
+
+    // The writer finalizes cleanly after the reads.
     enc.finish().expect("writer finishes after read");
 
-    // Final file has all frames.
-    let mut final_src = StackedSource::open(layout, &path).expect("reopen final");
-    let mut total = 0usize;
-    while final_src.next_tuple().expect("decode").is_some() {
-        total += 1;
-    }
+    let total = drain_tuples(StackedSource::open(layout, &path).expect("reopen final"));
     assert_eq!(total, N_FRAMES, "final file should hold all pushed frames");
 }
 

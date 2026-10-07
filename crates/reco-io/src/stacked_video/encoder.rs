@@ -174,11 +174,12 @@ impl StackedEncoder {
     /// container.
     ///
     /// Required for write-while-read replay: a concurrent reader
-    /// only sees bytes once the AVIO layer has written them to
-    /// the file descriptor, and fMP4 flushes fragments only on
-    /// this call (or when the next keyframe forces one). Call
-    /// periodically from the replay path, typically once per
-    /// keyframe or every few seconds.
+    /// only sees bytes once they have reached the file. With
+    /// Matroska, a reader opened after this call sees every frame
+    /// the encoder has emitted; frames still inside the encoder
+    /// follow on a later call. fMP4's open fragment waits for the
+    /// next keyframe. Call periodically from the replay path,
+    /// typically once per keyframe or every few seconds.
     ///
     /// Does not finalize the file; [`Self::finish`] is still
     /// required when the recording session ends.
