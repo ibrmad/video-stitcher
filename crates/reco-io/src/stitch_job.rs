@@ -338,7 +338,7 @@ impl StitchJob {
     }
 
     /// Export the whole field as `layout`'s fixed panorama: its size
-    /// replaces the resolution, the pose and FOV no longer matter, and a
+    /// replaces the resolution, the pose and FOV don't apply, and a
     /// sidecar beside the video maps its pixels ([`sidecar_path`]).
     pub fn panorama(mut self, layout: reco_core::projection::PanoramaLayout) -> Self {
         self.panorama = Some(layout);
