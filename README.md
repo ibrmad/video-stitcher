@@ -16,6 +16,43 @@ Stitch two camera feeds into a seamless panoramic sports view with AI-powered au
 - **Live production** - GStreamer camera ingest (Linux / Jetson CSI), push-based `StitchCore::submit_frame_*` for OBS and live streams, replay ring buffer, stacked-video pack/unpack
 - **Cross-platform** - Linux / macOS / Windows desktop, NVIDIA Jetson Orin, cloud workers; mobile (iOS / Android) trait points land in this release, concrete impls follow
 
+## What's new
+
+**A new desktop app.** The desktop app is rebuilt from scratch on
+[Makepad 2](https://github.com/makepad/makepad) as `reco-desktop`, replacing
+the previous Slint app. The CLI and the OBS plugin are unchanged. The engine
+crates are unchanged too, apart from one additive hook in `reco-core`
+(`StitchPipeline::render_uploaded_to_view`) that lets the preview redraw from
+the frames already on the GPU when only the view changes.
+
+- **Zero-copy preview on macOS.** The stitched view is rendered by Reco's own
+  wgpu pipeline into textures Makepad shows without a copy; Windows and Linux
+  read frames back. A paused preview uses about 0% CPU, and on the 5.3K match
+  pair a pan costs about 3 ms instead of 20.
+- **One window for the whole job.** A Setup panel (camera files in order, drag
+  to reorder, drop files on the window, recent matches, auto-calibrate with
+  progress and Cancel), an Adjust panel (view, stitch, lens, stats) and a time
+  panel with a ruler and one lane per camera. Panels slide away (⌘1, ⌘2,
+  ⌘3; Ctrl off macOS), every slider's number can be typed, and the window
+  size and panel state are remembered.
+- **Lenses.** A searchable list of about 4,200 lens profiles, fine-tune
+  sliders around the loaded lens, and a single-camera view to judge a lens.
+- **Record and export.** Record the preview at the chosen aspect; export a range
+  of the match with size, codec and quality, the replay and debug extras, and
+  AI tracking: model, follow mode, detection interval, style preset, framing,
+  tilt lock and a lookahead with a memory-risk gauge. Cancel keeps the part
+  written.
+- **Care with your work.** Quitting with unsaved calibration edits asks first;
+  sheets close on Escape and hold every shortcut while open; the app keeps a
+  log file and can send or copy a bug report.
+- **Packaged builds.** Release builds are packaged with their fonts, icons
+  and ONNX Runtime: `Reco.app` on macOS, a folder on Windows and Linux.
+- **Moving over.** Settings live in `desktop.json`; the old app's `gui.json`
+  isn't read. Calibration files are unchanged.
+
+See [crates/reco-desktop](crates/reco-desktop) for the app's design and how to
+build, check and package it.
+
 ## Quick start
 
 ```bash
@@ -116,6 +153,17 @@ brew install ffmpeg pkg-config
 cargo build --release
 ```
 
+On Linux the desktop app also needs the development packages for X11 and the
+rest of Makepad's stack:
+
+```bash
+sudo apt install libx11-dev libxcursor-dev libglx-dev libxkbcommon-dev \
+    libpulse-dev libasound2-dev libgbm-dev libdrm-dev libssl-dev
+```
+
+The desktop app is built, checked and packaged as described in
+[crates/reco-desktop](crates/reco-desktop).
+
 ### Feature flags
 
 | Feature | Crate | Purpose |
@@ -156,7 +204,13 @@ cargo run --release -p reco-cli --features profiling -- \
 
 ## Privacy
 
-Reco collects no usage data, sends no telemetry, and makes no network requests except those you explicitly configure (RTMP streaming, etc.). All performance statistics shown in the Stats panel are computed locally in memory and never leave your machine.
+Reco collects no usage data unless you opt in, and makes no network requests except those you explicitly configure (RTMP streaming, etc.) and the desktop app's update check. All performance statistics shown in the Stats panel are computed locally in memory.
+
+The desktop app:
+
+- asks GitHub once at start for the latest release, and shows a notice if there is a newer one;
+- sends usage data only after you turn it on in Preferences: a random client id, the app's version and the figures of each action, with no names, paths or pictures;
+- sends a bug report only with usage data on; otherwise Report a bug copies the report for you to post on the forum.
 
 ## License
 
