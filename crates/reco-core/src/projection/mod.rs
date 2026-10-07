@@ -15,6 +15,7 @@
 
 mod coverage;
 mod geometry;
+mod panorama;
 mod virtual_camera;
 
 // Re-export coverage types so external code can still use
@@ -23,6 +24,9 @@ pub use coverage::{ClampedPosition, CoverageBoundary, PanoramaExtent};
 
 // Re-export geometry utility.
 pub use geometry::point_in_polygon;
+
+// The whole-field panorama's layout and mapping.
+pub use panorama::{PanoramaBounds, PanoramaDetail, PanoramaLayout, inverse_mercator, mercator};
 
 // Re-export virtual camera (pub(crate) visibility preserved).
 pub(crate) use virtual_camera::VirtualCamera;
