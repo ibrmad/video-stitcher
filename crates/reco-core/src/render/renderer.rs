@@ -1281,33 +1281,12 @@ fn view_matrix(
     // `direction_to_yaw_pitch` without any downstream sign reconciliation.
     let cam = crate::projection::VirtualCamera::new(position);
     let eye = Point3::from(cam.eye);
-    let mut base_forward = cam.base_forward;
     let base_right = cam.base_right;
-    let mut world_up = crate::projection::VirtualCamera::world_up();
-
-    // Rig tilt: rotate the entire reference frame around the base right axis.
-    // This tilts "up" and "forward" so that yaw/pitch operate in the tilted
-    // coordinate system. Panning in this tilted frame naturally introduces
-    // roll that compensates for edge distortion from a tilted camera rig.
-    if rig_tilt.abs() > 1e-6 {
-        let tilt_q =
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(base_right), rig_tilt);
-        base_forward = tilt_q * base_forward;
-        world_up = tilt_q * world_up;
-    }
-
-    // Rig roll: rotate around the forward axis to correct lateral lean.
-    // Negated because roll describes the camera's lean direction, and we
-    // need to rotate the opposite way to straighten the horizon.
-    // (Tilt is not negated because it shifts the view center to match
-    // where the camera points, which is the same direction.)
-    if rig_roll.abs() > 1e-6 {
-        let roll_q = UnitQuaternion::from_axis_angle(
-            &nalgebra::Unit::new_normalize(base_forward),
-            -rig_roll,
-        );
-        world_up = roll_q * world_up;
-    }
+    // Rig tilt turns the whole reference frame about the base right axis,
+    // so yaw and pitch work in the tilted frame (panning in it adds the
+    // roll that offsets a tilted rig's edge distortion); rig roll then
+    // straightens the horizon. Shared with the whole-field panorama.
+    let (base_forward, world_up) = cam.rig_axes(rig_tilt, rig_roll);
 
     // Yaw: rotate around the (possibly tilted) up axis
     let up_axis = nalgebra::Unit::new_normalize(world_up);
@@ -1440,6 +1419,32 @@ mod tests {
         // Point at Z = 1 (OpenGL far) should map to Z = 1 (wgpu far)
         let p = m * nalgebra::Vector4::new(0.0, 0.0, 1.0, 1.0);
         assert!((p.z - 1.0).abs() < 1e-5);
+    }
+
+    /// The whole-field panorama and the follow camera agree on where a
+    /// pose looks, with the rig's tilt and roll.
+    #[test]
+    fn view_matrix_forward_is_the_basis_direction() {
+        let camera_position = [0.24_f32, 0.0, 0.24];
+        for (tilt, roll) in [(0.0, 0.0), (0.05, -0.03), (-0.08, 0.02)] {
+            let basis = crate::projection::PanoramaBasis::with_rig(&camera_position, tilt, roll);
+            for (yaw, pitch) in [
+                (0.0, 0.0),
+                (0.7, -0.3),
+                (-1.2, 0.1),
+                (1.5, -0.6),
+                (-0.4, 0.4),
+            ] {
+                let view = view_matrix(&camera_position, yaw, pitch, tilt, roll);
+                // look_at_rh looks down camera-space -Z: forward is minus the third row.
+                let forward = -nalgebra::Vector3::new(view[(2, 0)], view[(2, 1)], view[(2, 2)]);
+                let d = basis.direction(f64::from(yaw), f64::from(pitch));
+                assert!(
+                    (forward.cast::<f64>() - d).norm() < 1e-5,
+                    "tilt {tilt} roll {roll} yaw {yaw} pitch {pitch}: {forward:?} vs {d:?}"
+                );
+            }
+        }
     }
 
     #[test]

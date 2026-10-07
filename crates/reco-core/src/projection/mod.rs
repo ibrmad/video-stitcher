@@ -26,7 +26,10 @@ pub use coverage::{ClampedPosition, CoverageBoundary, PanoramaExtent};
 pub use geometry::point_in_polygon;
 
 // The whole-field panorama's layout and mapping.
-pub use panorama::{PanoramaBounds, PanoramaDetail, PanoramaLayout, inverse_mercator, mercator};
+pub use panorama::{
+    PanoramaBasis, PanoramaBounds, PanoramaDetail, PanoramaLayout, PanoramaSidecar, SidecarOutline,
+    inverse_mercator, mercator,
+};
 
 // Re-export virtual camera (pub(crate) visibility preserved).
 pub(crate) use virtual_camera::VirtualCamera;
@@ -295,7 +298,7 @@ pub fn panorama_to_camera(
     calibration: &MatchCalibration,
     scene: &SceneGeometry,
 ) -> Option<(f32, f32)> {
-    use nalgebra::{Point3, Vector3};
+    use nalgebra::Point3;
 
     let params = match camera {
         CameraId::Left => &calibration.left,
@@ -310,36 +313,9 @@ pub fn panorama_to_camera(
     let dir = cam.yaw_pitch_to_direction(yaw, pitch);
     let cam_pos = Point3::from(cam.eye);
 
-    // Step 2: ray-plane intersection.
-    let model = match camera {
-        CameraId::Left => scene.model_matrix_left(),
-        CameraId::Right => scene.model_matrix_right(),
-    };
-    let plane_origin = model.transform_point(&Point3::new(0.0, 0.0, 0.0));
-    let plane_normal = model
-        .transform_vector(&Vector3::new(0.0, 0.0, 1.0))
-        .normalize();
-
-    let denom = plane_normal.dot(&dir);
-    if denom.abs() < 1e-6 {
-        return None; // Ray parallel to plane
-    }
-    let t = (plane_origin - cam_pos).dot(&plane_normal) / denom;
-    if t <= 0.0 {
-        return None; // Behind camera
-    }
-    let hit = cam_pos + dir * t;
-
-    // Step 3: world hit -> extended plane UV. Reject hits outside
-    // the plane's renderable region (texture UV [0, 1], equivalently
-    // extended UV [-0.5, 1.5] is the full valid range but the plane
-    // only covers [0, 1] inside that).
-    let (uv_x, uv_y) = world_to_plane_uv(hit, camera, scene)?;
-    let tex_u = (uv_x + 0.5) * 0.5;
-    let tex_v = (uv_y + 0.5) * 0.5;
-    if !(0.0..=1.0).contains(&tex_u) || !(0.0..=1.0).contains(&tex_v) {
-        return None;
-    }
+    // Steps 2-3: ray-plane intersection, then the extended plane UV
+    // (rejecting hits outside the plane's renderable region).
+    let (uv_x, uv_y) = plane_uv(&cam_pos, &dir, camera, scene)?;
 
     // Step 4: extended plane UV -> distorted normalized pixel via
     // the forward KB4 model. The previous implementation passed
@@ -352,6 +328,45 @@ pub fn panorama_to_camera(
     } else {
         None
     }
+}
+
+/// Where a ray from `eye` along `dir` meets a camera's plane, as the
+/// extended plane UV the stitch shader works in, or `None` when it
+/// misses (parallel, behind the eye, or outside the plane's texture).
+fn plane_uv(
+    eye: &nalgebra::Point3<f32>,
+    dir: &nalgebra::Vector3<f32>,
+    camera: CameraId,
+    scene: &SceneGeometry,
+) -> Option<(f64, f64)> {
+    use nalgebra::{Point3, Vector3};
+    let model = match camera {
+        CameraId::Left => scene.model_matrix_left(),
+        CameraId::Right => scene.model_matrix_right(),
+    };
+    let plane_origin = model.transform_point(&Point3::new(0.0, 0.0, 0.0));
+    let plane_normal = model
+        .transform_vector(&Vector3::new(0.0, 0.0, 1.0))
+        .normalize();
+
+    let denom = plane_normal.dot(dir);
+    if denom.abs() < 1e-6 {
+        return None; // Ray parallel to plane
+    }
+    let t = (plane_origin - eye).dot(&plane_normal) / denom;
+    if t <= 0.0 {
+        return None; // Behind camera
+    }
+    let hit = eye + dir * t;
+
+    // Extended plane UV [-0.5, 1.5] covers the texture UV [0, 1].
+    let (uv_x, uv_y) = world_to_plane_uv(hit, camera, scene)?;
+    let tex_u = (uv_x + 0.5) * 0.5;
+    let tex_v = (uv_y + 0.5) * 0.5;
+    if !(0.0..=1.0).contains(&tex_u) || !(0.0..=1.0).contains(&tex_v) {
+        return None;
+    }
+    Some((uv_x, uv_y))
 }
 
 /// Compute the valid yaw/pitch bounds for a given FOV where no black

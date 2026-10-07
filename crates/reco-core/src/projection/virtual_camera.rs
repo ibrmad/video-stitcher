@@ -85,6 +85,29 @@ impl VirtualCamera {
         }
     }
 
+    /// The forward and up axes after the rig's tilt and roll: yaw turns
+    /// about this up axis, then pitch about the yaw-turned base right.
+    ///
+    /// Tilt turns forward and up about the base right axis; roll turns up
+    /// about the tilted forward axis, the other way to the lean it
+    /// describes.
+    pub fn rig_axes(&self, rig_tilt: f32, rig_roll: f32) -> (Vector3<f32>, Vector3<f32>) {
+        use nalgebra::{Unit, UnitQuaternion};
+        let mut forward = self.base_forward;
+        let mut up = Self::world_up();
+        if rig_tilt.abs() > 1e-6 {
+            let tilt =
+                UnitQuaternion::from_axis_angle(&Unit::new_normalize(self.base_right), rig_tilt);
+            forward = tilt * forward;
+            up = tilt * up;
+        }
+        if rig_roll.abs() > 1e-6 {
+            let roll = UnitQuaternion::from_axis_angle(&Unit::new_normalize(forward), -rig_roll);
+            up = roll * up;
+        }
+        (forward, up)
+    }
+
     /// Exact inverse of [`direction_to_yaw_pitch`](Self::direction_to_yaw_pitch).
     /// `pitch` is expected in `(-pi/2, pi/2)`; at the poles yaw is
     /// undefined and the round-trip through `direction_to_yaw_pitch`
