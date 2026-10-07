@@ -784,6 +784,7 @@ impl VideoEncoder {
         name: &str,
     ) -> Result<OpenedVideoEncoder, EncodeError> {
         let needs_global_header = octx.format().flags().contains(format::Flags::GLOBAL_HEADER);
+        let codec_tag = apple_codec_tag(codec.id(), octx.format().name());
 
         let mut ost = octx.add_stream(codec)?;
         let stream_index = ost.index();
@@ -846,6 +847,13 @@ impl VideoEncoder {
         opts.set("bf", "0");
         let encoder = enc.open_with(opts)?;
         ost.set_parameters(&encoder);
+        if let Some(tag) = codec_tag {
+            // SAFETY: codec_par is valid for the stream's lifetime, and
+            // the header isn't written yet.
+            unsafe {
+                (*ost.parameters().as_mut_ptr()).codec_tag = tag;
+            }
+        }
         // Stamp both stream rates so our own outputs re-probe cleanly on
         // every consumer path (Matroska and fragmented MP4 don't derive
         // them from sample timing the way plain mov does).
@@ -1652,6 +1660,17 @@ impl SilentAudio {
     }
 }
 
+/// The codec tag Apple's players need in this container, when FFmpeg's
+/// default differs: HEVC in MP4 or MOV as `hvc1` (parameter sets in the
+/// sample description), which QuickTime and AVFoundation open, where the
+/// muxer's default `hev1` doesn't.
+fn apple_codec_tag(codec: codec::Id, container: &str) -> Option<u32> {
+    let mp4_family = container
+        .split(',')
+        .any(|name| matches!(name, "mp4" | "mov"));
+    (codec == codec::Id::HEVC && mp4_family).then(|| u32::from_le_bytes(*b"hvc1"))
+}
+
 /// Build encoder-specific FFmpeg options.
 /// Scale a 1080p-tuned bitrate ceiling (Mbps) by output pixel count, so
 /// higher resolutions get a proportionally higher cap. Clamped to
@@ -1975,6 +1994,17 @@ mod tests {
         // Clamped: low res floors at 0.5x, never below 1 Mbps.
         assert_eq!(scale_bitrate_mbps(30, 640, 360), 15);
         assert_eq!(scale_bitrate_mbps(1, 320, 240), 1);
+    }
+
+    /// HEVC in MP4 or MOV is tagged `hvc1`, the tag Apple's players open
+    /// (QuickTime and AVFoundation refuse FFmpeg's default `hev1`).
+    #[test]
+    fn hevc_in_mp4_is_tagged_for_apple_players() {
+        let hvc1 = u32::from_le_bytes(*b"hvc1");
+        assert_eq!(apple_codec_tag(codec::Id::HEVC, "mp4"), Some(hvc1));
+        assert_eq!(apple_codec_tag(codec::Id::HEVC, "mov"), Some(hvc1));
+        assert_eq!(apple_codec_tag(codec::Id::HEVC, "matroska"), None);
+        assert_eq!(apple_codec_tag(codec::Id::H264, "mp4"), None);
     }
 
     /// An option's bitrate in bits/s, read as FFmpeg reads it ("30M" or
